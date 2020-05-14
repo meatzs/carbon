@@ -25,6 +25,7 @@ trait Verifier {
   val expModule: ExpModule
   val typeModule: TypeModule
   val exhaleModule: ExhaleModule
+  val inliningModule: InliningModule
   val inhaleModule: InhaleModule
   val funcPredModule: FuncPredModule
   val permModule: PermModule

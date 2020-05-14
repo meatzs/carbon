@@ -52,6 +52,7 @@ case class CarbonVerifier(private var _debugInfo: Seq[(String, Any)] = Nil) exte
   val typeModule = new DefaultTypeModule(this)
   val exhaleModule = new DefaultExhaleModule(this)
   val inhaleModule = new DefaultInhaleModule(this)
+  val inliningModule = new DefaultInliningModule(this)
   val heapModule = new DefaultHeapModule(this)
   val funcPredModule = new DefaultFuncPredModule(this)
   val permModule = new QuantifiedPermModule(this)
