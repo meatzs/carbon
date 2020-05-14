@@ -13,7 +13,7 @@ import viper.carbon.verifier.Verifier
 import viper.silver.verifier.{PartialVerificationError, reasons}
 import viper.carbon.boogie.Implicits._
 import viper.carbon.modules.components.DefinednessComponent
-import viper.silver.ast.{LocationAccess, MagicWand, PredicateAccess, Ref}
+import viper.silver.ast.{LocalVarAssign, LocationAccess, MagicWand, PredicateAccess, Ref}
 import viper.silver.ast.utility.Expressions
 
 /**
@@ -471,50 +471,54 @@ class DefaultExpModule(val verifier: Verifier) extends ExpModule with Definednes
 
 
   override def checkDefinednessOfSpecAndInhale(e: sil.Exp, error: PartialVerificationError, statesStack: List[Any] = null, duringPackageStmt: Boolean = false): Stmt = {
-
-    val stmt =
-    {
-      e match {
-        case sil.And(e1, e2) =>
-          checkDefinednessOfSpecAndInhale(e1, error, statesStack, duringPackageStmt) ::
-            checkDefinednessOfSpecAndInhale(e2, error, statesStack, duringPackageStmt) ::
-            Nil
-        case sil.Implies(e1, e2) =>
-          checkDefinedness(e1, error, duringPackageStmt = duringPackageStmt) ++ {
-            if (duringPackageStmt)
-              If(wandModule.getCurOpsBoolvar() ==> translateExpInWand(e1), checkDefinednessOfSpecAndInhale(e2, error, statesStack, duringPackageStmt), Statements.EmptyStmt)
-            else
-              If(translateExp(e1), checkDefinednessOfSpecAndInhale(e2, error, statesStack, duringPackageStmt), Statements.EmptyStmt)
-          }
-        case sil.CondExp(c, e1, e2) =>
-          checkDefinedness(c, error, duringPackageStmt = duringPackageStmt) ++ {
-            if (duringPackageStmt)
-              If(wandModule.getCurOpsBoolvar() ==> translateExpInWand(c), checkDefinednessOfSpecAndInhale(e1, error, statesStack, duringPackageStmt), checkDefinednessOfSpecAndInhale(e2, error, statesStack, duringPackageStmt))
-            else
-              If(translateExp(c), checkDefinednessOfSpecAndInhale(e1, error, statesStack, duringPackageStmt), checkDefinednessOfSpecAndInhale(e2, error, statesStack, duringPackageStmt))
-          }
-      case l@sil.Let(v, exp, body) =>
-        checkDefinedness(exp, error, true) ::
-          {
-            val u = env.makeUniquelyNamed(v) // choose a fresh "v" binder
-            env.define(u.localVar)
-            Assign(translateLocalVar(u.localVar),translateExp(exp)) ::
-              checkDefinednessOfSpecAndInhale(body.replace(v.localVar, u.localVar), error) ::
-              {
+    if (e.isPure && inliningModule.current_exists.isDefined) {
+      val exists: sil.LocalVar = inliningModule.current_exists_sil.get
+      val new_s: sil.LocalVarAssign = sil.LocalVarAssign(exists, sil.And(exists, e)(e.pos, e.info, e.errT))(e.pos, e.info, e.errT)
+      println("Catching pure subexpression inhaled", e)
+      stmtModule.translateStmt(new_s)
+    }
+    else {
+      val stmt = {
+        e match {
+          case sil.And(e1, e2) =>
+            checkDefinednessOfSpecAndInhale(e1, error, statesStack, duringPackageStmt) ::
+              checkDefinednessOfSpecAndInhale(e2, error, statesStack, duringPackageStmt) ::
+              Nil
+          case sil.Implies(e1, e2) =>
+            checkDefinedness(e1, error, duringPackageStmt = duringPackageStmt) ++ {
+              if (duringPackageStmt)
+                If(wandModule.getCurOpsBoolvar() ==> translateExpInWand(e1), checkDefinednessOfSpecAndInhale(e2, error, statesStack, duringPackageStmt), Statements.EmptyStmt)
+              else
+                If(translateExp(e1), checkDefinednessOfSpecAndInhale(e2, error, statesStack, duringPackageStmt), Statements.EmptyStmt)
+            }
+          case sil.CondExp(c, e1, e2) =>
+            checkDefinedness(c, error, duringPackageStmt = duringPackageStmt) ++ {
+              if (duringPackageStmt)
+                If(wandModule.getCurOpsBoolvar() ==> translateExpInWand(c), checkDefinednessOfSpecAndInhale(e1, error, statesStack, duringPackageStmt), checkDefinednessOfSpecAndInhale(e2, error, statesStack, duringPackageStmt))
+              else
+                If(translateExp(c), checkDefinednessOfSpecAndInhale(e1, error, statesStack, duringPackageStmt), checkDefinednessOfSpecAndInhale(e2, error, statesStack, duringPackageStmt))
+            }
+          case l@sil.Let(v, exp, body) =>
+            checkDefinedness(exp, error, true) :: {
+              val u = env.makeUniquelyNamed(v) // choose a fresh "v" binder
+              env.define(u.localVar)
+              Assign(translateLocalVar(u.localVar), translateExp(exp)) ::
+                checkDefinednessOfSpecAndInhale(body.replace(v.localVar, u.localVar), error) :: {
                 env.undefine(u.localVar)
                 Nil
               }
-          }
-      //      case fa@sil.Forall(vars, triggers, expr) => // NOTE: there's no need for a special case for QPs, since these are desugared, introducing conjunctions
-        case _ =>
-          checkDefinedness(e, error, duringPackageStmt = duringPackageStmt) ++
-            inhale(e, statesStack, duringPackageStmt)
+            }
+          //      case fa@sil.Forall(vars, triggers, expr) => // NOTE: there's no need for a special case for QPs, since these are desugared, introducing conjunctions
+          case _ =>
+            checkDefinedness(e, error, duringPackageStmt = duringPackageStmt) ++
+              inhale(e, statesStack, duringPackageStmt)
+        }
       }
-    }
 
-    if(duringPackageStmt) {
-      If(wandModule.getCurOpsBoolvar(), stmt, Statements.EmptyStmt)
-    }else stmt
+      if (duringPackageStmt) {
+        If(wandModule.getCurOpsBoolvar(), stmt, Statements.EmptyStmt)
+      } else stmt
+    }
   }
 
   override def checkDefinednessOfSpecAndExhale(e: sil.Exp, definednessError: PartialVerificationError, exhaleError: PartialVerificationError

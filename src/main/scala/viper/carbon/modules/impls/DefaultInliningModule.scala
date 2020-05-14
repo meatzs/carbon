@@ -1,13 +1,13 @@
 package viper.carbon.modules.impls
 
-import viper.carbon.modules.{InliningModule, StatelessComponent, StmtModule}
+import viper.carbon.modules.InliningModule
 import viper.silver.{ast => sil}
 import viper.carbon.boogie.{Havoc, MaybeComment, _}
 import viper.carbon.verifier.Verifier
 import Implicits._
 import viper.carbon.modules.components.Component
 import viper.silver.ast.{CurrentPerm, ErrorTrafo, FieldAccess, FieldAssign, ForPerm, Info, LocalVarAssign, LocationAccess, Method, Position, WildcardPerm}
-import viper.silver.verifier.{DummyReason, PartialVerificationError, VerificationError, errors}
+import viper.silver.verifier.{DummyReason, VerificationError}
 import viper.silver.ast.utility.Expressions
 import viper.silver.verifier.errors.SoundnessFailed
 import viper.silver.ast
@@ -16,6 +16,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   import verifier._
   import expModule._
+  import heapModule._
+  import permModule._
 
   override def start() {
     // register(this)
@@ -24,8 +26,192 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   override def reset(): Unit = {}
 
   val lblNamespace = verifier.freshNamespace("stmt.lbl")
+  implicit val namespace = verifier.freshNamespace("inlining")
 
   def name = "Inlining module"
+
+
+  var id_pair: Int = 0
+
+  private val maskType = NamedType("MaskType")
+  private val heapType = NamedType("HeapType")
+
+  // Check soundness condition
+
+  private val smallMask = LocalVarDecl(Identifier("SmallMask"),maskType)
+  private val bigMask = LocalVarDecl(Identifier("BigMask"),maskType)
+  private val smallerMask = Identifier("SmallerMask")
+
+  private val wfMask = Identifier("wfMask")
+  private val normalMask = LocalVarDecl(Identifier("normalMask"),maskType)
+
+  private def lookup(h: Exp, o: Exp, f: Exp) = MapSelect(h, Seq(o, f))
+  private val normalHeap: LocalVarDecl = LocalVarDecl(Identifier("normalHeap"), heapType)
+
+  def staticHeap(): Var = {
+    heapModule.currentHeap.head.asInstanceOf[Var]
+  }
+
+  private val equalOnMask = Identifier("EqualOnMask")
+  private val heap1 = LocalVarDecl(Identifier("Heap1"), heapType)
+  private val heap2 = LocalVarDecl(Identifier("Heap2"), heapType)
+
+  private val smallerState = Identifier("SmallerState")
+  private val sumState = Identifier("SumState")
+  private val mask1 = LocalVarDecl(Identifier("Mask1"),maskType)
+  private val mask2 = LocalVarDecl(Identifier("Mask2"),maskType)
+  private val smallHeap = LocalVarDecl(Identifier("SmallHeap"), heapType)
+  private val bigHeap = LocalVarDecl(Identifier("BigHeap"), heapType)
+
+  private val axiomNamespace = verifier.freshNamespace("inlining.axiom")
+
+  def currentPermission(mask: Exp, rcv: Exp, location: Exp): MapSelect = {
+    MapSelect(mask, Seq(rcv, location))
+  }
+
+  def getAxioms(): List[Decl] = {
+    val obj: LocalVarDecl = LocalVarDecl(Identifier("o")(axiomNamespace), refType)
+    val field = LocalVarDecl(Identifier("f")(axiomNamespace), fieldType)
+    val smallerMaskArgs = Seq(smallMask, bigMask)
+    val smallerMaskApp = FuncApp(smallerMask, smallerMaskArgs map (_.l), Bool)
+    val permSmall = currentPermission(smallMask.l, obj.l, field.l)
+    val permBig = currentPermission(bigMask.l,obj.l,field.l)
+
+    val wfMaskArgs = Seq(normalMask)
+    val wfMaskApp = FuncApp(wfMask, wfMaskArgs map (_.l), Bool)
+    val perm = currentPermission(normalMask.l, obj.l, field.l)
+
+    val equalOnArgs = Seq(heap1, heap2, normalMask)
+    val equalOnApp = FuncApp(equalOnMask, equalOnArgs map (_.l), Bool)
+    val lookup1 = lookup(heap1.l, obj.l, field.l)
+    val lookup2 = lookup(heap2.l, obj.l, field.l)
+
+    val smallerStateArgs = Seq(smallMask, smallHeap, bigMask, bigHeap)
+    val smallerStateApp = FuncApp(smallerState, smallerStateArgs map (_.l), Bool)
+
+    val sumStateArgs = Seq(mask1, heap1, mask2, heap2, normalMask, normalHeap)
+    val sumStateApp = FuncApp(sumState, sumStateArgs map (_.l), Bool)
+    val sumMaskApp = FuncApp(sumMasks, Seq(normalMask, mask1, mask2) map (_.l), Bool)
+
+    MaybeCommentedDecl("CHECK SOUNDNESS CONDITION",
+      Func(smallerMask, smallerMaskArgs, Bool) ++
+        Axiom(Forall(
+          smallerMaskArgs,
+          Trigger(smallerMaskApp),
+          smallerMaskApp <==>
+            Forall(
+              Seq(obj, field),
+              Trigger(Seq(permSmall)) ++ Trigger(Seq(permBig)),
+              permSmall <= permBig,
+              field.typ.freeTypeVars)
+        )) ++
+        Func(wfMask, wfMaskArgs, Bool) ++
+        Axiom(Forall(
+          wfMaskArgs,
+          Trigger(wfMaskApp),
+          wfMaskApp <==>
+            Forall(obj ++ field,
+              Trigger(Seq(perm)),
+              (perm >= noPerm && ((heapModule.isPredicateField(field.l).not && heapModule.isWandField(field.l).not) ==> perm <= fullPerm)),
+              field.typ.freeTypeVars)
+        )) ++
+        Func(equalOnMask, equalOnArgs, Bool) ++
+        Axiom(Forall(
+          equalOnArgs,
+          Trigger(equalOnApp),
+          equalOnApp <==>
+            Forall(obj ++ field,
+              Trigger(Seq(lookup1)) ++ Trigger(Seq(lookup2)),
+              perm > noPerm ==> (lookup1 === lookup2),
+              field.typ.freeTypeVars)
+        ))) ++
+      Func(smallerState, smallerStateArgs, Bool) ++
+      Axiom(Forall(
+        smallerStateArgs,
+        Trigger(smallerStateApp),
+        smallerStateApp <==> (smallerMaskApp &&
+          FuncApp(equalOnMask, Seq(smallHeap.l, bigHeap.l, smallMask.l), Bool)
+          ))) ++
+      Func(sumState, sumStateArgs, Bool) ++
+      Axiom(Forall(
+        sumStateArgs,
+        Trigger(sumStateApp),
+        sumStateApp <==> (sumMaskApp
+          && heap1.l === normalHeap.l
+          && heap2.l === normalHeap.l
+          /*
+          && FuncApp(equalOnMask, Seq(heap1.l, normalHeap.l, mask1.l), Bool)
+          && FuncApp(equalOnMask, Seq(heap2.l, normalHeap.l, mask2.l), Bool)
+           */
+          )))
+  }
+
+
+
+  def newPhiRPair(): (LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl) = {
+    id_pair += 1
+    (
+      LocalVarDecl(Identifier("checkFraming" + id_pair), Bool),
+      LocalVarDecl(Identifier("exists" + id_pair), Bool),
+      LocalVarDecl(Identifier("MaskPhi" + id_pair), maskType),
+      LocalVarDecl(Identifier("HeapPhi" + id_pair), heapType),
+      LocalVarDecl(Identifier("MaskR" + id_pair), maskType),
+      LocalVarDecl(Identifier("HeapR" + id_pair), heapType)
+    )
+  }
+
+  var id_exhale_heap: Int = 0
+
+  def newExhaleHeap(): LocalVarDecl = {
+    id_exhale_heap += 1
+    LocalVarDecl(Identifier("ExhaleHeap" + id_exhale_heap), heapType)
+  }
+
+  var id_wildcard: Int = 0
+
+  def newWildcard(): LocalVarDecl = {
+    id_wildcard += 1
+    LocalVarDecl(Identifier("wildcard" + id_wildcard), permType)
+  }
+
+  var id_freshObj: Int = 0
+
+  def newFreshObj(): LocalVarDecl = {
+    id_freshObj += 1
+    LocalVarDecl(Identifier("freshObj" + id_freshObj), refType)
+  }
+
+  var id_var: Int = 0
+
+  def newVar(typ: Type): LocalVarDecl = {
+    id_var += 1
+    LocalVarDecl(Identifier("varTemp" + id_var), typ)
+  }
+
+  var id_permwild: Int = 0
+
+  def newPermwild(): LocalVarDecl = {
+    id_permwild += 1
+    LocalVarDecl(Identifier("permWild_" + id_permwild), permType)
+  }
+
+  def tempState(): (LocalVarDecl, LocalVarDecl) = {
+    (
+      LocalVarDecl(Identifier("tempMask"), maskType),
+      LocalVarDecl(Identifier("tempHeap"), heapType)
+    )
+  }
+
+  def wfMask(args: Seq[Exp], typ: Type = Bool): Exp = FuncApp(wfMask, args, typ)
+
+  def sumStateNormal(mask1: Var, heap1: Var, mask2: Var, heap2: Var, mask: Var, heap: Var): Exp = {
+    FuncApp(sumState, Seq(mask1, heap1, mask2, heap2, mask, heap), Bool)
+  }
+
+  def smallerState(smallMask: Var, smallHeap: Var, bigMask: Var, bigHeap: Var): Exp = {
+    FuncApp(smallerState, Seq(smallMask, smallHeap, bigMask, bigHeap), Bool)
+  }
+
 
 
   var current_depth = 0
@@ -92,8 +278,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         (Seqn(r map (_._1)), r flatMap (_._2))
       case Assume(BinExp(v: LocalVar, LtCmp, right)) if (v.name.name == "wildcard") =>
         // Exhale wildcard
-        val w = verifier.permModule.newWildcard()
-        val p = verifier.permModule.newPermwild()
+        val w = newWildcard()
+        val p = newPermwild()
 
         val noPerm = BinExp(IntLit(0), Div, IntLit(1))
         //(LocalVarWhereDecl(w.l.name, w.l > noPerm) ++
@@ -107,17 +293,17 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         (If(cond, nthn, nels), l1 ++ l2)
       case Assign(LocalVar(Identifier("perm", n1), typ1), v: LocalVar) if (v.name.name == "wildcard") =>
         // Inhale wildcard
-        val w = verifier.permModule.newWildcard()
+        val w = newWildcard()
         // val noPerm = BinExp(IntLit(0), Div, IntLit(1))
         // (LocalVarWhereDecl(w.l.name, w.l > noPerm) ++
         (Assign(w.l, v) ++ s, Seq(w))
       case HavocImpl(Seq(v)) =>
         if (v.name.name == "ExhaleHeap") {
-          val h = verifier.permModule.newExhaleHeap()
+          val h = newExhaleHeap()
           (Seqn(Seq(s, Assign(h.l, v))), Seq(h))
         }
         else if (v.name.name == "newVersion") {
-          val nv = verifier.permModule.newVar(v.typ)
+          val nv = newVar(v.typ)
           (Seqn(Seq(s, Assign(nv.l, v))), Seq(nv))
         }
         /*
@@ -127,7 +313,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
        }
         */
         else if (v.name.name == "freshObj") {
-          val obj = verifier.permModule.newFreshObj()
+          val obj = newFreshObj()
           (Seqn(Seq(s, Assign(obj.l, v))), Seq(obj))
         }
         else {
@@ -197,8 +383,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
-  def tempState: (LocalVarDecl, LocalVarDecl) = permModule.tempState()
-
   def normalState: (Var, Var) = (permModule.currentMask.head.asInstanceOf[Var], heapModule.currentHeap.head.asInstanceOf[Var])
 
   // heapModule.freshTempState("").head)
@@ -240,7 +424,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         sil.Seqn(assign ++ ss map (removeAssumeRecordVarsSil(_, exists)), scopedDecls)(a, b, c)
       case sil.Inhale(exp) if (exp.isPure) => sil.LocalVarAssign(exists, sil.And(exists, exp)(exp.pos, exp.info, exp.errT))(a, b, c)
       // Assume
-      case sil.MethodCall(_, _, targets: Seq[ast.LocalVar]) =>
+      case sil.MethodCall(methodName, _, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).isEmpty =>
         val tempVars: Seq[ast.LocalVar] = targets map ((x: ast.LocalVar) => {
           val name = silNameNotUsed(x.name + "_temp")
           val tempLocalVar = sil.LocalVar(name, x.typ)(x.pos, x.info, x.errT)
@@ -270,7 +454,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         recordedScopes = recordedScopes.tail
         val assign: Seq[LocalVarAssign] = (locals zip tempVars) map { (x: (sil.LocalVarDecl, sil.LocalVar)) => sil.LocalVarAssign(x._1.localVar, x._2)(a, b, c) }
         sil.Seqn(assign ++ ss map assignVarsSil, scopedDecls)(a, b, c)
-      case sil.MethodCall(_, _, targets: Seq[ast.LocalVar]) =>
+      case sil.MethodCall(methodName, _, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).isEmpty =>
         val tempVars: Seq[ast.LocalVar] = recordedScopes.head
         assert(targets.size == tempVars.size)
         recordedScopes = recordedScopes.tail
@@ -290,7 +474,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     s match {
       case Seqn(stmts) => stmts map (removeAssume(_, exists))
       case Assume(FuncApp(Identifier("state", namespace), args, typ)) =>
-        Assign(exists, exists && permModule.wfMask(args.tail, typ))
+        Assign(exists, exists && wfMask(args.tail, typ))
       case CommentBlock(c, ss) =>
         CommentBlock(c, removeAssume(ss, exists))
       case If(cond, thn, els) => If(cond, removeAssume(thn, exists), removeAssume(els, exists))
@@ -370,61 +554,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   var id_wfm = 0
-
-  def checkMonoAssume(orig_s: ast.Stmt, orig: ast.Stmt): Stmt = {
-
-    checkingFraming = true
-
-    id_wfm += 1
-
-    val converted_vars: Seq[LocalVar] = (orig_s.writtenVars filter (v => mainModule.env.isDefinedAt(v))) map translateLocalVar
-    val oldVars = converted_vars map ((v: LocalVar) => verifier.permModule.newVar(v.typ).l)
-    val tempVars = converted_vars map ((v: LocalVar) => verifier.permModule.newVar(v.typ).l)
-
-    val pair: (LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl) = verifier.permModule.newPhiRPair()
-    used_checks += pair._1.l.name.name
-
-    val s = stmtModule.translateStmt(orig_s)
-
-    val (check, exists, maskPhi, heapPhi, maskR, heapR) = pair
-
-    val nm: VerificationError = SoundnessFailed(orig, DummyReason, "monoOut", id_wfm, "WFM")
-    val error_ignore: VerificationError = SoundnessFailed(orig, DummyReason, "true by construct", id_wfm, "WFM")
-    // Replaced by assumes
-    val nsm: VerificationError = SoundnessFailed(orig, DummyReason, "safeMono", id_wfm, "WFM")
-
-    val modif_s = assumify(removeAssume(s, exists.l))
-
-    val r = MaybeComment(id_wfm + ": Check WFM",
-      Havoc(Seq(check.l)) ++
-        If(check.l,
-          assignSeqToSeq(oldVars, converted_vars) ++
-            Assign(exists.l, TrueLit()) ++
-            Havoc((Seq(maskPhi, heapPhi) map (_.l)).asInstanceOf[Seq[Var]]) ++
-            Assume(verifier.permModule.sumStateNormal(maskPhi.l, heapPhi.l, maskR.l, heapR.l, normalState._1, normalState._2)) ++
-            Assume(verifier.permModule.smallerState(maskPhi.l, heapPhi.l, normalState._1, normalState._2)) ++
-            Assume(verifier.permModule.wfMask(Seq(maskPhi.l))) ++
-            MaybeComment("Record current state", Assign(tempState._1.l, normalState._1) ++ Assign(tempState._2.l, normalState._2)) ++
-            MaybeComment("Change state", Assign(normalState._1, maskPhi.l) ++ Assign(normalState._2, heapPhi.l)) ++
-
-            MaybeComment("Small statement without assume", modif_s) ++
-
-            MaybeComment("Back to phi", Assign(maskPhi.l, normalState._1) ++ Assign(heapPhi.l, normalState._2)) ++
-            assignSeqToSeq(tempVars, converted_vars) ++
-            MaybeComment("Back to current state", Assign(normalState._1, tempState._1.l) ++ Assign(normalState._2, tempState._2.l)) ++
-            assignSeqToSeq(converted_vars, oldVars) ++
-
-            MaybeComment("Normal statement", modifError(s, nsm, check.l)) ++
-
-            Assert(exists.l && permModule.smallerState(maskPhi.l, heapPhi.l, normalState._1, normalState._2), nm) ++
-            Assert(equalSeq(converted_vars, tempVars), nm) ++
-            Assume(FalseLit())
-          ,
-          Statements.EmptyStmt))
-
-    checkingFraming = false
-    r
-  }
+  var current_exists: Option[Var] = None
+  var current_exists_sil: Option[sil.LocalVar] = None
 
   def checkFraming(orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false): Stmt = {
 
@@ -457,7 +588,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val silExistsDecl: ast.LocalVarDecl = sil.LocalVarDecl(silNameNotUsed("exists"), sil.Bool)(aa, bb, cc)
       // val silExistsDecl: ast.LocalVarDecl = sil.LocalVarDecl("exists", sil.Bool)(aa, bb, cc)
 
-      val exists = mainModule.env.define(silExistsDecl.localVar)
+      val exists: LocalVar = mainModule.env.define(silExistsDecl.localVar)
 
       val orig_s1: sil.Stmt = sil.Seqn(Seq(sil.LocalVarAssign(silExistsDecl.localVar, sil.TrueLit()(aa, bb, cc))(aa, bb, cc),
         removeAssumeRecordVarsSil(orig_s, silExistsDecl.localVar)),
@@ -467,22 +598,30 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       // val orig_s1 = orig_s
 
       val converted_vars: Seq[LocalVar] = (orig_s.writtenVars filter (v => mainModule.env.isDefinedAt(v))) map translateLocalVar
-      val oldVars = converted_vars map ((v: LocalVar) => verifier.permModule.newVar(v.typ).l)
-      val tempVars = converted_vars map ((v: LocalVar) => verifier.permModule.newVar(v.typ).l)
+      val oldVars = converted_vars map ((v: LocalVar) => newVar(v.typ).l)
+      val tempVars = converted_vars map ((v: LocalVar) => newVar(v.typ).l)
 
-      val pair: (LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl) = verifier.permModule.newPhiRPair()
+      val pair: (LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl) = newPhiRPair()
       used_checks += pair._1.l.name.name
 
       var s1: Stmt = Statements.EmptyStmt
       var s2: Stmt = Statements.EmptyStmt
       checkingFraming = true
+      val old_current_exists = current_exists
+      val old_current_exists_sil = current_exists_sil
+      current_exists = Some(exists)
+      current_exists_sil = Some(silExistsDecl.localVar)
       if (checkMono || !inlinable(orig_s)) {
         s1 = stmtModule.translateStmt(orig_s1)
+        current_exists = old_current_exists
+        current_exists_sil = old_current_exists_sil
         s2 = stmtModule.translateStmt(orig_s2)
       }
       else {
         s1 = stmtModule.translateStmt(orig_s1)
         checkingFraming = false
+        current_exists = old_current_exists
+        current_exists_sil = old_current_exists_sil
         s2 = stmtModule.translateStmt(orig_s2)
         checkingFraming = true
       }
@@ -522,15 +661,15 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         assignSeqToSeq(oldVars, converted_vars) ++ {
           if (checkMono) {
             Havoc((Seq(maskPhi, heapPhi) map (_.l)).asInstanceOf[Seq[Var]]) ++
-              Assume(verifier.permModule.sumStateNormal(maskPhi.l, heapPhi.l, maskR.l, heapR.l, normalState._1, normalState._2)) ++
-              Assume(verifier.permModule.smallerState(maskPhi.l, heapPhi.l, normalState._1, normalState._2)) ++
-              Assume(verifier.permModule.wfMask(Seq(maskPhi.l)))
+              Assume(sumStateNormal(maskPhi.l, heapPhi.l, maskR.l, heapR.l, normalState._1, normalState._2)) ++
+              Assume(smallerState(maskPhi.l, heapPhi.l, normalState._1, normalState._2)) ++
+              Assume(wfMask(Seq(maskPhi.l)))
           }
           else {
             Havoc((Seq(maskPhi, heapPhi, maskR, heapR) map (_.l)).asInstanceOf[Seq[Var]]) ++
-              Assume(verifier.permModule.sumStateNormal(maskPhi.l, heapPhi.l, maskR.l, heapR.l, normalState._1, normalState._2)) ++
-              Assume(verifier.permModule.wfMask(Seq(maskPhi.l))) ++
-              Assume(verifier.permModule.wfMask(Seq(maskR.l)))
+              Assume(sumStateNormal(maskPhi.l, heapPhi.l, maskR.l, heapR.l, normalState._1, normalState._2)) ++
+              Assume(wfMask(Seq(maskPhi.l))) ++
+              Assume(wfMask(Seq(maskR.l)))
           }
         } ++
           MaybeComment("Record current state", Assign(tempState._1.l, normalState._1) ++ Assign(tempState._2.l, normalState._2)) ++
@@ -543,14 +682,14 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
       val normalStmt: Seqn = MaybeComment("Normal statement", modif_s2)
 
-      val endCheck: Seq[Stmt] = Assert(exists && permModule.smallerState(maskPhi.l, heapPhi.l, normalState._1, normalState._2), nm) ++
+      val endCheck: Seq[Stmt] = Assert(exists && smallerState(maskPhi.l, heapPhi.l, normalState._1, normalState._2), nm) ++
         Assert(equalSeq(converted_vars, tempVars), nm) ++ {
         if (!checkMono) {
           Havoc(Seq(tempState._1.l, tempState._2.l)) ++
             Assume(
-              verifier.permModule.sumStateNormal(maskPhi.l, heapPhi.l, maskR.l, heapR.l, tempState._1.l, tempState._2.l)
+              sumStateNormal(maskPhi.l, heapPhi.l, maskR.l, heapR.l, tempState._1.l, tempState._2.l)
             ) ++
-            Assert(exists && permModule.smallerState(tempState._1.l, tempState._2.l, normalState._1, normalState._2), nf)
+            Assert(exists && smallerState(tempState._1.l, tempState._2.l, normalState._1, normalState._2), nf)
         }
         else {
           Statements.EmptyStmt
@@ -629,39 +768,45 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
-  def readVarsExp(e: ast.Exp): Seq[ast.LocalVar] = {
+  def readVarsExp(e: ast.Exp): Set[ast.LocalVar] = {
     e match {
-      case ast.Let(decl, e1, e2) => Seq(decl.localVar)
-      case ast.LocalVar(name, typ) => Seq(ast.LocalVar(name, typ)(e.pos, e.info, e.errT))
+      case ast.Let(decl, e1, e2) => Set(decl.localVar)
+      case ast.LocalVar(name, typ) => Set(ast.LocalVar(name, typ)(e.pos, e.info, e.errT))
       case ast.FieldAccessPredicate(e1, e2) => readVarsExp(e1) ++ readVarsExp(e2)
       case ast.BinExp(e1, e2) => readVarsExp(e1) ++ readVarsExp(e2)
       case ast.UnExp(e) => readVarsExp(e)
       case ast.CurrentPerm(e) => readVarsExp(e)
       case ast.FieldAccess(e1, _) => readVarsExp(e1)
-      case _: ast.Literal => Seq()
-      case _: ast.AbstractConcretePerm => Seq()
-      case ast.WildcardPerm() => Seq()
-      case ast.FuncApp(_, args) => (args map readVarsExp).fold(Seq())(_ ++ _)
+      case _: ast.Literal => Set()
+      case _: ast.AbstractConcretePerm => Set()
+      case ast.WildcardPerm() => Set()
+      case ast.FuncApp(_, args) => (args map readVarsExp).fold(Set())(_ ++ _)
       case ast.CondExp(e1, e2, e3) => readVarsExp(e1) ++ readVarsExp(e2) ++ readVarsExp(e3)
       case ast.Applying(ast.MagicWand(e1, e2), body) => readVarsExp(e1) ++ readVarsExp(e2) ++ readVarsExp(body)
-      case ast.EmptySeq(_) => Seq()
-      case ast.EmptySet(_) => Seq()
-      case _: ast.ExtensionExp => Seq()
-      case ast.DomainFuncApp(_, args, _) => (args map readVarsExp).fold(Seq())(_ ++ _)
-      case ast.EmptyMultiset(_) => Seq()
-      case ast.EpsilonPerm() => Seq()
-      case ast.Exists(_, _, e) => readVarsExp(e)
-      case ast.ExplicitMultiset(elems) => (elems map readVarsExp).fold(Seq())(_ ++ _)
-      case ast.ExplicitSet(elems) => (elems map readVarsExp).fold(Seq())(_ ++ _)
-      case ast.ExplicitSeq(elems) => (elems map readVarsExp).fold(Seq())(_ ++ _)
-      case ast.ForPerm(_, _, body) => readVarsExp(body)
-      case ast.Forall(_, _, e) => readVarsExp(e)
+      case ast.EmptySet(_) => Set()
+      case ast.EmptySeq(_) => Set()
+      case _: ast.ExtensionExp => Set()
+      case ast.DomainFuncApp(_, args, _) => (args map readVarsExp).fold(Set())(_ ++ _)
+      case ast.EmptyMultiset(_) => Set()
+      case ast.EpsilonPerm() => Set()
+      case ast.Exists(vars: Seq[ast.LocalVarDecl], _, e) =>
+        val vars_set: Set[ast.LocalVar] = (vars map (_.localVar)).toSet
+        readVarsExp(e).diff(vars_set)
+      case ast.ExplicitMultiset(elems) => (elems map readVarsExp).fold(Set())(_ ++ _)
+      case ast.ExplicitSet(elems) => (elems map readVarsExp).fold(Set())(_ ++ _)
+      case ast.ExplicitSeq(elems) => (elems map readVarsExp).fold(Set())(_ ++ _)
+      case ast.ForPerm(vars, _, body) =>
+        val vars_set: Set[ast.LocalVar] = (vars map (_.localVar)).toSet
+        readVarsExp(body).diff(vars_set)
+      case ast.Forall(vars, _, e) =>
+        val vars_set: Set[ast.LocalVar] = (vars map (_.localVar)).toSet
+        readVarsExp(e).diff(vars_set)
       case ast.InhaleExhaleExp(in, ex) => readVarsExp(in) ++ readVarsExp(ex)
-      case ast.PredicateAccess(args, _) => (args map readVarsExp).fold(Seq())(_ ++ _)
+      case ast.PredicateAccess(args, _) => (args map readVarsExp).fold(Set())(_ ++ _)
       case ast.PredicateAccessPredicate(ast.PredicateAccess(args, _), perm) =>
-        (args map readVarsExp).fold(Seq())(_ ++ _) ++ readVarsExp(perm)
+        (args map readVarsExp).fold(Set())(_ ++ _) ++ readVarsExp(perm)
       case ast.RangeSeq(low, high) => readVarsExp(low) ++ readVarsExp(high)
-      case ast.Result(_) => Seq()
+      case ast.Result(_) => Set()
       case ast.SeqAppend(left, right) => readVarsExp(left) ++ readVarsExp(right)
       case ast.SeqContains(elem, s) => readVarsExp(elem) ++ readVarsExp(s)
       case ast.SeqDrop(s, n) => readVarsExp(s) ++ readVarsExp(n)
@@ -705,7 +850,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   def renameExp(exp: ast.Exp): ast.Exp = {
-    val vars = readVarsExp(exp)
+    val vars = readVarsExp(exp).toSeq
     val renamedVars = vars map renameVar
     val r = Expressions.instantiateVariables(exp, vars, renamedVars)
     r
@@ -748,7 +893,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       case ast.FieldAssign(ast.FieldAccess(rcv, field), rhs) => FieldAssign(FieldAccess(renameExp(rcv), field)(a, b, c), renameExp(rhs))(a, b, c)
       case ast.MethodCall(methodName, args, targets) => ast.MethodCall(methodName, args map renameExp, targets map renameVar)(a, b, c)
       case ast.Exhale(exp) => ast.Exhale(renameExp(exp))(a, b, c)
-      case ast.Inhale(exp) => ast.Inhale(renameExp(exp))(a, b, c)
+      case ast.Inhale(exp) =>
+        println("Rename exp", exp, renameExp(exp))
+        ast.Inhale(renameExp(exp))(a, b, c)
       case ast.Assert(exp) => ast.Assert(renameExp(exp))(a, b, c)
       case ast.Assume(exp) => ast.Assume(renameExp(exp))(a, b, c)
       case ast.Fold(acc) => ast.Fold(renameAccPredicate(acc))(a, b, c)
@@ -867,5 +1014,4 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
     r
   }
-
 }

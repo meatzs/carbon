@@ -137,26 +137,8 @@ trait PermModule extends Module with CarbonStateComponent {
   // removes permission to w#ft (footprint of the magic wand) (See Heap module for w#ft description)
   def exhaleWandFt(w: sil.MagicWand): Stmt
 
-  // Useful for checking soundness condition
-
-  def wfMask(args: Seq[Exp], typ: Type = Bool): Exp
-
-  def newPhiRPair(): (LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl)
-
-  def newExhaleHeap(): LocalVarDecl
-
-  def newWildcard(): LocalVarDecl
-
-  def newFreshObj(): LocalVarDecl
-
-  def newVar(typ: Type): LocalVarDecl
-
-  def newPermwild(): LocalVarDecl
-
-  def tempState(): (LocalVarDecl, LocalVarDecl)
-
-  def sumStateNormal(mask1: Var, heap1: Var, mask2: Var, heap2: Var, mask: Var, heap: Var): Exp
-
-  def smallerState(smallMask: Var, smallHeap: Var, bigMask: Var, bigHeap: Var): Exp
+  val noPerm: Const
+  val fullPerm: Const
+  val sumMasks: Identifier
 
 }

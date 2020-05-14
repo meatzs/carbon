@@ -88,9 +88,9 @@ class QuantifiedPermModule(val verifier: Verifier)
   private val zeroPMaskName = Identifier("ZeroPMask")
   override val zeroPMask = Const(zeroPMaskName)
   private val noPermName = Identifier("NoPerm")
-  private val noPerm = Const(noPermName)
+  val noPerm: Const = Const(noPermName)
   private val fullPermName = Identifier("FullPerm")
-  private val fullPerm = Const(fullPermName)
+  val fullPerm = Const(fullPermName)
   private val permAddName = Identifier("PermAdd")
   private val permSubName = Identifier("PermSub")
   private val permDivName = Identifier("PermDiv")
@@ -104,7 +104,7 @@ class QuantifiedPermModule(val verifier: Verifier)
   private val resultMask = LocalVarDecl(Identifier("ResultMask"),maskType)
   private val summandMask1 = LocalVarDecl(Identifier("SummandMask1"),maskType)
   private val summandMask2 = LocalVarDecl(Identifier("SummandMask2"),maskType)
-  private val sumMasks = Identifier("sumMask")
+  val sumMasks: Identifier = Identifier("sumMask")
   private val tempMask = LocalVar(Identifier("TempMask"),maskType)
 
   private val qpMaskName = Identifier("QPMask")
@@ -234,82 +234,7 @@ class QuantifiedPermModule(val verifier: Verifier)
     } ++ {
       MaybeCommentedDecl("Functions used to represent the range of the projection of each QP instance onto its receiver expressions for quantified permissions during inhale and exhale",
         rangeFuncs)
-    } ++ {
-      val obj = LocalVarDecl(Identifier("o")(axiomNamespace), refType)
-      val field = LocalVarDecl(Identifier("f")(axiomNamespace), fieldType)
-      val smallerMaskArgs = Seq(smallMask, bigMask)
-      val smallerMaskApp = FuncApp(smallerMask, smallerMaskArgs map (_.l), Bool)
-      val permSmall = currentPermission(smallMask.l, obj.l, field.l)
-      val permBig = currentPermission(bigMask.l,obj.l,field.l)
-
-      val wfMaskArgs = Seq(normalMask)
-      val wfMaskApp = FuncApp(wfMask, wfMaskArgs map (_.l), Bool)
-      val perm = currentPermission(normalMask.l, obj.l, field.l)
-
-      val equalOnArgs = Seq(heap1, heap2, normalMask)
-      val equalOnApp = FuncApp(equalOnMask, equalOnArgs map (_.l), Bool)
-      val lookup1 = lookup(heap1.l, obj.l, field.l)
-      val lookup2 = lookup(heap2.l, obj.l, field.l)
-
-      val smallerStateArgs = Seq(smallMask, smallHeap, bigMask, bigHeap)
-      val smallerStateApp = FuncApp(smallerState, smallerStateArgs map (_.l), Bool)
-
-      val sumStateArgs = Seq(mask1, heap1, mask2, heap2, normalMask, normalHeap)
-      val sumStateApp = FuncApp(sumState, sumStateArgs map (_.l), Bool)
-      val sumMaskApp = FuncApp(sumMasks, Seq(normalMask, mask1, mask2) map (_.l), Bool)
-
-      MaybeCommentedDecl("CHECK SOUNDNESS CONDITION",
-        Func(smallerMask, smallerMaskArgs, Bool) ++
-          Axiom(Forall(
-            smallerMaskArgs,
-            Trigger(smallerMaskApp),
-            smallerMaskApp <==>
-              Forall(
-                Seq(obj, field),
-                Trigger(Seq(permSmall)) ++ Trigger(Seq(permBig)),
-                permSmall <= permBig,
-                field.typ.freeTypeVars)
-          )) ++
-          Func(wfMask, wfMaskArgs, Bool) ++
-          Axiom(Forall(
-            wfMaskArgs,
-            Trigger(wfMaskApp),
-            wfMaskApp <==>
-              Forall(obj ++ field,
-                Trigger(Seq(perm)),
-                (perm >= noPerm && ((heapModule.isPredicateField(field.l).not && heapModule.isWandField(field.l).not) ==> perm <= fullPerm)),
-                field.typ.freeTypeVars)
-          )) ++
-          Func(equalOnMask, equalOnArgs, Bool) ++
-          Axiom(Forall(
-            equalOnArgs,
-            Trigger(equalOnApp),
-            equalOnApp <==>
-              Forall(obj ++ field,
-                Trigger(Seq(lookup1)) ++ Trigger(Seq(lookup2)),
-                perm > noPerm ==> (lookup1 === lookup2),
-                field.typ.freeTypeVars)
-          ))) ++
-        Func(smallerState, smallerStateArgs, Bool) ++
-        Axiom(Forall(
-          smallerStateArgs,
-          Trigger(smallerStateApp),
-          smallerStateApp <==> (smallerMaskApp &&
-            FuncApp(equalOnMask, Seq(smallHeap.l, bigHeap.l, smallMask.l), Bool)
-            ))) ++
-        Func(sumState, sumStateArgs, Bool) ++
-        Axiom(Forall(
-          sumStateArgs,
-          Trigger(sumStateApp),
-          sumStateApp <==> (sumMaskApp
-            && heap1.l === normalHeap.l
-            && heap2.l === normalHeap.l
-            /*
-            && FuncApp(equalOnMask, Seq(heap1.l, normalHeap.l, mask1.l), Bool)
-            && FuncApp(equalOnMask, Seq(heap2.l, normalHeap.l, mask2.l), Bool)
-             */
-            )))
-    }
+    } ++ inliningModule.getAxioms()
   }
 
   def permType = NamedType(permTypeName)
@@ -887,7 +812,12 @@ class QuantifiedPermModule(val verifier: Verifier)
   }
 
   override def inhaleExp(e: sil.Exp): Stmt = {
-    inhaleAux(e, Assume)
+    inliningModule.current_exists match {
+      case None => inhaleAux(e, Assume)
+      case Some(ex: Var) =>
+        println("CATCHING INHALING", e)
+        inhaleAux(e, (exp: Exp) => Assign(ex, BinExp(ex, And, exp)))
+    }
   }
 
   override def inhaleWandFt(w: sil.MagicWand): Stmt = {
@@ -1103,7 +1033,13 @@ class QuantifiedPermModule(val verifier: Verifier)
 
            val translatedLocalVarDecl = vsFresh.map(vFresh => translateLocalVarDecl(vFresh))
            //permission should be >= 0 if the condition is satisfied
-           val permPositive = Assume(Forall(translatedLocalVarDecl, tr1, translatedCond ==> permissionPositiveInternal(translatedPerms,None,true)))
+           val permPositive = {
+             inliningModule.current_exists match {
+               case None => Assume(Forall(translatedLocalVarDecl, tr1, translatedCond ==> permissionPositiveInternal(translatedPerms,None,true)))
+               case Some(ex) => Assign(ex, ex && (Forall(translatedLocals, tr1, translatedCond ==> permissionPositiveInternal(translatedPerms,None,true))))
+             }
+           }
+
 
            //Define Permission to all locations of field f for locations where condition applies: add permission defined
            val condTrueLocations = (((condInv && permGt(permInv, noPerm))&&rangeFunApp) ==> ((permGt(permInv, noPerm) ==> (rcvInv === obj.l)) && (
@@ -1216,7 +1152,13 @@ class QuantifiedPermModule(val verifier: Verifier)
            val triggerForPermissionUpdateAxioms = Seq(Trigger(currentPermission(qpMask,translateNull, general_location))/*, Trigger(invFunApp)*/)
 
            // permissions non-negative
-           val permPositive = Assume(Forall(translatedLocals, tr1, translatedCond ==> permissionPositiveInternal(translatedPerms,None,true)))
+           val permPositive = {
+             inliningModule.current_exists match {
+               case None => Assume(Forall(translatedLocals, tr1, translatedCond ==> permissionPositiveInternal(translatedPerms,None,true)))
+               case Some(ex) => Assign(ex, ex &&
+                 (Forall(translatedLocals, tr1, translatedCond ==> permissionPositiveInternal(translatedPerms,None,true))))
+             }
+           }
 
            //assumptions for predicates that gain permission
            val permissionsMap = Assume(
@@ -1887,72 +1829,6 @@ class QuantifiedPermModule(val verifier: Verifier)
           (3, TrueLit(), e)
       }
     }
-  }
-
-  var id_pair: Int = 0
-
-  def newPhiRPair(): (LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl) = {
-    id_pair += 1
-    (
-      LocalVarDecl(Identifier("checkFraming" + id_pair), Bool),
-      LocalVarDecl(Identifier("exists" + id_pair), Bool),
-      LocalVarDecl(Identifier("MaskPhi" + id_pair), maskType),
-      LocalVarDecl(Identifier("HeapPhi" + id_pair), heapType),
-      LocalVarDecl(Identifier("MaskR" + id_pair), maskType),
-      LocalVarDecl(Identifier("HeapR" + id_pair), heapType)
-    )
-  }
-
-  var id_exhale_heap: Int = 0
-
-  def newExhaleHeap(): LocalVarDecl = {
-    id_exhale_heap += 1
-    LocalVarDecl(Identifier("ExhaleHeap" + id_exhale_heap), heapType)
-  }
-
-  var id_wildcard: Int = 0
-
-  def newWildcard(): LocalVarDecl = {
-    id_wildcard += 1
-    LocalVarDecl(Identifier("wildcard" + id_wildcard), permType)
-  }
-
-  var id_freshObj: Int = 0
-
-  def newFreshObj(): LocalVarDecl = {
-    id_freshObj += 1
-    LocalVarDecl(Identifier("freshObj" + id_freshObj), refType)
-  }
-
-  var id_var: Int = 0
-
-  def newVar(typ: Type): LocalVarDecl = {
-    id_var += 1
-    LocalVarDecl(Identifier("varTemp" + id_var), typ)
-  }
-
-  var id_permwild: Int = 0
-
-  def newPermwild(): LocalVarDecl = {
-    id_permwild += 1
-    LocalVarDecl(Identifier("permWild_" + id_permwild), permType)
-  }
-
-  def tempState(): (LocalVarDecl, LocalVarDecl) = {
-    (
-      LocalVarDecl(Identifier("tempMask"), maskType),
-      LocalVarDecl(Identifier("tempHeap"), heapType)
-    )
-  }
-
-  def wfMask(args: Seq[Exp], typ: Type = Bool): Exp = FuncApp(wfMask, args, typ)
-
-  def sumStateNormal(mask1: Var, heap1: Var, mask2: Var, heap2: Var, mask: Var, heap: Var): Exp = {
-    FuncApp(sumState, Seq(mask1, heap1, mask2, heap2, mask, heap), Bool)
-  }
-
-  def smallerState(smallMask: Var, smallHeap: Var, bigMask: Var, bigHeap: Var): Exp = {
-    FuncApp(smallerState, Seq(smallMask, smallHeap, bigMask, bigHeap), Bool)
   }
 
 }

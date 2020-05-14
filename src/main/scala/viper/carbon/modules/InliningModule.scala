@@ -10,6 +10,29 @@ import viper.carbon.boogie._
 // trait InhaleModule extends Module with InhaleComponent with ComponentRegistry[InhaleComponent] {
 trait InliningModule extends Module with Component {
 
+  var current_exists: Option[Var]
+  var current_exists_sil: Option[sil.LocalVar]
+
+  def newPhiRPair(): (LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl)
+
+  def newExhaleHeap(): LocalVarDecl
+
+  def newWildcard(): LocalVarDecl
+
+  def newFreshObj(): LocalVarDecl
+
+  def newVar(typ: Type): LocalVarDecl
+
+  def newPermwild(): LocalVarDecl
+
+  def tempState(): (LocalVarDecl, LocalVarDecl)
+
+  def wfMask(args: Seq[Exp], typ: Type = Bool): Exp
+
+  def sumStateNormal(mask1: Var, heap1: Var, mask2: Var, heap2: Var, mask: Var, heap: Var): Exp
+
+  def smallerState(smallMask: Var, smallHeap: Var, bigMask: Var, bigHeap: Var): Exp
+
   var current_depth: Int
 
   def maxDepth: Int
@@ -27,8 +50,6 @@ trait InliningModule extends Module with Component {
   def recordExhaleHeaps(s: Stmt): (Stmt, Seq[LocalVarDecl])
 
   def assumeExhaleHeap(s: Stmt, l: Seq[LocalVarDecl], check: LocalVar, e: VerificationError): (Stmt, Seq[LocalVarDecl])
-
-  def tempState: (LocalVarDecl, LocalVarDecl)
 
   def normalState: (Var, Var)
 
@@ -65,37 +86,16 @@ trait InliningModule extends Module with Component {
 
   var id_wfm: Int
 
-  def checkMonoAssume(orig_s: ast.Stmt, orig: ast.Stmt): Stmt
-
   def checkFraming(orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false): Stmt
 
   def inlineLoop(w: sil.Stmt, cond: ast.Exp, invs: Seq[ast.Exp], body: ast.Seqn): Stmt
-
-  def readVarsExp(e: ast.Exp): Seq[ast.LocalVar]
-
-  def readVarsDecl(d: ast.Declaration): Seq[ast.LocalVar]
-
-  def seqSeqToSeq(s: Seq[Seq[ast.LocalVar]]): Seq[ast.LocalVar]
-
-  var currentRenaming: Map[ast.LocalVar, ast.LocalVar]
-
-  def newString(s: String): String
-
-  def renameVar(x: ast.LocalVar): ast.LocalVar
-
-  def renameExp(exp: ast.Exp): ast.Exp
-
-  def renameAccPredicate(acc: ast.PredicateAccessPredicate): ast.PredicateAccessPredicate
-
-  def renameDecl(d: sil.Declaration): sil.Declaration
-
-  def renameWand(wand: sil.MagicWand): sil.MagicWand
-
-  def alphaRename(s: ast.Stmt): ast.Stmt
 
   def inlineMethod(m: Method, args: Seq[ast.Exp], targets: Seq[ast.LocalVar]): Stmt
 
   def inlinable(stmt: sil.Stmt): Boolean
 
   def groupNonInlinableStmts(ss: Seq[sil.Stmt], orig_s: sil.Stmt): Seq[sil.Stmt]
+
+  def getAxioms(): List[Decl]
+
 }
