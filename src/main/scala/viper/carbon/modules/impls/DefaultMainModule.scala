@@ -59,8 +59,16 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
     )
 
     val output = verifier.program match {
-      case sil.Program(domains, fields, functions, predicates, methods, extensions) =>
+      case sil.Program(domains, fields, functions, predicates, old_methods, extensions) =>
         // translate all members
+        var methods = old_methods
+
+        if (staticInlining.isDefined) {
+          entry match {
+            case None => methods = Seq(methods.head)
+            case Some(s) => methods = Seq(program.findMethod(s))
+          }
+        }
 
         // important to convert Seq to List to force the methods to be translated, otherwise it's possible that
         // evaluation happens lazily, which can lead to incorrect behaviour (evaluation order is important here)

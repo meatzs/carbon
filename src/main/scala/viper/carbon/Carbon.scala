@@ -95,5 +95,29 @@ class CarbonConfig(args: Seq[String]) extends SilFrontendConfig(args, "Carbon") 
     noshort = true
   )
 
+  val staticInlining = opt[Int]("SI",
+    descr = "Static inlining up to a depth (default: disabled)",
+    default = None,
+    noshort = true
+  )
+
+  val entry = opt[String]("entry",
+    descr = "Entry point for static inlining (default: first method)",
+    default = None,
+    noshort = true
+  )
+
+  val noCheckSC = opt[Boolean]("noCheckSC",
+    descr = "Check soundness condition for inlining (default: enabled)",
+    default = None,
+    noshort = true
+  )
+
+  val noSyntacticCheck = opt[Boolean]("noSyntacticCheck",
+    descr = "Disable syntactic check to speed up checking soundness condition for inlining (default: enabled)",
+    default = None,
+    noshort = true
+  )
+
   verify()
 }

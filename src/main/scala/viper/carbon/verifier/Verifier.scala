@@ -73,5 +73,9 @@ trait Verifier {
    */
   def replaceProgram(prog : sil.Program)
 
+  def staticInlining: Option[Int]
+  def noCheckSC: Boolean
+  def noSyntacticCheck: Boolean
+  def entry: Option[String]
 
 }
