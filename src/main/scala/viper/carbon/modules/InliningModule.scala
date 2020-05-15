@@ -1,13 +1,12 @@
 package viper.carbon.modules
 
-import viper.carbon.modules.components.{CarbonStateComponent, Component, ComponentRegistry, StmtComponent}
+import viper.carbon.modules.components.Component
 import viper.silver.{ast => sil}
 import viper.silver.ast.{ErrorTrafo, Info, Method, Position}
 import viper.silver.verifier.VerificationError
 import viper.silver.ast
 import viper.carbon.boogie._
 
-// trait InhaleModule extends Module with InhaleComponent with ComponentRegistry[InhaleComponent] {
 trait InliningModule extends Module with Component {
 
   var current_exists: Option[Var]
@@ -65,8 +64,6 @@ trait InliningModule extends Module with Component {
   def assignSeqToSeq(s1: Seq[Var], s2: Seq[Var]): Stmt
 
   def equalSeq(s1: Seq[Var], s2: Seq[Var]): Exp
-
-  var id_wfm: Int
 
   def checkFraming(orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false): Stmt
 

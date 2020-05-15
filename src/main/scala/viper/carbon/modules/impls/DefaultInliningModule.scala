@@ -39,12 +39,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
-  // var id_pair: Int = 0
-
   private val maskType = NamedType("MaskType")
   private val heapType = NamedType("HeapType")
-
-  // Check soundness condition
 
   private val smallMask = LocalVarDecl(Identifier("SmallMask"),maskType)
   private val bigMask = LocalVarDecl(Identifier("BigMask"),maskType)
@@ -52,6 +48,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   private val wfMask = Identifier("wfMask")
   private val normalMask = LocalVarDecl(Identifier("normalMask"),maskType)
+
+  private val identicalOnEq = Identifier("IdenticalOnKnownLocationsEquiv")
 
   private def lookup(h: Exp, o: Exp, f: Exp) = MapSelect(h, Seq(o, f))
   private val normalHeap: LocalVarDecl = LocalVarDecl(Identifier("normalHeap"), heapType)
@@ -85,9 +83,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   def normalState: (Var, Var) = (permModule.currentMask.head.asInstanceOf[Var], heapModule.currentHeap.head.asInstanceOf[Var])
 
   // heapModule.freshTempState("").head)
-
-  var id_checkFraming = 1
-  var id_checkMono = 1
 
   def silEmptyStmt(): ((Position, Info, ErrorTrafo) => ast.Seqn) = {
     sil.Seqn(Seq(), Seq())
@@ -131,9 +126,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         (Assign(w.l, v) ++ s, Seq(w))
       case HavocImpl(Seq(v)) =>
         if (v.name.name == "ExhaleHeap") {
-          // val h = newExhaleHeap()
+          val pre = getVarDecl("PreExhaleHeap", heapType)
           val h = getVarDecl("ExhaleHeap", heapType)
-          (Seqn(Seq(s, Assign(h.l, v))), Seq(h))
+          (Seqn(Seq(Assign(pre.l, currentHeap.head), s, Assign(h.l, v))), Seq(pre, h))
         }
         else if (v.name.name == "newVersion") {
           // val nv = newVar(v.typ)
@@ -186,9 +181,18 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         // Inhale wildcard
         (If(check, Assign(v, l.head.l), Statements.EmptyStmt) ++ s, l.tail)
       case HavocImpl(Seq(v)) =>
-        if (v.name.name == "ExhaleHeap" || v.name.name == "freshObj" || v.name.name == "newVersion") {
+        if (v.name.name == "freshObj" || v.name.name == "newVersion") {
           val ss = If(check, Assume(v === l.head.l), Statements.EmptyStmt)
           (s ++ ss, l.tail)
+        }
+        else if (v.name.name == "ExhaleHeap") {
+          val pre = l.head
+          val h = l.tail.head
+          val ss = If(check, Assert(
+            //sameOnMask(pre.l, currentHeap.head.asInstanceOf[Var], currentMask.head.asInstanceOf[Var]),
+            pre.l === currentHeap.head,
+            e) ++ Assume(v === h.l), Statements.EmptyStmt)
+          (s ++ ss, l.tail.tail)
         }
         else {
           (s, l)
@@ -197,7 +201,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
-  // Also for methods
   var recordedScopes: Seq[Seq[sil.LocalVar]] = Seq()
 
   def recordVarsSil(s: sil.Stmt): sil.Stmt = {
@@ -267,7 +270,14 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     s match {
       case Seqn(stmts) => stmts map (removeAssume(_, exists))
       case Assume(FuncApp(Identifier("state", namespace), args, typ)) =>
+        println("removeAssume useful", s)
         Assign(exists, exists && wfMask(args.tail, typ))
+        /*
+      case Assume(FuncApp(Identifier("IdenticalOnKnownLocations", namespace), args, typ)) =>
+        println("removeAssume identicalOnKnownLoc useful", s)
+        Statements.EmptyStmt
+        // Assign(exists, exists && identicalEq(args, typ))
+         */
       case CommentBlock(c, ss) =>
         CommentBlock(c, removeAssume(ss, exists))
       case If(cond, thn, els) => If(cond, removeAssume(thn, exists), removeAssume(els, exists))
@@ -347,6 +357,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   def wfMask(args: Seq[Exp], typ: Type = Bool): Exp = FuncApp(wfMask, args, typ)
+  def identicalEq(args: Seq[Exp], typ: Type = Bool): Exp = FuncApp(identicalOnEq, args, typ)
+
+  def sameOnMask(heap1: Var, heap2: Var, mask: Var): Exp = {
+    FuncApp(equalOnMask, Seq(heap1, heap2, mask), Bool)
+  }
 
   def sumStateNormal(mask1: Var, heap1: Var, mask2: Var, heap2: Var, mask: Var, heap: Var): Exp = {
     FuncApp(sumState, Seq(mask1, heap1, mask2, heap2, mask, heap), Bool)
@@ -403,6 +418,136 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     MapSelect(mask, Seq(rcv, location))
   }
 
+  def getAxiomsIdentical(): List[Decl] = {
+    val obj: LocalVarDecl = LocalVarDecl(Identifier("o")(axiomNamespace), refType)
+    val field = LocalVarDecl(Identifier("f")(axiomNamespace), fieldType)
+
+    val heapTyp = NamedType("HeapType")
+    val heapName = Identifier("Heap")
+    val heap0Name = Identifier("Heap0")
+    val heap1Name = Identifier("Heap1")
+    val heap2Name = Identifier("Heap2")
+    val exhaleHeapName = Identifier("ExhaleHeap")
+
+    val h = LocalVarDecl(heapName, heapType)
+    val eh = LocalVarDecl(exhaleHeapName, heapType)
+    val h0 = LocalVarDecl(heap0Name, heapType)
+    val h1 = LocalVarDecl(heap1Name, heapType)
+    val h2 = LocalVarDecl(heap2Name, heapType)
+    val vars = Seq(h, eh) ++ staticMask
+    val identicalFuncApp = FuncApp(identicalOnEq, vars map (_.l), Bool)
+    val identicalFunc = Func(identicalOnEq, vars, Bool)
+      // frame all locations with direct permission
+    MaybeCommentedDecl("Equiv function", identicalFunc) ++
+    MaybeCommentedDecl("Frame all locations with direct permissions", Axiom(Forall(
+      vars,
+      Trigger(Seq(identicalFuncApp)),
+      identicalFuncApp <==>
+        (Forall(Seq(obj, field),
+          Trigger(Seq(lookup(eh.l, obj.l, field.l))),
+          (staticPermissionPositive(obj.l, field.l) ==>
+            (lookup(h.l, obj.l, field.l) === lookup(eh.l, obj.l, field.l))),
+          field.typ.freeTypeVars
+          ))))) /*++
+      // frame all predicate masks
+      MaybeCommentedDecl("Frame all predicate mask locations of predicates with direct permission", Axiom(Forall(
+        vars ++ Seq(predField),
+        Trigger(Seq(identicalFuncApp, isPredicateField(predField.l), lookup(eh.l, nullLit, predicateMaskField(predField.l)))),
+        identicalFuncApp ==>
+          ((staticPermissionPositive(nullLit, predField.l) && isPredicateField(predField.l)) ==>
+            (lookup(h.l, nullLit, predicateMaskField(predField.l)) === lookup(eh.l, nullLit, predicateMaskField(predField.l))))
+      )), size = 1) ++
+      // frame all locations with direct permission
+      MaybeCommentedDecl("Frame all locations with known folded permissions", Axiom(Forall(
+        vars ++ Seq(predField),
+        //Trigger(Seq(identicalFuncApp, lookup(h.l, nullLit, predicateMaskField(predField.l)), isPredicateField(predField.l))) ++
+        Trigger(Seq(identicalFuncApp, lookup(eh.l, nullLit, predField.l), isPredicateField(predField.l))) /*++
+          Trigger(Seq(identicalFuncApp, lookup(eh.l, nullLit, predicateMaskField(predField.l)), isPredicateField(predField.l))) ++
+          (verifier.program.predicates map (pred =>
+            Trigger(Seq(identicalFuncApp, predicateTriggerAnyState(pred, predField.l), isPredicateField(predField.l))))
+            )*/,
+        identicalFuncApp ==>
+          (
+            (staticPermissionPositive(nullLit, predField.l) && isPredicateField(predField.l)) ==>
+              Forall(Seq(obj2, field),
+                //Trigger(Seq(lookup(h.l, obj2.l, field.l))) ++
+                Trigger(Seq(lookup(eh.l, obj2.l, field.l))),
+                (lookup(lookup(h.l, nullLit, predicateMaskField(predField.l)), obj2.l, field.l) ==>
+                  (lookup(h.l, obj2.l, field.l) === lookup(eh.l, obj2.l, field.l))),
+                field.typ.freeTypeVars
+              )
+            )
+      )), size = 1)  ++
+      // frame all wand masks
+      MaybeCommentedDecl("Frame all wand mask locations of wands with direct permission", Axiom(Forall(
+        vars ++ Seq(predField),
+        Trigger(Seq(identicalFuncApp, isWandField(predField.l), lookup(eh.l, nullLit, wandMaskField(predField.l)))),
+        identicalFuncApp ==>
+          ((staticPermissionPositive(nullLit, predField.l) && isWandField(predField.l)) ==>
+            (lookup(h.l, nullLit, wandMaskField(predField.l)) === lookup(eh.l, nullLit, wandMaskField(predField.l))))
+      )), size = 1) ++
+      MaybeCommentedDecl("Frame all locations in the footprint of magic wands", Axiom(Forall(
+        vars ++ Seq(predField),
+        Trigger(Seq(identicalFuncApp, isWandField(predField.l)))
+        ,
+        identicalFuncApp ==>
+          (
+            (staticPermissionPositive(nullLit, predField.l) && isWandField(predField.l)) ==>
+              Forall(Seq(obj2, field),
+                Trigger(Seq(lookup(eh.l, obj2.l, field.l))),
+                (lookup(lookup(h.l, nullLit, wandMaskField(predField.l)), obj2.l, field.l) ==>
+                  (lookup(h.l, obj2.l, field.l) === lookup(eh.l, obj2.l, field.l))),
+                field.typ.freeTypeVars
+              )
+            )
+      )), size = 1) ++
+      (if(enableAllocationEncoding) // preserve "allocated" knowledge, where already true
+        MaybeCommentedDecl("All previously-allocated references are still allocated", Axiom(Forall(
+          vars ++ Seq(obj),
+          /*Trigger(Seq(identicalFuncApp, lookup(h.l, obj.l, Const(allocName)))) ++*/
+          Trigger(Seq(identicalFuncApp, lookup(eh.l, obj.l, Const(allocName)))),
+          identicalFuncApp ==>
+            (lookup(h.l, obj.l, Const(allocName)) ==> lookup(eh.l, obj.l, Const(allocName)))
+        )), size = 1) else Nil) ++
+      MaybeCommentedDecl("Updated Heaps are Successor Heaps", {
+        val value = LocalVarDecl(Identifier("v"),TypeVar("B"));
+        val upd = MapUpdate(h.l,Seq(obj.l,field.l),value.l)
+        Axiom(Forall(
+          Seq(h, obj, field, value),
+          Trigger(Seq(upd))
+          ,
+          FuncApp(succHeapName, Seq(h.l, upd), Bool)
+        ))
+      }, size = 1) ++
+      MaybeCommentedDecl("IdenticalOnKnownLocations Heaps are Successor Heaps",
+        Axiom(Forall(
+          vars,
+          Trigger(Seq(identicalFuncApp))
+          ,
+          identicalFuncApp ==> FuncApp(succHeapName, Seq(h.l, eh.l), Bool)
+        )), size = 1) ++
+      MaybeCommentedDecl("Successor Heaps are Transitive Successor Heaps", {
+        val succHeapApp = FuncApp(succHeapName, Seq(h0.l, h1.l), Bool)
+        Axiom(Forall(
+          Seq(h0, h1),
+          Trigger(Seq(succHeapApp))
+          ,
+          succHeapApp ==> FuncApp(succHeapTransName, Seq(h0.l, h1.l), Bool)
+        ))
+      }, size = 1) ++
+      MaybeCommentedDecl("Transitivity of Transitive Successor Heaps", {
+        val succHeapTransApp = FuncApp(succHeapTransName, Seq(h0.l, h1.l), Bool)
+        val succHeapApp = FuncApp(succHeapName, Seq(h1.l, h2.l), Bool)
+        Axiom(Forall(
+          Seq(h0, h1, h2),
+          Trigger(Seq(succHeapTransApp,succHeapApp))
+          ,
+          (succHeapTransApp && succHeapApp) ==> FuncApp(succHeapTransName, Seq(h0.l, h2.l), Bool) // NOTE: ignore IDE warning - these parentheses are NOT spurious, due to how the overloaded && and ==> get desugared
+        ))
+      }, size = 1)
+     */
+  }
+
   def getAxioms(): List[Decl] = {
     val obj: LocalVarDecl = LocalVarDecl(Identifier("o")(axiomNamespace), refType)
     val field = LocalVarDecl(Identifier("f")(axiomNamespace), fieldType)
@@ -426,6 +571,20 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     val sumStateArgs = Seq(mask1, heap1, mask2, heap2, normalMask, normalHeap)
     val sumStateApp = FuncApp(sumState, sumStateArgs map (_.l), Bool)
     val sumMaskApp = FuncApp(sumMasks, Seq(normalMask, mask1, mask2) map (_.l), Bool)
+
+/*
+    MaybeCommentedDecl("Frame all locations with direct permissions", Axiom(Forall(
+      vars ++ Seq(obj, field),
+      //        Trigger(Seq(identicalFuncApp, lookup(h.l, obj.l, field.l))) ++
+      Trigger(Seq(identicalFuncApp, lookup(eh.l, obj.l, field.l))),
+      identicalFuncApp ==>
+        (staticPermissionPositive(obj.l, field.l) ==>
+          (lookup(h.l, obj.l, field.l) === lookup(eh.l, obj.l, field.l)))
+    )), size = 1) ++
+
+ */
+
+
 
     MaybeCommentedDecl("CHECK SOUNDNESS CONDITION",
       Func(smallerMask, smallerMaskArgs, Bool) ++
@@ -473,16 +632,13 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         sumStateApp <==> (sumMaskApp
           && heap1.l === normalHeap.l
           && heap2.l === normalHeap.l
-          /*
-          && FuncApp(equalOnMask, Seq(heap1.l, normalHeap.l, mask1.l), Bool)
-          && FuncApp(equalOnMask, Seq(heap2.l, normalHeap.l, mask2.l), Bool)
-           */
-          )))
+          ))) ++ getAxiomsIdentical()
   }
 
-  var id_wfm = 0
   var current_exists: Option[Var] = None
   var current_exists_sil: Option[sil.LocalVar] = None
+  var id_checkFraming = 1
+  var id_checkMono = 1
 
   def checkFraming(orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false): Stmt = {
 
@@ -584,7 +740,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
       val nm: VerificationError = SoundnessFailed(orig, DummyReason, "monoOut", id_error, errorType)
       val nf: VerificationError = SoundnessFailed(orig, DummyReason, "framing", id_error, errorType)
-      val error_ignore: VerificationError = SoundnessFailed(orig, DummyReason, "ignore", id_error, errorType)
+      val error_ignore: VerificationError = SoundnessFailed(orig, DummyReason, "monoOut (structural)", id_error, errorType)
       // Replaced by assumes
       val nsm: VerificationError = SoundnessFailed(orig, DummyReason, "safeMono", id_error, errorType)
 
@@ -598,13 +754,13 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val smallStmt: Seq[Stmt] =
         assignSeqToSeq(oldVars, converted_vars) ++ {
           if (checkMono) {
-            Havoc((Seq(maskPhi, heapPhi) map (_.l)).asInstanceOf[Seq[Var]]) ++
+            //Havoc((Seq(maskPhi, heapPhi) map (_.l)).asInstanceOf[Seq[Var]]) ++
               Assume(sumStateNormal(maskPhi.l, heapPhi.l, maskR.l, heapR.l, normalState._1, normalState._2)) ++
               Assume(smallerState(maskPhi.l, heapPhi.l, normalState._1, normalState._2)) ++
               Assume(wfMask(Seq(maskPhi.l)))
           }
           else {
-            Havoc((Seq(maskPhi, heapPhi, maskR, heapR) map (_.l)).asInstanceOf[Seq[Var]]) ++
+            // Havoc((Seq(maskPhi, heapPhi, maskR, heapR) map (_.l)).asInstanceOf[Seq[Var]]) ++
               Assume(sumStateNormal(maskPhi.l, heapPhi.l, maskR.l, heapR.l, normalState._1, normalState._2)) ++
               Assume(wfMask(Seq(maskPhi.l))) ++
               Assume(wfMask(Seq(maskR.l)))
@@ -639,13 +795,15 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val r = {
         if (checkWFM) {
           MaybeComment(id_checkFraming + ": Check WFM",
-            Havoc(Seq(check.l)) ++ If(check.l, smallStmt ++ normalStmt ++ endCheck, Statements.EmptyStmt))
+            //Havoc(Seq(check.l)) ++
+              If(check.l, smallStmt ++ normalStmt ++ endCheck, Statements.EmptyStmt))
         }
         else {
           MaybeComment(id_checkFraming + ": Check " + {
             if (checkMono) "MONO" else "FRAMING"
           },
-            Havoc(Seq(check.l)) ++ If(check.l, smallStmt, Statements.EmptyStmt) ++ normalStmt ++ If(check.l, endCheck, Statements.EmptyStmt))
+            // Havoc(Seq(check.l)) ++
+              If(check.l, smallStmt, Statements.EmptyStmt) ++ normalStmt ++ If(check.l, endCheck, Statements.EmptyStmt))
         }
       }
 
