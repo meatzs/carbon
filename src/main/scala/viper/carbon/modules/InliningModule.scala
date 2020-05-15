@@ -13,20 +13,6 @@ trait InliningModule extends Module with Component {
   var current_exists: Option[Var]
   var current_exists_sil: Option[sil.LocalVar]
 
-  def newPhiRPair(): (LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl)
-
-  def newExhaleHeap(): LocalVarDecl
-
-  def newWildcard(): LocalVarDecl
-
-  def newFreshObj(): LocalVarDecl
-
-  def newVar(typ: Type): LocalVarDecl
-
-  def newPermwild(): LocalVarDecl
-
-  def tempState(): (LocalVarDecl, LocalVarDecl)
-
   def wfMask(args: Seq[Exp], typ: Type = Bool): Exp
 
   def sumStateNormal(mask1: Var, heap1: Var, mask2: Var, heap2: Var, mask: Var, heap: Var): Exp
@@ -62,17 +48,13 @@ trait InliningModule extends Module with Component {
 
   var recordedScopes: Seq[Seq[sil.LocalVar]]
 
-  def removeAssumeRecordVarsSil(s: sil.Stmt, exists: sil.LocalVar): sil.Stmt
+  def recordVarsSil(s: sil.Stmt): sil.Stmt
 
   def assignVarsSil(s: sil.Stmt): sil.Stmt
 
   def removeAssume(s: Stmt, exists: LocalVar): Stmt
 
   def modifError(s: Stmt, error: VerificationError, check: Var): Stmt
-
-  def isEmpty(s: Stmt): Boolean
-
-  def removeEmpty(s: Stmt): Stmt
 
   def assumify(s: Stmt): Stmt
 

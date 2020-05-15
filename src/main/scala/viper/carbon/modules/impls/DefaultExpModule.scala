@@ -471,6 +471,7 @@ class DefaultExpModule(val verifier: Verifier) extends ExpModule with Definednes
 
 
   override def checkDefinednessOfSpecAndInhale(e: sil.Exp, error: PartialVerificationError, statesStack: List[Any] = null, duringPackageStmt: Boolean = false): Stmt = {
+    /*
     if (e.isPure && inliningModule.current_exists.isDefined) {
       val exists: sil.LocalVar = inliningModule.current_exists_sil.get
       val new_s: sil.LocalVarAssign = sil.LocalVarAssign(exists, sil.And(exists, e)(e.pos, e.info, e.errT))(e.pos, e.info, e.errT)
@@ -478,6 +479,7 @@ class DefaultExpModule(val verifier: Verifier) extends ExpModule with Definednes
       stmtModule.translateStmt(new_s)
     }
     else {
+     */
       val stmt = {
         e match {
           case sil.And(e1, e2) =>
@@ -518,7 +520,7 @@ class DefaultExpModule(val verifier: Verifier) extends ExpModule with Definednes
       if (duringPackageStmt) {
         If(wandModule.getCurOpsBoolvar(), stmt, Statements.EmptyStmt)
       } else stmt
-    }
+    //}
   }
 
   override def checkDefinednessOfSpecAndExhale(e: sil.Exp, definednessError: PartialVerificationError, exhaleError: PartialVerificationError

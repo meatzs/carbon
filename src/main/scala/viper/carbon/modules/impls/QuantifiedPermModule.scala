@@ -815,7 +815,7 @@ class QuantifiedPermModule(val verifier: Verifier)
     inliningModule.current_exists match {
       case None => inhaleAux(e, Assume)
       case Some(ex: Var) =>
-        println("CATCHING INHALING", e)
+        // println("CATCHING INHALING", e)
         inhaleAux(e, (exp: Exp) => Assign(ex, BinExp(ex, And, exp)))
     }
   }

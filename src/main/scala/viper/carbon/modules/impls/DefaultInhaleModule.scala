@@ -35,7 +35,6 @@ class DefaultInhaleModule(val verifier: Verifier) extends InhaleModule with Stat
       stateModule.replaceState(statesStackForPackageStmt(0).asInstanceOf[StateRep].state)
     }
 
-
     val stmt =
         (exps map (e => inhaleConnective(e.whenInhaling))) ++
           MaybeCommentBlock("Free assumptions",
@@ -97,7 +96,11 @@ class DefaultInhaleModule(val verifier: Verifier) extends InhaleModule with Stat
 
   override def inhaleExp(e: sil.Exp): Stmt = {
     if (e.isPure) {
-      Assume(translateExp(e))
+      inliningModule.current_exists match {
+        case None => Assume(translateExp(e))
+        case Some(ex: LocalVar) => Assign(ex, ex && translateExp(e))
+      }
+
     } else {
       Nil
     }
