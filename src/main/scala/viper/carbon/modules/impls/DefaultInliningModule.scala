@@ -101,10 +101,14 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   // MATCH DETERMINISM
   // ----------------------------------------------------------------
 
-  // In order to remove some "indeterminism"
-  def recordExhaleHeaps(s: Stmt): (Stmt, Seq[LocalVarDecl]) = {
+  // Records:
+  // - exhale heaps
+  // - wildcard values
+  // - new version of predicates unfolded (?)
+  // - values of "freshObj"
+  def recordDeterminism(s: Stmt): (Stmt, Seq[LocalVarDecl]) = {
     s match {
-      case Seqn(stmts) => val r = (stmts map recordExhaleHeaps)
+      case Seqn(stmts) => val r = (stmts map recordDeterminism)
         (Seqn(r map (_._1)), r flatMap (_._2))
       case Assume(BinExp(v: LocalVar, LtCmp, right)) if (v.name.name == "wildcard") =>
         // Exhale wildcard
@@ -114,11 +118,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         val noPerm = BinExp(IntLit(0), Div, IntLit(1))
         (Assign(w.l, v) ++ Assign(p.l, right) ++ s, Seq(w, p))
       case CommentBlock(c, ss) =>
-        val (sss, l) = recordExhaleHeaps(ss)
+        val (sss, l) = recordDeterminism(ss)
         (CommentBlock(c, sss), l)
       case If(cond, thn, els) =>
-        val (nthn, l1) = recordExhaleHeaps(thn)
-        val (nels, l2) = recordExhaleHeaps(els)
+        val (nthn, l1) = recordDeterminism(thn)
+        val (nels, l2) = recordDeterminism(els)
         (If(cond, nthn, nels), l1 ++ l2)
       case Assign(LocalVar(Identifier("perm", n1), typ1), v: LocalVar) if (v.name.name == "wildcard") =>
         // val w = newWildcard()
@@ -147,19 +151,19 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
-  def assumeExhaleHeap(s: Stmt, l: Seq[LocalVarDecl], check: LocalVar, e: VerificationError): (Stmt, Seq[LocalVarDecl]) = {
+  def determinize(s: Stmt, l: Seq[LocalVarDecl], check: LocalVar, e: VerificationError): (Stmt, Seq[LocalVarDecl]) = {
     s match {
       case Seqn(stmts) =>
         var new_s: Seq[Stmt] = Seq()
         var ll = l
         for (ss <- stmts) {
-          val (sss, lll) = assumeExhaleHeap(ss, ll, check, e)
+          val (sss, lll) = determinize(ss, ll, check, e)
           ll = lll
           new_s = new_s :+ sss
         }
         (Seqn(new_s), ll)
       case CommentBlock(c, ss) =>
-        val (sss, ll) = assumeExhaleHeap(ss, l, check, e)
+        val (sss, ll) = determinize(ss, l, check, e)
         (CommentBlock(c, sss), ll)
       case Assume(BinExp(w: LocalVar, LtCmp, right)) if (w.name.name == "wildcard") =>
         val old_w = l.head
@@ -171,11 +175,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         (If(check, s1 ++ s2, s), l.tail.tail)
       case If(cond: LocalVar, thn, els) if (used_checks.contains(cond.name.name) && cond.name.name != check.name.name) =>
         // println("AVOID IF", cond, check)
-        val (nels, l2) = assumeExhaleHeap(els, l, check, e)
+        val (nels, l2) = determinize(els, l, check, e)
         (If(cond, thn, nels), l2)
       case If(cond, thn, els) =>
-        val (nthn, l1) = assumeExhaleHeap(thn, l, check, e)
-        val (nels, l2) = assumeExhaleHeap(els, l1, check, e)
+        val (nthn, l1) = determinize(thn, l, check, e)
+        val (nels, l2) = determinize(els, l1, check, e)
         (If(cond, nthn, nels), l2)
       case Assign(LocalVar(Identifier("perm", n1), typ1), v: LocalVar) if (v.name.name == "wildcard") =>
         // Inhale wildcard
@@ -188,8 +192,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         else if (v.name.name == "ExhaleHeap") {
           val pre = l.head
           val h = l.tail.head
-          val ss = If(check, Assert(
-            //sameOnMask(pre.l, currentHeap.head.asInstanceOf[Var], currentMask.head.asInstanceOf[Var]),
+          val ss = If(check,
+            Assert(
             pre.l === currentHeap.head,
             e) ++ Assume(v === h.l), Statements.EmptyStmt)
           (s ++ ss, l.tail.tail)
@@ -239,7 +243,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
-  def assignVarsSil(s: sil.Stmt): sil.Stmt = {
+  def assignVarsSil(s: sil.Stmt, check: sil.LocalVar): sil.Stmt = {
     val a = s.pos
     val b = s.info
     val c = s.errT
@@ -250,7 +254,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         assert(locals.size == tempVars.size)
         recordedScopes = recordedScopes.tail
         val assign: Seq[LocalVarAssign] = (locals zip tempVars) map { (x: (sil.LocalVarDecl, sil.LocalVar)) => sil.LocalVarAssign(x._1.localVar, x._2)(a, b, c) }
-        sil.Seqn(assign ++ ss map assignVarsSil, scopedDecls)(a, b, c)
+        // val if_assign: ast.Stmt = sil.If(check, sil.Seqn(assign, Seq())(a, b, c), silEmptyStmt()(a, b, c))(a, b, c)
+        sil.Seqn(assign ++ ss map (assignVarsSil(_, check)), scopedDecls)(a, b, c)
       case sil.MethodCall(methodName, _, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).body.isEmpty =>
         val tempVars: Seq[ast.LocalVar] = recordedScopes.head
         assert(targets.size == tempVars.size)
@@ -258,30 +263,23 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         val assign: Seq[LocalVarAssign] = (tempVars zip targets) map { (x: (sil.LocalVar, sil.LocalVar)) => sil.LocalVarAssign(x._2, x._1)(a, b, c) }
         sil.Seqn(Seq(s) ++ assign, Seq())(a, b, c)
       case sil.If(cond, s1, s2) =>
-        val ss1 = assignVarsSil(s1).asInstanceOf[sil.Seqn]
-        val ss2 = assignVarsSil(s2).asInstanceOf[sil.Seqn]
+        val ss1 = assignVarsSil(s1, check).asInstanceOf[sil.Seqn]
+        val ss2 = assignVarsSil(s2, check).asInstanceOf[sil.Seqn]
         sil.If(cond, ss1, ss2)(a, b, c)
       case _ => s
     }
   }
 
   // Only changes "assume state" into "exists := exists && wfState"
-  def removeAssume(s: Stmt, exists: LocalVar): Stmt = {
+  def changeStateWfState(s: Stmt, exists: LocalVar): Stmt = {
     s match {
-      case Seqn(stmts) => stmts map (removeAssume(_, exists))
+      case Seqn(stmts) => stmts map (changeStateWfState(_, exists))
       case Assume(FuncApp(Identifier("state", namespace), args, typ)) =>
-        println("removeAssume useful", s)
         Assign(exists, exists && wfMask(args.tail, typ))
-        /*
-      case Assume(FuncApp(Identifier("IdenticalOnKnownLocations", namespace), args, typ)) =>
-        println("removeAssume identicalOnKnownLoc useful", s)
-        Statements.EmptyStmt
-        // Assign(exists, exists && identicalEq(args, typ))
-         */
       case CommentBlock(c, ss) =>
-        CommentBlock(c, removeAssume(ss, exists))
-      case If(cond, thn, els) => If(cond, removeAssume(thn, exists), removeAssume(els, exists))
-      case NondetIf(thn, els) => NondetIf(removeAssume(thn, exists), removeAssume(els, exists))
+        CommentBlock(c, changeStateWfState(ss, exists))
+      case If(cond, thn, els) => If(cond, changeStateWfState(thn, exists), changeStateWfState(els, exists))
+      case NondetIf(thn, els) => NondetIf(changeStateWfState(thn, exists), changeStateWfState(els, exists))
       case ss => ss
     }
   }
@@ -359,10 +357,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   def wfMask(args: Seq[Exp], typ: Type = Bool): Exp = FuncApp(wfMask, args, typ)
   def identicalEq(args: Seq[Exp], typ: Type = Bool): Exp = FuncApp(identicalOnEq, args, typ)
 
-  def sameOnMask(heap1: Var, heap2: Var, mask: Var): Exp = {
-    FuncApp(equalOnMask, Seq(heap1, heap2, mask), Bool)
-  }
-
   def sumStateNormal(mask1: Var, heap1: Var, mask2: Var, heap2: Var, mask: Var, heap: Var): Exp = {
     FuncApp(sumState, Seq(mask1, heap1, mask2, heap2, mask, heap), Bool)
   }
@@ -371,11 +365,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     FuncApp(smallerState, Seq(smallMask, smallHeap, bigMask, bigHeap), Bool)
   }
 
-  def modifError(s: Stmt, error: VerificationError, check: Var): Stmt = {
+  def doubleErrorSafeMono(s: Stmt, error: VerificationError, check: Var): Stmt = {
     s match {
-      case Seqn(stmts) => stmts map (modifError(_, error, check))
-      case CommentBlock(c, ss) => CommentBlock(c, modifError(ss, error, check))
-      case If(cond, thn, els) => If(cond, modifError(thn, error, check), modifError(els, error, check))
+      case Seqn(stmts) => stmts map (doubleErrorSafeMono(_, error, check))
+      case CommentBlock(c, ss) => CommentBlock(c, doubleErrorSafeMono(ss, error, check))
+      case If(cond, thn, els) => If(cond, doubleErrorSafeMono(thn, error, check), doubleErrorSafeMono(els, error, check))
       case Assert(exp, err) => Seqn(Assert(check ==> exp, error) ++ Assert(exp, err))
       case _ => s
     }
@@ -416,136 +410,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   def currentPermission(mask: Exp, rcv: Exp, location: Exp): MapSelect = {
     MapSelect(mask, Seq(rcv, location))
-  }
-
-  def getAxiomsIdentical(): List[Decl] = {
-    val obj: LocalVarDecl = LocalVarDecl(Identifier("o")(axiomNamespace), refType)
-    val field = LocalVarDecl(Identifier("f")(axiomNamespace), fieldType)
-
-    val heapTyp = NamedType("HeapType")
-    val heapName = Identifier("Heap")
-    val heap0Name = Identifier("Heap0")
-    val heap1Name = Identifier("Heap1")
-    val heap2Name = Identifier("Heap2")
-    val exhaleHeapName = Identifier("ExhaleHeap")
-
-    val h = LocalVarDecl(heapName, heapType)
-    val eh = LocalVarDecl(exhaleHeapName, heapType)
-    val h0 = LocalVarDecl(heap0Name, heapType)
-    val h1 = LocalVarDecl(heap1Name, heapType)
-    val h2 = LocalVarDecl(heap2Name, heapType)
-    val vars = Seq(h, eh) ++ staticMask
-    val identicalFuncApp = FuncApp(identicalOnEq, vars map (_.l), Bool)
-    val identicalFunc = Func(identicalOnEq, vars, Bool)
-      // frame all locations with direct permission
-    MaybeCommentedDecl("Equiv function", identicalFunc) ++
-    MaybeCommentedDecl("Frame all locations with direct permissions", Axiom(Forall(
-      vars,
-      Trigger(Seq(identicalFuncApp)),
-      identicalFuncApp <==>
-        (Forall(Seq(obj, field),
-          Trigger(Seq(lookup(eh.l, obj.l, field.l))),
-          (staticPermissionPositive(obj.l, field.l) ==>
-            (lookup(h.l, obj.l, field.l) === lookup(eh.l, obj.l, field.l))),
-          field.typ.freeTypeVars
-          ))))) /*++
-      // frame all predicate masks
-      MaybeCommentedDecl("Frame all predicate mask locations of predicates with direct permission", Axiom(Forall(
-        vars ++ Seq(predField),
-        Trigger(Seq(identicalFuncApp, isPredicateField(predField.l), lookup(eh.l, nullLit, predicateMaskField(predField.l)))),
-        identicalFuncApp ==>
-          ((staticPermissionPositive(nullLit, predField.l) && isPredicateField(predField.l)) ==>
-            (lookup(h.l, nullLit, predicateMaskField(predField.l)) === lookup(eh.l, nullLit, predicateMaskField(predField.l))))
-      )), size = 1) ++
-      // frame all locations with direct permission
-      MaybeCommentedDecl("Frame all locations with known folded permissions", Axiom(Forall(
-        vars ++ Seq(predField),
-        //Trigger(Seq(identicalFuncApp, lookup(h.l, nullLit, predicateMaskField(predField.l)), isPredicateField(predField.l))) ++
-        Trigger(Seq(identicalFuncApp, lookup(eh.l, nullLit, predField.l), isPredicateField(predField.l))) /*++
-          Trigger(Seq(identicalFuncApp, lookup(eh.l, nullLit, predicateMaskField(predField.l)), isPredicateField(predField.l))) ++
-          (verifier.program.predicates map (pred =>
-            Trigger(Seq(identicalFuncApp, predicateTriggerAnyState(pred, predField.l), isPredicateField(predField.l))))
-            )*/,
-        identicalFuncApp ==>
-          (
-            (staticPermissionPositive(nullLit, predField.l) && isPredicateField(predField.l)) ==>
-              Forall(Seq(obj2, field),
-                //Trigger(Seq(lookup(h.l, obj2.l, field.l))) ++
-                Trigger(Seq(lookup(eh.l, obj2.l, field.l))),
-                (lookup(lookup(h.l, nullLit, predicateMaskField(predField.l)), obj2.l, field.l) ==>
-                  (lookup(h.l, obj2.l, field.l) === lookup(eh.l, obj2.l, field.l))),
-                field.typ.freeTypeVars
-              )
-            )
-      )), size = 1)  ++
-      // frame all wand masks
-      MaybeCommentedDecl("Frame all wand mask locations of wands with direct permission", Axiom(Forall(
-        vars ++ Seq(predField),
-        Trigger(Seq(identicalFuncApp, isWandField(predField.l), lookup(eh.l, nullLit, wandMaskField(predField.l)))),
-        identicalFuncApp ==>
-          ((staticPermissionPositive(nullLit, predField.l) && isWandField(predField.l)) ==>
-            (lookup(h.l, nullLit, wandMaskField(predField.l)) === lookup(eh.l, nullLit, wandMaskField(predField.l))))
-      )), size = 1) ++
-      MaybeCommentedDecl("Frame all locations in the footprint of magic wands", Axiom(Forall(
-        vars ++ Seq(predField),
-        Trigger(Seq(identicalFuncApp, isWandField(predField.l)))
-        ,
-        identicalFuncApp ==>
-          (
-            (staticPermissionPositive(nullLit, predField.l) && isWandField(predField.l)) ==>
-              Forall(Seq(obj2, field),
-                Trigger(Seq(lookup(eh.l, obj2.l, field.l))),
-                (lookup(lookup(h.l, nullLit, wandMaskField(predField.l)), obj2.l, field.l) ==>
-                  (lookup(h.l, obj2.l, field.l) === lookup(eh.l, obj2.l, field.l))),
-                field.typ.freeTypeVars
-              )
-            )
-      )), size = 1) ++
-      (if(enableAllocationEncoding) // preserve "allocated" knowledge, where already true
-        MaybeCommentedDecl("All previously-allocated references are still allocated", Axiom(Forall(
-          vars ++ Seq(obj),
-          /*Trigger(Seq(identicalFuncApp, lookup(h.l, obj.l, Const(allocName)))) ++*/
-          Trigger(Seq(identicalFuncApp, lookup(eh.l, obj.l, Const(allocName)))),
-          identicalFuncApp ==>
-            (lookup(h.l, obj.l, Const(allocName)) ==> lookup(eh.l, obj.l, Const(allocName)))
-        )), size = 1) else Nil) ++
-      MaybeCommentedDecl("Updated Heaps are Successor Heaps", {
-        val value = LocalVarDecl(Identifier("v"),TypeVar("B"));
-        val upd = MapUpdate(h.l,Seq(obj.l,field.l),value.l)
-        Axiom(Forall(
-          Seq(h, obj, field, value),
-          Trigger(Seq(upd))
-          ,
-          FuncApp(succHeapName, Seq(h.l, upd), Bool)
-        ))
-      }, size = 1) ++
-      MaybeCommentedDecl("IdenticalOnKnownLocations Heaps are Successor Heaps",
-        Axiom(Forall(
-          vars,
-          Trigger(Seq(identicalFuncApp))
-          ,
-          identicalFuncApp ==> FuncApp(succHeapName, Seq(h.l, eh.l), Bool)
-        )), size = 1) ++
-      MaybeCommentedDecl("Successor Heaps are Transitive Successor Heaps", {
-        val succHeapApp = FuncApp(succHeapName, Seq(h0.l, h1.l), Bool)
-        Axiom(Forall(
-          Seq(h0, h1),
-          Trigger(Seq(succHeapApp))
-          ,
-          succHeapApp ==> FuncApp(succHeapTransName, Seq(h0.l, h1.l), Bool)
-        ))
-      }, size = 1) ++
-      MaybeCommentedDecl("Transitivity of Transitive Successor Heaps", {
-        val succHeapTransApp = FuncApp(succHeapTransName, Seq(h0.l, h1.l), Bool)
-        val succHeapApp = FuncApp(succHeapName, Seq(h1.l, h2.l), Bool)
-        Axiom(Forall(
-          Seq(h0, h1, h2),
-          Trigger(Seq(succHeapTransApp,succHeapApp))
-          ,
-          (succHeapTransApp && succHeapApp) ==> FuncApp(succHeapTransName, Seq(h0.l, h2.l), Bool) // NOTE: ignore IDE warning - these parentheses are NOT spurious, due to how the overloaded && and ==> get desugared
-        ))
-      }, size = 1)
-     */
   }
 
   def getAxioms(): List[Decl] = {
@@ -632,7 +496,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         sumStateApp <==> (sumMaskApp
           && heap1.l === normalHeap.l
           && heap2.l === normalHeap.l
-          ))) ++ getAxiomsIdentical()
+          )))
   }
 
   var current_exists: Option[Var] = None
@@ -665,15 +529,17 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val cc = orig_s.errT
 
       val silExistsDecl: ast.LocalVarDecl = sil.LocalVarDecl(silNameNotUsed("exists"), sil.Bool)(aa, bb, cc)
-      // val silExistsDecl: ast.LocalVarDecl = sil.LocalVarDecl("exists", sil.Bool)(aa, bb, cc)
-
       val exists: LocalVar = mainModule.env.define(silExistsDecl.localVar)
+
+      val silCheckDecl: ast.LocalVarDecl = sil.LocalVarDecl(silNameNotUsed("checkFraming"), sil.Bool)(aa, bb, cc)
+      val check: LocalVar = mainModule.env.define(silCheckDecl.localVar)
+
 
       // val orig_s1: sil.Stmt = sil.Seqn(Seq(sil.LocalVarAssign(silExistsDecl.localVar, sil.TrueLit()(aa, bb, cc))(aa, bb, cc),
       val orig_s1: sil.Stmt = recordVarsSil(orig_s)
         //Seq(silExistsDecl))(aa, bb, cc)
         //Seq())(aa, bb, cc)
-      val orig_s2: sil.Stmt = assignVarsSil(orig_s)
+      val orig_s2: sil.Stmt = assignVarsSil(orig_s, silCheckDecl.localVar)
       // val orig_s1 = orig_s
 
       val converted_vars: Seq[LocalVar] = (orig_s.writtenVars filter (v => mainModule.env.isDefinedAt(v))) map translateLocalVar
@@ -683,7 +549,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val tempVars = converted_vars map ((v: LocalVar) => getVarDecl(v.name.name, v.typ).l)
 
 
-      val check = getVarDecl("checkFraming", Bool)
+      // val check = getVarDecl("checkFraming", Bool)
       val maskPhi = getVarDecl("MaskPhi", maskType)
       val heapPhi = getVarDecl("HeapPhi", heapType)
       val maskR = getVarDecl("MaskR", maskType)
@@ -694,7 +560,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
       // val pair: (LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl) = newPhiRPair()
       // used_checks += pair._1.l.name.name
-      used_checks += check.l.name.name
+      used_checks += check.name.name
 
       var s1: Stmt = Statements.EmptyStmt
       var s2: Stmt = Statements.EmptyStmt
@@ -744,8 +610,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       // Replaced by assumes
       val nsm: VerificationError = SoundnessFailed(orig, DummyReason, "safeMono", id_error, errorType)
 
-      val (modif_s, l) = recordExhaleHeaps(assumify(addIfExists(removeAssume(s1, exists), exists)))
-      val (modif_s2, ll) = assumeExhaleHeap(modifError(s2, nsm, check.l), l, check.l, error_ignore)
+      val (modif_s, l) = recordDeterminism(assumify(addIfExists(changeStateWfState(s1, exists), exists)))
+      val (modif_s2, ll) = determinize(doubleErrorSafeMono(s2, nsm, check), l, check, error_ignore)
 
       val tempState = (getVarDecl("tempMask", maskType), getVarDecl("tempHeap", heapType))
 
@@ -796,14 +662,14 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         if (checkWFM) {
           MaybeComment(id_checkFraming + ": Check WFM",
             //Havoc(Seq(check.l)) ++
-              If(check.l, smallStmt ++ normalStmt ++ endCheck, Statements.EmptyStmt))
+              If(check, smallStmt ++ normalStmt ++ endCheck, Statements.EmptyStmt))
         }
         else {
           MaybeComment(id_checkFraming + ": Check " + {
             if (checkMono) "MONO" else "FRAMING"
           },
             // Havoc(Seq(check.l)) ++
-              If(check.l, smallStmt, Statements.EmptyStmt) ++ normalStmt ++ If(check.l, endCheck, Statements.EmptyStmt))
+              If(check, smallStmt, Statements.EmptyStmt) ++ normalStmt ++ If(check, endCheck, Statements.EmptyStmt))
         }
       }
 
