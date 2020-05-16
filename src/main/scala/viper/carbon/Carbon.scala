@@ -113,6 +113,12 @@ class CarbonConfig(args: Seq[String]) extends SilFrontendConfig(args, "Carbon") 
     noshort = true
   )
 
+  val printSC = opt[Boolean]("printSC",
+    descr = "Print the code when checking mono and framing (default: disabled)",
+    default = None,
+    noshort = true
+  )
+
   val noSyntacticCheck = opt[Boolean]("noSyntacticCheck",
     descr = "Disable syntactic check to speed up checking soundness condition for inlining (default: enabled)",
     default = None,

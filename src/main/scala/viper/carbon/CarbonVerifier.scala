@@ -189,6 +189,7 @@ case class CarbonVerifier(private var _debugInfo: Seq[(String, Any)] = Nil) exte
   def staticInlining = if (config != null) {config.staticInlining.toOption} else None
   def noCheckSC: Boolean = if (config != null) {config.noCheckSC.toOption.getOrElse(false)} else {false}
   def noSyntacticCheck: Boolean = if (config != null) {config.noSyntacticCheck.toOption.getOrElse(false)} else {false}
+  def printSC: Boolean = if (config != null) {config.printSC.toOption.getOrElse(false)} else {false}
   def entry = if (config != null) {config.entry.toOption} else None
 
 }

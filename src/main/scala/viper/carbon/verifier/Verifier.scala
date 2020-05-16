@@ -76,6 +76,7 @@ trait Verifier {
 
   def staticInlining: Option[Int]
   def noCheckSC: Boolean
+  def printSC: Boolean
   def noSyntacticCheck: Boolean
   def entry: Option[String]
 

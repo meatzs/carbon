@@ -101,6 +101,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   // MATCH DETERMINISM
   // ----------------------------------------------------------------
 
+  var declareFalseAtBegin: Seq[LocalVarDecl] = Seq()
+
   // Records:
   // - exhale heaps
   // - wildcard values
@@ -113,10 +115,12 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       case Assume(BinExp(v: LocalVar, LtCmp, right)) if (v.name.name == "wildcard") =>
         // Exhale wildcard
         // val w = newWildcard()
+        val b = getVarDecl("BranchTakenForWildcard", Bool)
+        declareFalseAtBegin :+= b
         val w = getVarDecl("wildcard", permType)
         val p = getVarDecl("permwild", permType)
         val noPerm = BinExp(IntLit(0), Div, IntLit(1))
-        (Assign(w.l, v) ++ Assign(p.l, right) ++ s, Seq(w, p))
+        (Assign(b.l, TrueLit()) ++ Assign(w.l, v) ++ Assign(p.l, right) ++ s, Seq(b, w, p))
       case CommentBlock(c, ss) =>
         val (sss, l) = recordDeterminism(ss)
         (CommentBlock(c, sss), l)
@@ -130,9 +134,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         (Assign(w.l, v) ++ s, Seq(w))
       case HavocImpl(Seq(v)) =>
         if (v.name.name == "ExhaleHeap") {
+          val b = getVarDecl("BranchTakenForExhale", Bool)
+          declareFalseAtBegin :+= b
           val pre = getVarDecl("PreExhaleHeap", heapType)
           val h = getVarDecl("ExhaleHeap", heapType)
-          (Seqn(Seq(Assign(pre.l, currentHeap.head), s, Assign(h.l, v))), Seq(pre, h))
+          (Seqn(Seq(Assign(b.l, TrueLit()), Assign(pre.l, currentHeap.head), s, Assign(h.l, v))), Seq(b, pre, h))
         }
         else if (v.name.name == "newVersion") {
           // val nv = newVar(v.typ)
@@ -166,13 +172,14 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         val (sss, ll) = determinize(ss, l, check, e)
         (CommentBlock(c, sss), ll)
       case Assume(BinExp(w: LocalVar, LtCmp, right)) if (w.name.name == "wildcard") =>
-        val old_w = l.head
-        val p = l.tail.head
+        val b = l.head
+        val old_w = l.tail.head
+        val p = l.tail.tail.head
 
         val s1 = Assert(right >= p.l, e)
         val s2 = Assume(right - w >= p.l - old_w.l)
 
-        (If(check, s1 ++ s2, s), l.tail.tail)
+        (If(check && b.l, s1 ++ s2, s), l.tail.tail.tail)
       case If(cond: LocalVar, thn, els) if (used_checks.contains(cond.name.name) && cond.name.name != check.name.name) =>
         // println("AVOID IF", cond, check)
         val (nels, l2) = determinize(els, l, check, e)
@@ -190,13 +197,17 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           (s ++ ss, l.tail)
         }
         else if (v.name.name == "ExhaleHeap") {
-          val pre = l.head
-          val h = l.tail.head
-          val ss = If(check,
-            Assert(
-            pre.l === currentHeap.head,
-            e) ++ Assume(v === h.l), Statements.EmptyStmt)
-          (s ++ ss, l.tail.tail)
+          val b = l.head
+          val pre = l.tail.head
+          val h = l.tail.tail.head
+          /*val ss = If(check,
+            Assert(b.l ==> (pre.l === currentHeap.head), e) ++
+              Assume(v === h.l), Statements.EmptyStmt)
+           */
+          val ss = If(check && b.l,
+            Assert(pre.l === currentHeap.head, e) ++
+              Assume(v === h.l), Statements.EmptyStmt)
+          (s ++ ss, l.tail.tail.tail)
         }
         else {
           (s, l)
@@ -524,6 +535,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
     else {
 
+      if (verifier.printSC) {
+        println(orig_s)
+        println()
+      }
+
       val aa = orig_s.pos
       val bb = orig_s.info
       val cc = orig_s.errT
@@ -610,7 +626,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       // Replaced by assumes
       val nsm: VerificationError = SoundnessFailed(orig, DummyReason, "safeMono", id_error, errorType)
 
+      declareFalseAtBegin = Seq()
       val (modif_s, l) = recordDeterminism(assumify(addIfExists(changeStateWfState(s1, exists), exists)))
+      val assign_false_branches_taken: Seq[Stmt] = declareFalseAtBegin map ((x) => Assign(x.l, FalseLit()))
+
       val (modif_s2, ll) = determinize(doubleErrorSafeMono(s2, nsm, check), l, check, error_ignore)
 
       val tempState = (getVarDecl("tempMask", maskType), getVarDecl("tempHeap", heapType))
@@ -618,7 +637,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       assert(ll.isEmpty)
 
       val smallStmt: Seq[Stmt] =
-        assignSeqToSeq(oldVars, converted_vars) ++ {
+        assignSeqToSeq(oldVars, converted_vars) ++
+        assign_false_branches_taken ++
+        {
           if (checkMono) {
             //Havoc((Seq(maskPhi, heapPhi) map (_.l)).asInstanceOf[Seq[Var]]) ++
               Assume(sumStateNormal(maskPhi.l, heapPhi.l, maskR.l, heapR.l, normalState._1, normalState._2)) ++
