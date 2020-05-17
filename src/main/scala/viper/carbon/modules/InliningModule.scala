@@ -17,8 +17,6 @@ trait InliningModule extends Module with Component {
 
   def maxDepth: Int
 
-  var used_checks: Set[String]
-
   def normalState: (Var, Var)
 
   def silEmptyStmt(): ((Position, Info, ErrorTrafo) => ast.Seqn)
@@ -36,13 +34,13 @@ trait InliningModule extends Module with Component {
   // - values of "freshObj"
   def recordDeterminism(s: Stmt): (Stmt, Seq[LocalVarDecl])
 
-  def determinize(s: Stmt, l: Seq[LocalVarDecl], check: LocalVar, e: VerificationError): (Stmt, Seq[LocalVarDecl])
+  def determinize(s: Stmt, l: Seq[LocalVarDecl], check: Exp, id_check: Int, e: VerificationError): (Stmt, Seq[LocalVarDecl])
 
   var recordedScopes: Seq[Seq[sil.LocalVar]]
 
   def recordVarsSil(s: sil.Stmt): sil.Stmt
 
-  def assignVarsSil(s: sil.Stmt, check: sil.LocalVar): sil.Stmt
+  def assignVarsSil(s: sil.Stmt): sil.Stmt
 
   // Only changes "assume state" into "exists := exists && wfState"
   def changeStateWfState(s: Stmt, exists: LocalVar): Stmt
@@ -73,7 +71,7 @@ trait InliningModule extends Module with Component {
 
   def smallerState(smallMask: Var, smallHeap: Var, bigMask: Var, bigHeap: Var): Exp
 
-  def doubleErrorSafeMono(s: Stmt, error: VerificationError, check: Var): Stmt
+  def doubleErrorSafeMono(s: Stmt, error: VerificationError, check: Exp, id_check: Int): Stmt
 
   def assumify(s: Stmt): Stmt
 

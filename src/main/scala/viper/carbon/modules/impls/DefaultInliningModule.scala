@@ -78,8 +78,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     case Some(n) => n
   }
 
-  var used_checks: Set[String] = Set()
-
   def normalState: (Var, Var) = (permModule.currentMask.head.asInstanceOf[Var], heapModule.currentHeap.head.asInstanceOf[Var])
 
   // heapModule.freshTempState("").head)
@@ -100,6 +98,14 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   // ----------------------------------------------------------------
   // MATCH DETERMINISM
   // ----------------------------------------------------------------
+
+  var id_checkVar = 0
+  var checkVar = getVarDecl("checkFraming", Int)
+
+  def getCheckBool(): (Exp, Int) = {
+    id_checkVar += 1
+    (checkVar.l === IntLit(id_checkVar), id_checkVar)
+  }
 
   var declareFalseAtBegin: Seq[LocalVarDecl] = Seq()
 
@@ -157,19 +163,28 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
-  def determinize(s: Stmt, l: Seq[LocalVarDecl], check: LocalVar, e: VerificationError): (Stmt, Seq[LocalVarDecl]) = {
+  def conditionToAvoid(cond: Exp, id_check: Int): Boolean = {
+    cond match {
+      case BinExp(e1, Implies, _) => conditionToAvoid(e1, id_check)
+      case BinExp(e1, And, _) => conditionToAvoid(e1, id_check)
+      case BinExp(v: LocalVar, EqCmp, IntLit(i)) => v.name == checkVar.l.name && i != id_check
+      case _ => false
+    }
+  }
+
+  def determinize(s: Stmt, l: Seq[LocalVarDecl], check: Exp, id_check: Int, e: VerificationError): (Stmt, Seq[LocalVarDecl]) = {
     s match {
       case Seqn(stmts) =>
         var new_s: Seq[Stmt] = Seq()
         var ll = l
         for (ss <- stmts) {
-          val (sss, lll) = determinize(ss, ll, check, e)
+          val (sss, lll) = determinize(ss, ll, check, id_check, e)
           ll = lll
           new_s = new_s :+ sss
         }
         (Seqn(new_s), ll)
       case CommentBlock(c, ss) =>
-        val (sss, ll) = determinize(ss, l, check, e)
+        val (sss, ll) = determinize(ss, l, check, id_check, e)
         (CommentBlock(c, sss), ll)
       case Assume(BinExp(w: LocalVar, LtCmp, right)) if (w.name.name == "wildcard") =>
         val b = l.head
@@ -180,13 +195,14 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         val s2 = Assume(right - w >= p.l - old_w.l)
 
         (If(check && b.l, s1 ++ s2, s), l.tail.tail.tail)
-      case If(cond: LocalVar, thn, els) if (used_checks.contains(cond.name.name) && cond.name.name != check.name.name) =>
+      case If(cond, thn, els) if conditionToAvoid(cond, id_check) =>
+      // (used_checks.contains(cond.name.name) && cond.name.name != check.name.name) =>
         // println("AVOID IF", cond, check)
-        val (nels, l2) = determinize(els, l, check, e)
+        val (nels, l2) = determinize(els, l, check, id_check, e)
         (If(cond, thn, nels), l2)
       case If(cond, thn, els) =>
-        val (nthn, l1) = determinize(thn, l, check, e)
-        val (nels, l2) = determinize(els, l1, check, e)
+        val (nthn, l1) = determinize(thn, l, check, id_check, e)
+        val (nels, l2) = determinize(els, l1, check, id_check, e)
         (If(cond, nthn, nels), l2)
       case Assign(LocalVar(Identifier("perm", n1), typ1), v: LocalVar) if (v.name.name == "wildcard") =>
         // Inhale wildcard
@@ -254,7 +270,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
-  def assignVarsSil(s: sil.Stmt, check: sil.LocalVar): sil.Stmt = {
+  def assignVarsSil(s: sil.Stmt): sil.Stmt = {
     val a = s.pos
     val b = s.info
     val c = s.errT
@@ -266,7 +282,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         recordedScopes = recordedScopes.tail
         val assign: Seq[LocalVarAssign] = (locals zip tempVars) map { (x: (sil.LocalVarDecl, sil.LocalVar)) => sil.LocalVarAssign(x._1.localVar, x._2)(a, b, c) }
         // val if_assign: ast.Stmt = sil.If(check, sil.Seqn(assign, Seq())(a, b, c), silEmptyStmt()(a, b, c))(a, b, c)
-        sil.Seqn(assign ++ ss map (assignVarsSil(_, check)), scopedDecls)(a, b, c)
+        sil.Seqn(assign ++ ss map assignVarsSil, scopedDecls)(a, b, c)
       case sil.MethodCall(methodName, _, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).body.isEmpty =>
         val tempVars: Seq[ast.LocalVar] = recordedScopes.head
         assert(targets.size == tempVars.size)
@@ -274,8 +290,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         val assign: Seq[LocalVarAssign] = (tempVars zip targets) map { (x: (sil.LocalVar, sil.LocalVar)) => sil.LocalVarAssign(x._2, x._1)(a, b, c) }
         sil.Seqn(Seq(s) ++ assign, Seq())(a, b, c)
       case sil.If(cond, s1, s2) =>
-        val ss1 = assignVarsSil(s1, check).asInstanceOf[sil.Seqn]
-        val ss2 = assignVarsSil(s2, check).asInstanceOf[sil.Seqn]
+        val ss1 = assignVarsSil(s1).asInstanceOf[sil.Seqn]
+        val ss2 = assignVarsSil(s2).asInstanceOf[sil.Seqn]
         sil.If(cond, ss1, ss2)(a, b, c)
       case _ => s
     }
@@ -376,11 +392,15 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     FuncApp(smallerState, Seq(smallMask, smallHeap, bigMask, bigHeap), Bool)
   }
 
-  def doubleErrorSafeMono(s: Stmt, error: VerificationError, check: Var): Stmt = {
+  def doubleErrorSafeMono(s: Stmt, error: VerificationError, check: Exp, id_check: Int): Stmt = {
     s match {
-      case Seqn(stmts) => stmts map (doubleErrorSafeMono(_, error, check))
-      case CommentBlock(c, ss) => CommentBlock(c, doubleErrorSafeMono(ss, error, check))
-      case If(cond, thn, els) => If(cond, doubleErrorSafeMono(thn, error, check), doubleErrorSafeMono(els, error, check))
+      case Seqn(stmts) => stmts map (doubleErrorSafeMono(_, error, check, id_check))
+      case CommentBlock(c, ss) => CommentBlock(c, doubleErrorSafeMono(ss, error, check, id_check))
+      // case If(cond: LocalVar, thn, els) if (used_checks.contains(cond.name.name) && cond.name.name != check.name.name) =>
+      case If(cond, thn, els) if conditionToAvoid(cond, id_check) =>
+        If(cond, thn, doubleErrorSafeMono(els, error, check, id_check))
+      case If(cond, thn, els) => If(cond, doubleErrorSafeMono(thn, error, check, id_check), doubleErrorSafeMono(els, error, check, id_check))
+      case Assert(BinExp(e1, Implies,  _), _) if conditionToAvoid(e1, id_check) => s
       case Assert(exp, err) => Seqn(Assert(check ==> exp, error) ++ Assert(exp, err))
       case _ => s
     }
@@ -512,12 +532,18 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   var current_exists: Option[Var] = None
   var current_exists_sil: Option[sil.LocalVar] = None
-  var id_checkFraming = 1
-  var id_checkMono = 1
+  var id_checkFraming = 0
+  var id_checkMono = 0
 
   def checkFraming(orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false): Stmt = {
 
     println("checkFraming", current_depth, "framing", !checkMono, "length", length(orig_s))
+
+    if (checkMono) {id_checkMono += 1} else {id_checkFraming += 1}
+    val id_error = {if (checkMono) id_checkMono else id_checkFraming}
+    val errorType = {if (checkMono) "MONO" else "FRAMING"}
+
+    println(errorType + " " + id_error)
 
     if (syntacticFraming(orig_s, checkMono)) {
       if (checkMono) {
@@ -530,15 +556,13 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         Statements.EmptyStmt
       }
       else {
-        stmtModule.translateStmt(orig_s)
+        checkingFraming = true
+        val r = stmtModule.translateStmt(orig_s)
+        checkingFraming = false
+        r
       }
     }
     else {
-
-      if (verifier.printSC) {
-        println(orig_s)
-        println()
-      }
 
       val aa = orig_s.pos
       val bb = orig_s.info
@@ -547,15 +571,16 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val silExistsDecl: ast.LocalVarDecl = sil.LocalVarDecl(silNameNotUsed("exists"), sil.Bool)(aa, bb, cc)
       val exists: LocalVar = mainModule.env.define(silExistsDecl.localVar)
 
-      val silCheckDecl: ast.LocalVarDecl = sil.LocalVarDecl(silNameNotUsed("checkFraming"), sil.Bool)(aa, bb, cc)
-      val check: LocalVar = mainModule.env.define(silCheckDecl.localVar)
+      //val silCheckDecl: ast.LocalVarDecl = sil.LocalVarDecl(silNameNotUsed("checkFraming"), sil.Bool)(aa, bb, cc)
+      // val check: LocalVar = mainModule.env.define(silCheckDecl.localVar)
+      val (check, id_check) = getCheckBool()
 
 
       // val orig_s1: sil.Stmt = sil.Seqn(Seq(sil.LocalVarAssign(silExistsDecl.localVar, sil.TrueLit()(aa, bb, cc))(aa, bb, cc),
       val orig_s1: sil.Stmt = recordVarsSil(orig_s)
         //Seq(silExistsDecl))(aa, bb, cc)
         //Seq())(aa, bb, cc)
-      val orig_s2: sil.Stmt = assignVarsSil(orig_s, silCheckDecl.localVar)
+      val orig_s2: sil.Stmt = assignVarsSil(orig_s)
       // val orig_s1 = orig_s
 
       val converted_vars: Seq[LocalVar] = (orig_s.writtenVars filter (v => mainModule.env.isDefinedAt(v))) map translateLocalVar
@@ -576,7 +601,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
       // val pair: (LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl) = newPhiRPair()
       // used_checks += pair._1.l.name.name
-      used_checks += check.name.name
 
       var s1: Stmt = Statements.EmptyStmt
       var s2: Stmt = Statements.EmptyStmt
@@ -603,22 +627,20 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       s1 = s1.optimize.asInstanceOf[Stmt]
       s2 = s2.optimize.asInstanceOf[Stmt]
 
-      // val (check, _, maskPhi, heapPhi, maskR, heapR) = pair
+      if (verifier.printSC) {
+        println()
+        println("Orig_s")
+        println(orig_s)
+        println()
+        println("s1")
+        println(s1)
+        println()
+        println("s2")
+        println(s2)
+        println()
+      }
 
-      val id_error = {
-        if (checkMono) {
-          id_checkMono
-        } else {
-          id_checkFraming
-        }
-      }
-      val errorType = {
-        if (checkMono) {
-          "MONO"
-        } else {
-          "FRAMING"
-        }
-      }
+      // val (check, _, maskPhi, heapPhi, maskR, heapR) = pair
 
       val nm: VerificationError = SoundnessFailed(orig, DummyReason, "monoOut", id_error, errorType)
       val nf: VerificationError = SoundnessFailed(orig, DummyReason, "framing", id_error, errorType)
@@ -630,7 +652,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val (modif_s, l) = recordDeterminism(assumify(addIfExists(changeStateWfState(s1, exists), exists)))
       val assign_false_branches_taken: Seq[Stmt] = declareFalseAtBegin map ((x) => Assign(x.l, FalseLit()))
 
-      val (modif_s2, ll) = determinize(doubleErrorSafeMono(s2, nsm, check), l, check, error_ignore)
+      val (modif_s2, ll) = determinize(doubleErrorSafeMono(s2, nsm, check, id_check), l, check, id_check, error_ignore)
 
       val tempState = (getVarDecl("tempMask", maskType), getVarDecl("tempHeap", heapType))
 
@@ -694,12 +716,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         }
       }
 
-      if (checkMono) {
-        id_checkMono += 1
-      }
-      else {
-        id_checkFraming += 1
-      }
       checkingFraming = false
       mainModule.env.undefine(silExistsDecl.localVar)
       r
