@@ -535,23 +535,33 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   var id_checkFraming = 0
   var id_checkMono = 0
 
+  var beginning: Boolean = true
+
   def checkFraming(orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false): Stmt = {
 
     println("checkFraming", current_depth, "framing", !checkMono, "length", length(orig_s))
 
-    if (checkMono) {id_checkMono += 1} else {id_checkFraming += 1}
-    val id_error = {if (checkMono) id_checkMono else id_checkFraming}
-    val errorType = {if (checkMono) "MONO" else "FRAMING"}
+    if (verifier.printSC) {
+      println(orig_s)
+    }
 
-    println(errorType + " " + id_error)
+    var ignore = false
 
-    if (syntacticFraming(orig_s, checkMono)) {
+    if (beginning && checkMono) {
+      println("Ignoring first part of the code (trivial)")
+      ignore = true
+    }
+    else if (syntacticFraming(orig_s, checkMono)) {
       if (checkMono) {
         println("Syntactically mono")
       }
       else {
         println("Syntactically framing")
       }
+      ignore = true
+    }
+    beginning = false
+    if (ignore) {
       if (checkWFM) {
         Statements.EmptyStmt
       }
@@ -563,6 +573,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       }
     }
     else {
+
+      if (checkMono) {id_checkMono += 1} else {id_checkFraming += 1}
+      val id_error = {if (checkMono) id_checkMono else id_checkFraming}
+      val errorType = {if (checkMono) "MONO" else "FRAMING"}
+      println(errorType + " " + id_error)
 
       val aa = orig_s.pos
       val bb = orig_s.info
@@ -626,19 +641,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
       s1 = s1.optimize.asInstanceOf[Stmt]
       s2 = s2.optimize.asInstanceOf[Stmt]
-
-      if (verifier.printSC) {
-        println()
-        println("Orig_s")
-        println(orig_s)
-        println()
-        println("s1")
-        println(s1)
-        println()
-        println("s2")
-        println(s2)
-        println()
-      }
 
       // val (check, _, maskPhi, heapPhi, maskR, heapR) = pair
 
