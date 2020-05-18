@@ -49,8 +49,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   private val wfMask = Identifier("wfMask")
   private val normalMask = LocalVarDecl(Identifier("normalMask"),maskType)
 
-  private val identicalOnEq = Identifier("IdenticalOnKnownLocationsEquiv")
-
   private def lookup(h: Exp, o: Exp, f: Exp) = MapSelect(h, Seq(o, f))
   private val normalHeap: LocalVarDecl = LocalVarDecl(Identifier("normalHeap"), heapType)
 
@@ -98,6 +96,73 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   // ----------------------------------------------------------------
   // MATCH DETERMINISM
   // ----------------------------------------------------------------
+
+  var recordedScopes: Seq[Seq[sil.LocalVar]] = Seq()
+
+  // Record the values of variables at the beginning of scopes, and ensure return variables are the same (neither sound nor complete)
+  def recordVarsSil(s: sil.Stmt): sil.Stmt = {
+    val a = s.pos
+    val b = s.info
+    val c = s.errT
+    s match {
+      case sil.Seqn(ss, scopedDecls) =>
+        val locals: Seq[ast.LocalVarDecl] = scopedDecls.collect { case l: sil.LocalVarDecl => l }
+        val tempVars: Seq[ast.LocalVar] = locals map ((x: ast.LocalVarDecl) => {
+          val name = silNameNotUsed(x.localVar.name + "_temp")
+          val tempLocalVar = sil.LocalVar(name, x.localVar.typ)(x.pos, x.info, x.errT)
+          mainModule.env.define(tempLocalVar)
+          tempLocalVar
+        })
+        recordedScopes :+= tempVars
+        val assign: Seq[LocalVarAssign] = (tempVars zip locals) map { (x: (sil.LocalVar, sil.LocalVarDecl)) => sil.LocalVarAssign(x._1, x._2.localVar)(a, b, c) }
+        sil.Seqn(assign ++ ss map recordVarsSil, scopedDecls)(a, b, c)
+      // case sil.Inhale(exp) if (exp.isPure) => sil.LocalVarAssign(exists, sil.And(exists, exp)(exp.pos, exp.info, exp.errT))(a, b, c)
+      // Assume
+      case sil.MethodCall(methodName, _, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).body.isEmpty =>
+        val tempVars: Seq[ast.LocalVar] = targets map ((x: ast.LocalVar) => {
+          val name = silNameNotUsed(x.name + "_temp")
+          val tempLocalVar = sil.LocalVar(name, x.typ)(x.pos, x.info, x.errT)
+          mainModule.env.define(tempLocalVar)
+          tempLocalVar
+        })
+        recordedScopes :+= tempVars
+        val assign: Seq[LocalVarAssign] = (tempVars zip targets) map { (x: (sil.LocalVar, sil.LocalVar)) => sil.LocalVarAssign(x._1, x._2)(a, b, c) }
+        sil.Seqn(Seq(s) ++ assign, Seq())(a, b, c)
+      case sil.If(cond, s1: sil.Seqn, s2: sil.Seqn) =>
+        val ss1 = recordVarsSil(s1).asInstanceOf[sil.Seqn]
+        val ss2 = recordVarsSil(s2).asInstanceOf[sil.Seqn]
+        sil.If(cond, ss1, ss2)(a, b, c)
+      case _ => s
+    }
+  }
+
+  def assignVarsSil(s: sil.Stmt): sil.Stmt = {
+    val a = s.pos
+    val b = s.info
+    val c = s.errT
+    s match {
+      case sil.Seqn(ss, scopedDecls) =>
+        val locals: Seq[ast.LocalVarDecl] = scopedDecls.collect { case l: sil.LocalVarDecl => l }
+        val tempVars: Seq[ast.LocalVar] = recordedScopes.head
+        assert(locals.size == tempVars.size)
+        recordedScopes = recordedScopes.tail
+        val assign: Seq[LocalVarAssign] = (locals zip tempVars) map { (x: (sil.LocalVarDecl, sil.LocalVar)) => sil.LocalVarAssign(x._1.localVar, x._2)(a, b, c) }
+        // val if_assign: ast.Stmt = sil.If(check, sil.Seqn(assign, Seq())(a, b, c), silEmptyStmt()(a, b, c))(a, b, c)
+        sil.Seqn(assign ++ ss map assignVarsSil, scopedDecls)(a, b, c)
+      case sil.MethodCall(methodName, _, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).body.isEmpty =>
+        val tempVars: Seq[ast.LocalVar] = recordedScopes.head
+        assert(targets.size == tempVars.size)
+        recordedScopes = recordedScopes.tail
+        val assign: Seq[LocalVarAssign] = (tempVars zip targets) map { (x: (sil.LocalVar, sil.LocalVar)) => sil.LocalVarAssign(x._2, x._1)(a, b, c) }
+        sil.Seqn(Seq(s) ++ assign, Seq())(a, b, c)
+      case sil.If(cond, s1, s2) =>
+        val ss1 = assignVarsSil(s1).asInstanceOf[sil.Seqn]
+        val ss2 = assignVarsSil(s2).asInstanceOf[sil.Seqn]
+        sil.If(cond, ss1, ss2)(a, b, c)
+      case _ => s
+    }
+  }
+
 
   var id_checkVar = 0
   var checkVar = getVarDecl("checkFraming", Int)
@@ -221,7 +286,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
               Assume(v === h.l), Statements.EmptyStmt)
            */
           val ss = If(check && b.l,
-            Assert(pre.l === currentHeap.head, e) ++
+            Assert(
+              equalOnMaskFunc(pre.l, currentHeap.head.asInstanceOf[Var], currentMask.head.asInstanceOf[Var])
+              //pre.l === currentHeap.head
+            , e) ++
               Assume(v === h.l), Statements.EmptyStmt)
           (s ++ ss, l.tail.tail.tail)
         }
@@ -232,70 +300,17 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
-  var recordedScopes: Seq[Seq[sil.LocalVar]] = Seq()
+  var id_var_deter: Int = 0
+  private val deter_namespace: Namespace = verifier.freshNamespace("determinism")
 
-  def recordVarsSil(s: sil.Stmt): sil.Stmt = {
-    val a = s.pos
-    val b = s.info
-    val c = s.errT
-    s match {
-      case sil.Seqn(ss, scopedDecls) =>
-        val locals: Seq[ast.LocalVarDecl] = scopedDecls.collect { case l: sil.LocalVarDecl => l }
-        val tempVars: Seq[ast.LocalVar] = locals map ((x: ast.LocalVarDecl) => {
-          val name = silNameNotUsed(x.localVar.name + "_temp")
-          val tempLocalVar = sil.LocalVar(name, x.localVar.typ)(x.pos, x.info, x.errT)
-          mainModule.env.define(tempLocalVar)
-          tempLocalVar
-        })
-        recordedScopes :+= tempVars
-        val assign: Seq[LocalVarAssign] = (tempVars zip locals) map { (x: (sil.LocalVar, sil.LocalVarDecl)) => sil.LocalVarAssign(x._1, x._2.localVar)(a, b, c) }
-        sil.Seqn(assign ++ ss map recordVarsSil, scopedDecls)(a, b, c)
-      // case sil.Inhale(exp) if (exp.isPure) => sil.LocalVarAssign(exists, sil.And(exists, exp)(exp.pos, exp.info, exp.errT))(a, b, c)
-      // Assume
-      case sil.MethodCall(methodName, _, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).body.isEmpty =>
-        val tempVars: Seq[ast.LocalVar] = targets map ((x: ast.LocalVar) => {
-          val name = silNameNotUsed(x.name + "_temp")
-          val tempLocalVar = sil.LocalVar(name, x.typ)(x.pos, x.info, x.errT)
-          mainModule.env.define(tempLocalVar)
-          tempLocalVar
-        })
-        recordedScopes :+= tempVars
-        val assign: Seq[LocalVarAssign] = (tempVars zip targets) map { (x: (sil.LocalVar, sil.LocalVar)) => sil.LocalVarAssign(x._1, x._2)(a, b, c) }
-        sil.Seqn(Seq(s) ++ assign, Seq())(a, b, c)
-      case sil.If(cond, s1: sil.Seqn, s2: sil.Seqn) =>
-        val ss1 = recordVarsSil(s1).asInstanceOf[sil.Seqn]
-        val ss2 = recordVarsSil(s2).asInstanceOf[sil.Seqn]
-        sil.If(cond, ss1, ss2)(a, b, c)
-      case _ => s
-    }
+  def getVarDecl(name: String, typ: Type): LocalVarDecl = {
+    id_var_deter += 1
+    LocalVarDecl(Identifier("varTemp_" + id_var_deter + "_" + name)(deter_namespace), typ)
   }
 
-  def assignVarsSil(s: sil.Stmt): sil.Stmt = {
-    val a = s.pos
-    val b = s.info
-    val c = s.errT
-    s match {
-      case sil.Seqn(ss, scopedDecls) =>
-        val locals: Seq[ast.LocalVarDecl] = scopedDecls.collect { case l: sil.LocalVarDecl => l }
-        val tempVars: Seq[ast.LocalVar] = recordedScopes.head
-        assert(locals.size == tempVars.size)
-        recordedScopes = recordedScopes.tail
-        val assign: Seq[LocalVarAssign] = (locals zip tempVars) map { (x: (sil.LocalVarDecl, sil.LocalVar)) => sil.LocalVarAssign(x._1.localVar, x._2)(a, b, c) }
-        // val if_assign: ast.Stmt = sil.If(check, sil.Seqn(assign, Seq())(a, b, c), silEmptyStmt()(a, b, c))(a, b, c)
-        sil.Seqn(assign ++ ss map assignVarsSil, scopedDecls)(a, b, c)
-      case sil.MethodCall(methodName, _, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).body.isEmpty =>
-        val tempVars: Seq[ast.LocalVar] = recordedScopes.head
-        assert(targets.size == tempVars.size)
-        recordedScopes = recordedScopes.tail
-        val assign: Seq[LocalVarAssign] = (tempVars zip targets) map { (x: (sil.LocalVar, sil.LocalVar)) => sil.LocalVarAssign(x._2, x._1)(a, b, c) }
-        sil.Seqn(Seq(s) ++ assign, Seq())(a, b, c)
-      case sil.If(cond, s1, s2) =>
-        val ss1 = assignVarsSil(s1).asInstanceOf[sil.Seqn]
-        val ss2 = assignVarsSil(s2).asInstanceOf[sil.Seqn]
-        sil.If(cond, ss1, ss2)(a, b, c)
-      case _ => s
-    }
-  }
+  // ----------------------------------------------------------------
+  // CHECK SOUNDNESS CONDITION
+  // ----------------------------------------------------------------
 
   // Only changes "assume state" into "exists := exists && wfState"
   def changeStateWfState(s: Stmt, exists: LocalVar): Stmt = {
@@ -321,18 +336,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       case ss => If(exists, ss, Statements.EmptyStmt)
     }
   }
-
-  var id_var_deter: Int = 0
-  private val deter_namespace: Namespace = verifier.freshNamespace("determinism")
-
-  def getVarDecl(name: String, typ: Type): LocalVarDecl = {
-    id_var_deter += 1
-    LocalVarDecl(Identifier("varTemp_" + id_var_deter + "_" + name)(deter_namespace), typ)
-  }
-
-  // ----------------------------------------------------------------
-  // CHECK SOUNDNESS CONDITION
-  // ----------------------------------------------------------------
 
   def containsPermOrForperm(exp: sil.Exp): Boolean = {
     exp.contains[ForPerm] || exp.contains[CurrentPerm]
@@ -382,7 +385,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   def wfMask(args: Seq[Exp], typ: Type = Bool): Exp = FuncApp(wfMask, args, typ)
-  def identicalEq(args: Seq[Exp], typ: Type = Bool): Exp = FuncApp(identicalOnEq, args, typ)
+  def equalOnMaskFunc(heap1: Var, heap2: Var, mask: Var): Exp = FuncApp(equalOnMask, Seq(heap1, heap2, mask), Bool)
 
   def sumStateNormal(mask1: Var, heap1: Var, mask2: Var, heap2: Var, mask: Var, heap: Var): Exp = {
     FuncApp(sumState, Seq(mask1, heap1, mask2, heap2, mask, heap), Bool)
@@ -531,7 +534,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   var current_exists: Option[Var] = None
-  var current_exists_sil: Option[sil.LocalVar] = None
   var id_checkFraming = 0
   var id_checkMono = 0
 
@@ -621,20 +623,16 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       var s2: Stmt = Statements.EmptyStmt
       checkingFraming = true
       val old_current_exists = current_exists
-      val old_current_exists_sil = current_exists_sil
       current_exists = Some(exists)
-      current_exists_sil = Some(silExistsDecl.localVar)
       if (checkMono || !inlinable(orig_s)) {
         s1 = stmtModule.translateStmt(orig_s1)
         current_exists = old_current_exists
-        current_exists_sil = old_current_exists_sil
         s2 = stmtModule.translateStmt(orig_s2)
       }
       else {
         s1 = stmtModule.translateStmt(orig_s1)
         checkingFraming = false
         current_exists = old_current_exists
-        current_exists_sil = old_current_exists_sil
         s2 = stmtModule.translateStmt(orig_s2)
         checkingFraming = true
       }
@@ -647,7 +645,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val nm: VerificationError = SoundnessFailed(orig, DummyReason, "monoOut", id_error, errorType)
       val nf: VerificationError = SoundnessFailed(orig, DummyReason, "framing", id_error, errorType)
       val error_ignore: VerificationError = SoundnessFailed(orig, DummyReason, "monoOut (structural)", id_error, errorType)
-      // Replaced by assumes
       val nsm: VerificationError = SoundnessFailed(orig, DummyReason, "safeMono", id_error, errorType)
 
       declareFalseAtBegin = Seq()

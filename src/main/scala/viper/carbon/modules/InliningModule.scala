@@ -65,7 +65,6 @@ trait InliningModule extends Module with Component {
   def syntacticFraming(s: sil.Stmt, checkMono: Boolean = false): Boolean
 
   def wfMask(args: Seq[Exp], typ: Type = Bool): Exp
-  def identicalEq(args: Seq[Exp], typ: Type = Bool): Exp
 
   def sumStateNormal(mask1: Var, heap1: Var, mask2: Var, heap2: Var, mask: Var, heap: Var): Exp
 
@@ -88,7 +87,6 @@ trait InliningModule extends Module with Component {
   def getAxioms(): List[Decl]
 
   var current_exists: Option[Var]
-  var current_exists_sil: Option[sil.LocalVar]
   var id_checkFraming: Int
   var id_checkMono: Int
 
