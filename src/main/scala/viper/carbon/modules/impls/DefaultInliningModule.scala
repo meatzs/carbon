@@ -259,22 +259,23 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         val s1 = Assert(right >= p.l, e)
         val s2 = Assume(right - w >= p.l - old_w.l)
 
-        (If(check && b.l, s1 ++ s2, s), l.tail.tail.tail)
-      case If(cond, thn, els) if conditionToAvoid(cond, id_check) =>
+        (If(b.l, s1 ++ s2, s), l.tail.tail.tail)
+      /*case If(cond, thn, els) if conditionToAvoid(cond, id_check) =>
       // (used_checks.contains(cond.name.name) && cond.name.name != check.name.name) =>
         // println("AVOID IF", cond, check)
         val (nels, l2) = determinize(els, l, check, id_check, e)
         (If(cond, thn, nels), l2)
+       */
       case If(cond, thn, els) =>
         val (nthn, l1) = determinize(thn, l, check, id_check, e)
         val (nels, l2) = determinize(els, l1, check, id_check, e)
         (If(cond, nthn, nels), l2)
       case Assign(LocalVar(Identifier("perm", n1), typ1), v: LocalVar) if (v.name.name == "wildcard") =>
         // Inhale wildcard
-        (If(check, Assign(v, l.head.l), Statements.EmptyStmt) ++ s, l.tail)
+        (Assign(v, l.head.l) ++ s, l.tail)
       case HavocImpl(Seq(v)) =>
         if (v.name.name == "freshObj" || v.name.name == "newVersion") {
-          val ss = If(check, Assume(v === l.head.l), Statements.EmptyStmt)
+          val ss = Assume(v === l.head.l)
           (s ++ ss, l.tail)
         }
         else if (v.name.name == "ExhaleHeap") {
@@ -285,7 +286,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
             Assert(b.l ==> (pre.l === currentHeap.head), e) ++
               Assume(v === h.l), Statements.EmptyStmt)
            */
-          val ss = If(check && b.l,
+          val ss = If(b.l,
             Assert(
               equalOnMaskFunc(pre.l, currentHeap.head.asInstanceOf[Var], currentMask.head.asInstanceOf[Var])
               //pre.l === currentHeap.head
@@ -403,8 +404,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       case If(cond, thn, els) if conditionToAvoid(cond, id_check) =>
         If(cond, thn, doubleErrorSafeMono(els, error, check, id_check))
       case If(cond, thn, els) => If(cond, doubleErrorSafeMono(thn, error, check, id_check), doubleErrorSafeMono(els, error, check, id_check))
-      case Assert(BinExp(e1, Implies,  _), _) if conditionToAvoid(e1, id_check) => s
-      case Assert(exp, err) => Seqn(Assert(check ==> exp, error) ++ Assert(exp, err))
+      // case Assert(BinExp(e1, Implies,  _), _) if conditionToAvoid(e1, id_check) => s
+      case Assert(exp, _) => Assert(exp, error)
       case _ => s
     }
   }
@@ -562,17 +563,15 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       }
       ignore = true
     }
+    else if (isCheckingFraming()) {
+      ignore = true
+    }
+
     beginning = false
+
     if (ignore) {
-      if (checkWFM) {
-        Statements.EmptyStmt
-      }
-      else {
-        checkingFraming = true
-        val r = stmtModule.translateStmt(orig_s)
-        checkingFraming = false
-        r
-      }
+      println("IGNORING...")
+      Statements.EmptyStmt
     }
     else {
 
@@ -608,39 +607,26 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
 
       // val check = getVarDecl("checkFraming", Bool)
-      val maskPhi = getVarDecl("MaskPhi", maskType)
-      val heapPhi = getVarDecl("HeapPhi", heapType)
+      val maskPhi1 = getVarDecl("MaskPhi1", maskType)
+      val heapPhi1 = getVarDecl("HeapPhi1", heapType)
       val maskR = getVarDecl("MaskR", maskType)
       val heapR = getVarDecl("HeapR", heapType)
+      val maskPhi2 = getVarDecl("MaskPhi2", maskType)
+      val heapPhi2 = getVarDecl("HeapPhi2", heapType)
 
-      // val (check, _, maskPhi, heapPhi, maskR, heapR) = pair
-
-
-      // val pair: (LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl, LocalVarDecl) = newPhiRPair()
-      // used_checks += pair._1.l.name.name
+      checkingFraming = true
 
       var s1: Stmt = Statements.EmptyStmt
       var s2: Stmt = Statements.EmptyStmt
-      checkingFraming = true
       val old_current_exists = current_exists
       current_exists = Some(exists)
-      if (checkMono || !inlinable(orig_s)) {
-        s1 = stmtModule.translateStmt(orig_s1)
-        current_exists = old_current_exists
-        s2 = stmtModule.translateStmt(orig_s2)
-      }
-      else {
-        s1 = stmtModule.translateStmt(orig_s1)
-        checkingFraming = false
-        current_exists = old_current_exists
-        s2 = stmtModule.translateStmt(orig_s2)
-        checkingFraming = true
-      }
+      s1 = stmtModule.translateStmt(orig_s1)
+      current_exists = old_current_exists
+      s2 = stmtModule.translateStmt(orig_s2)
 
       s1 = s1.optimize.asInstanceOf[Stmt]
       s2 = s2.optimize.asInstanceOf[Stmt]
 
-      // val (check, _, maskPhi, heapPhi, maskR, heapR) = pair
 
       val nm: VerificationError = SoundnessFailed(orig, DummyReason, "monoOut", id_error, errorType)
       val nf: VerificationError = SoundnessFailed(orig, DummyReason, "framing", id_error, errorType)
@@ -653,46 +639,45 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
       val (modif_s2, ll) = determinize(doubleErrorSafeMono(s2, nsm, check, id_check), l, check, id_check, error_ignore)
 
-      val tempState = (getVarDecl("tempMask", maskType), getVarDecl("tempHeap", heapType))
+      val sumState = (getVarDecl("sumMask", maskType), getVarDecl("sumHeap", heapType))
 
       assert(ll.isEmpty)
 
-      val smallStmt: Seq[Stmt] =
+      val statement: Seq[Stmt] =
         assignSeqToSeq(oldVars, converted_vars) ++
         assign_false_branches_taken ++
-        {
+        // {
+          /*
           if (checkMono) {
-            //Havoc((Seq(maskPhi, heapPhi) map (_.l)).asInstanceOf[Seq[Var]]) ++
-              Assume(sumStateNormal(maskPhi.l, heapPhi.l, maskR.l, heapR.l, normalState._1, normalState._2)) ++
-              Assume(smallerState(maskPhi.l, heapPhi.l, normalState._1, normalState._2)) ++
-              Assume(wfMask(Seq(maskPhi.l)))
+              Assume(smallerState(maskPhi2.l, heapPhi2.l, normalState._1, normalState._2)) ++
+              Assume(wfMask(Seq(maskPhi2.l))) ++
+              Assume(smallerState(maskPhi1.l, heapPhi1.l, maskPhi2.l, heapPhi2.l)) ++
+              Assume(wfMask(Seq(maskPhi1.l)))
           }
           else {
-            // Havoc((Seq(maskPhi, heapPhi, maskR, heapR) map (_.l)).asInstanceOf[Seq[Var]]) ++
-              Assume(sumStateNormal(maskPhi.l, heapPhi.l, maskR.l, heapR.l, normalState._1, normalState._2)) ++
-              Assume(wfMask(Seq(maskPhi.l))) ++
-              Assume(wfMask(Seq(maskR.l)))
-          }
-        } ++
-          MaybeComment("Record current state", Assign(tempState._1.l, normalState._1) ++ Assign(tempState._2.l, normalState._2)) ++
-          MaybeComment("Change state", Assign(normalState._1, maskPhi.l) ++ Assign(normalState._2, heapPhi.l)) ++
+           */
+              Assume(smallerState(maskPhi2.l, heapPhi2.l, normalState._1, normalState._2)) ++
+              Assume(wfMask(Seq(maskPhi2.l))) ++
+              Assume(sumStateNormal(maskPhi1.l, heapPhi1.l, maskR.l, heapR.l, maskPhi2.l, heapPhi2.l)) ++
+              Assume(smallerState(maskPhi1.l, heapPhi1.l, maskPhi2.l, heapPhi2.l)) ++
+              Assume(wfMask(Seq(maskPhi1.l))) ++ Assume(wfMask(Seq(maskR.l))) ++
+          //}
+        //}
+          MaybeComment("State is phi1", Assign(normalState._1, maskPhi1.l) ++ Assign(normalState._2, heapPhi1.l)) ++
           MaybeComment("Init exists boolean", Assign(exists, TrueLit())) ++
-          MaybeComment("Small statement without assume", modif_s) ++
-          MaybeComment("Back to phi", Assign(maskPhi.l, normalState._1) ++ Assign(heapPhi.l, normalState._2)) ++
+          MaybeComment("s1 and phi1", modif_s) ++
+          MaybeComment("Back to phi1", Assign(maskPhi1.l, normalState._1) ++ Assign(heapPhi1.l, normalState._2)) ++
           assignSeqToSeq(tempVars, converted_vars) ++
-          MaybeComment("Back to current state", Assign(normalState._1, tempState._1.l) ++ Assign(normalState._2, tempState._2.l)) ++
-          assignSeqToSeq(converted_vars, oldVars)
-
-      val normalStmt: Seqn = MaybeComment("Normal statement", modif_s2)
-
-      val endCheck: Seq[Stmt] = Assert(exists && smallerState(maskPhi.l, heapPhi.l, normalState._1, normalState._2), nm) ++
-        Assert(equalSeq(converted_vars, tempVars), nm) ++ {
+          MaybeComment("State is phi2", Assign(normalState._1, maskPhi2.l) ++ Assign(normalState._2, heapPhi2.l)) ++
+          assignSeqToSeq(converted_vars, oldVars) ++
+          MaybeComment("s2 and phi2", modif_s2) ++
+          Assert(exists && smallerState(maskPhi1.l, heapPhi1.l, normalState._1, normalState._2), nm) ++
+          Assert(equalSeq(converted_vars, tempVars), nm) ++ {
         if (!checkMono) {
-          Havoc(Seq(tempState._1.l, tempState._2.l)) ++
             Assume(
-              sumStateNormal(maskPhi.l, heapPhi.l, maskR.l, heapR.l, tempState._1.l, tempState._2.l)
+              sumStateNormal(maskPhi1.l, heapPhi1.l, maskR.l, heapR.l, sumState._1.l, sumState._2.l)
             ) ++
-            Assert(exists && smallerState(tempState._1.l, tempState._2.l, normalState._1, normalState._2), nf)
+            Assert(exists && smallerState(sumState._1.l, sumState._2.l, normalState._1, normalState._2), nf)
         }
         else {
           Statements.EmptyStmt
@@ -700,21 +685,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       } ++
         Assume(FalseLit())
 
-      val r = {
-        if (checkWFM) {
-          MaybeComment(id_checkFraming + ": Check WFM",
-            //Havoc(Seq(check.l)) ++
-              If(check, smallStmt ++ normalStmt ++ endCheck, Statements.EmptyStmt))
-        }
-        else {
-          MaybeComment(id_checkFraming + ": Check " + {
-            if (checkMono) "MONO" else "FRAMING"
-          },
-            // Havoc(Seq(check.l)) ++
-              If(check, smallStmt, Statements.EmptyStmt) ++ normalStmt ++ If(check, endCheck, Statements.EmptyStmt))
-        }
-      }
-
+      val r: Stmt = MaybeComment(id_checkFraming + {if (checkWFM) ": Check WFM" else if (checkMono) ": Check MONO" else ": Check FRAMING"},
+        NondetIf(statement, Statements.EmptyStmt))
       checkingFraming = false
       mainModule.env.undefine(silExistsDecl.localVar)
       r
@@ -776,41 +748,27 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
     if (current_depth == maxDepth) {
       val cond_neg: sil.Stmt = sil.Inhale(sil.Not(cond)(cond.pos, cond.info, cond.errT))(cond.pos, cond.info, cond.errT)
-      val wfm: Stmt = {
-        if (!isCheckingFraming()) {
-          checkFraming(cond_neg, w, true, true)
-        }
-        else {
-          Statements.EmptyStmt
-        }
-      }
+      val wfm: Stmt = checkFraming(cond_neg, w, true, true)
       MaybeCommentBlock("0: Check SC and cut branch (loop)", wfm ++ Assume(guard ==> FalseLit()))
     }
     else {
       current_depth += 1
 
       val check_wfm = {
-        if (!isCheckingFraming()) {
-          val cond_pos: sil.Stmt = sil.Inhale(cond)(cond.pos, cond.info, cond.errT)
-          val cond_neg: sil.Stmt = sil.Inhale(sil.Not(cond)(cond.pos, cond.info, cond.errT))(cond.pos, cond.info, cond.errT)
-          MaybeCommentBlock("Check WFM", checkFraming(cond_pos, w, true, true) ++ checkFraming(cond_neg, w, true, true))
-        }
-        else {
-          Statements.EmptyStmt
-        }
+        val cond_pos: sil.Stmt = sil.Inhale(cond)(cond.pos, cond.info, cond.errT)
+        val cond_neg: sil.Stmt = sil.Inhale(sil.Not(cond)(cond.pos, cond.info, cond.errT))(cond.pos, cond.info, cond.errT)
+        MaybeCommentBlock("Check WFM", checkFraming(cond_pos, w, true, true) ++ checkFraming(cond_neg, w, true, true))
       }
 
-      val r = {
-        if (!isCheckingFraming()) {
-          checkFraming(body, w)
-        }
-        else {
-          MaybeCommentBlock(depth + ": Loop body", stmtModule.translateStmt(body))
-        }
+      val r1 = checkFraming(body, w)
+      if (!inlinable(body)) {
+        checkingFraming = true
       }
+      val r2 = MaybeCommentBlock(depth + ": Loop body", stmtModule.translateStmt(body))
+      checkingFraming = false
       val remaining = inlineLoop(w, cond, invs, body)
       current_depth -= 1
-      MaybeCommentBlock(depth + ": Inlined loop", check_wfm ++ If(guard, r ++ remaining, Statements.EmptyStmt))
+      MaybeCommentBlock(depth + ": Inlined loop", check_wfm ++ If(guard, r1 ++ r2 ++ remaining, Statements.EmptyStmt))
     }
   }
 
@@ -840,14 +798,13 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         }
       }
 
-      val r = {
-        if (!isCheckingFraming()) {
-          checkFraming(body, body)
-        }
-        else {
-          stmtModule.translateStmt(body)
-        }
+      val r1 = checkFraming(body, body)
+      if (!inlinable(body)) {
+        checkingFraming = true
       }
+      val r2 = stmtModule.translateStmt(body)
+      checkingFraming = false
+
       current_depth -= 1
 
       val assignArgsPre: Seq[(Exp, Exp)] = ((renamedFormalArgsVars map translateExp) zip (args map translateExp)) filter ((x) => x._1 != x._2)
@@ -867,9 +824,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         }
       }
 
-      Seqn(assignArgs) ++
-        r ++
-        Seqn(assignRets)
+      Seqn(assignArgs) ++ r1 ++ r2 ++ Seqn(assignRets)
     }
   }
 

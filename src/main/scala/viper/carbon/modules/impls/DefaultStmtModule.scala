@@ -253,7 +253,11 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
   override def translateStmt(stmt: sil.Stmt, statesStack: List[Any] = null, allStateAssms: Exp = TrueLit(), duringPackage: Boolean = false): Stmt = {
 
     if (verifier.staticInlining.isDefined && !isCheckingFraming() && !inlinable(stmt) && !syntacticFraming(stmt)) {
-      inliningModule.checkFraming(stmt, stmt, true)
+      val r1 = inliningModule.checkFraming(stmt, stmt, true)
+      inliningModule.checkingFraming = true
+      val r2 = translateStmt(stmt, statesStack, allStateAssms, duringPackage)
+      inliningModule.checkingFraming = false
+      r1 ++ r2
     }
     else {
       if (duringPackage) {
