@@ -129,7 +129,7 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
                 MaybeCommentBlock("Assumptions about method arguments", paramAssumptions),
                 inhalePre,
                 MaybeCommentBlock(initOldStateComment, initOld),
-                checkPost, body, exhalePost))
+                checkPost, inliningModule.ignoreErrorsWhenBounded(body), inliningModule.ignoreErrorsWhenBounded(exhalePost)))
         CommentedDecl(s"Translation of method $name", proc)
     }
     env = null

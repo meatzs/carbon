@@ -2,7 +2,7 @@ package viper.carbon.modules.impls
 
 import viper.carbon.modules.InliningModule
 import viper.silver.{ast => sil}
-import viper.carbon.boogie.{Havoc, MaybeComment, _}
+import viper.carbon.boogie._
 import viper.carbon.verifier.Verifier
 import Implicits._
 import viper.carbon.modules.components.Component
@@ -396,6 +396,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     FuncApp(smallerState, Seq(smallMask, smallHeap, bigMask, bigHeap), Bool)
   }
 
+  def smallerMask(smallMask: Var, bigMask: Var): Exp = {
+    FuncApp(smallerMask, Seq(smallMask, bigMask), Bool)
+  }
+
   def doubleErrorSafeMono(s: Stmt, error: VerificationError, check: Exp, id_check: Int): Stmt = {
     s match {
       case Seqn(stmts) => stmts map (doubleErrorSafeMono(_, error, check, id_check))
@@ -540,13 +544,26 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   var beginning: Boolean = true
 
+  val getBounded = getVarDecl("getBounded", Bool)
+
+  def getBoundedComplete(): Stmt = {
+    val mask = getVarDecl("boundedMask", maskType)
+
+    val r: Seq[Stmt] = Assume(smallerMask(mask.l, normalState._1)) ++
+    Assume(wfMask(Seq(mask.l))) ++
+    Assign(normalState._1, mask.l)
+
+    if (isCheckingFraming()) {
+      Statements.EmptyStmt
+    }
+    else {
+      If(getBounded.l, r, Statements.EmptyStmt)
+    }
+  }
+
   def checkFraming(orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false): Stmt = {
 
     println("checkFraming", current_depth, "framing", !checkMono, "length", length(orig_s))
-
-    if (verifier.printSC) {
-      println(orig_s)
-    }
 
     var ignore = false
 
@@ -579,6 +596,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val id_error = {if (checkMono) id_checkMono else id_checkFraming}
       val errorType = {if (checkMono) "MONO" else "FRAMING"}
       println(errorType + " " + id_error)
+
+      if (verifier.printSC) {
+        println(orig_s)
+      }
 
       val aa = orig_s.pos
       val bb = orig_s.info
@@ -682,11 +703,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         else {
           Statements.EmptyStmt
         }
-      } ++
-        Assume(FalseLit())
+      }
 
       val r: Stmt = MaybeComment(id_checkFraming + {if (checkWFM) ": Check WFM" else if (checkMono) ": Check MONO" else ": Check FRAMING"},
-        NondetIf(statement, Statements.EmptyStmt))
+        NondetIf(If(getBounded.l, statement, Statements.EmptyStmt) ++ Assume(FalseLit()), Statements.EmptyStmt))
       checkingFraming = false
       mainModule.env.undefine(silExistsDecl.localVar)
       r
@@ -740,6 +760,24 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   // ACTUAL INLINING
   // ----------------------------------------------------------------
 
+  def ignoreErrorsWhenBounded(stmt: Stmt): Stmt = {
+    if (staticInlining.isDefined) {
+      stmt match {
+        case Seqn(stmts) => stmts map ignoreErrorsWhenBounded
+        case CommentBlock(c, ss) => CommentBlock(c, ignoreErrorsWhenBounded(ss))
+        case If(cond: Var, _, _) if (cond.name.name == getBounded.l.name.name) =>
+          stmt
+        case If(cond, thn, els) => If(cond, ignoreErrorsWhenBounded(thn), ignoreErrorsWhenBounded(els))
+        case NondetIf(thn, els) => NondetIf(ignoreErrorsWhenBounded(thn), ignoreErrorsWhenBounded(els))
+        case Assert(exp, _) => If(getBounded.l, Assume(exp), stmt)
+        case ss => ss
+      }
+    }
+    else {
+      stmt
+    }
+  }
+
   def inlineLoop(w: sil.Stmt, cond: ast.Exp, invs: Seq[ast.Exp], body: ast.Seqn): Stmt = {
     println("inlineLoop", current_depth, cond, "length", length(w))
     val guard = translateExp(cond)
@@ -761,14 +799,15 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       }
 
       val r1 = checkFraming(body, w)
+      val oldCheckingFraming = checkingFraming
       if (!inlinable(body)) {
         checkingFraming = true
       }
       val r2 = MaybeCommentBlock(depth + ": Loop body", stmtModule.translateStmt(body))
-      checkingFraming = false
+      checkingFraming = oldCheckingFraming
       val remaining = inlineLoop(w, cond, invs, body)
       current_depth -= 1
-      MaybeCommentBlock(depth + ": Inlined loop", check_wfm ++ If(guard, r1 ++ r2 ++ remaining, Statements.EmptyStmt))
+      MaybeCommentBlock(depth + ": Inlined loop", check_wfm ++ If(guard, r1 ++ getBoundedComplete() ++ r2 ++ remaining, Statements.EmptyStmt) ++ getBoundedComplete())
     }
   }
 
@@ -799,11 +838,12 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       }
 
       val r1 = checkFraming(body, body)
+      val oldCheckingFraming = checkingFraming
       if (!inlinable(body)) {
         checkingFraming = true
       }
       val r2 = stmtModule.translateStmt(body)
-      checkingFraming = false
+      checkingFraming = oldCheckingFraming
 
       current_depth -= 1
 
@@ -824,7 +864,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         }
       }
 
-      Seqn(assignArgs) ++ r1 ++ r2 ++ Seqn(assignRets)
+      Seqn(assignArgs) ++ r1  ++ getBoundedComplete() ++ r2 ++ Seqn(assignRets) ++ getBoundedComplete()
     }
   }
 

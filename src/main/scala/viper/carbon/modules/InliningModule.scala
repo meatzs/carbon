@@ -100,6 +100,8 @@ trait InliningModule extends Module with Component {
   // ACTUAL INLINING
   // ----------------------------------------------------------------
 
+  def ignoreErrorsWhenBounded(stmt: Stmt): Stmt
+
   def inlineLoop(w: sil.Stmt, cond: ast.Exp, invs: Seq[ast.Exp], body: ast.Seqn): Stmt
 
   def inlineMethod(m: Method, args: Seq[ast.Exp], targets: Seq[ast.LocalVar]): Stmt
