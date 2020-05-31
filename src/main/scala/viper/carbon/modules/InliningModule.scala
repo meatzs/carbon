@@ -90,7 +90,7 @@ trait InliningModule extends Module with Component {
   var id_checkFraming: Int
   var id_checkMono: Int
 
-  def checkFraming(orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false): Stmt
+  def checkFraming(orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt
 
   def inlinable(stmt: sil.Stmt): Boolean
 

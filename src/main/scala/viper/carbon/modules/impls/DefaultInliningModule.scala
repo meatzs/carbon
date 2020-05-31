@@ -547,21 +547,19 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   val getBounded = getVarDecl("getBounded", Bool)
 
   def getBoundedComplete(): Stmt = {
-    val mask = getVarDecl("boundedMask", maskType)
-
-    val r: Seq[Stmt] = Assume(smallerMask(mask.l, normalState._1)) ++
-    Assume(wfMask(Seq(mask.l))) ++
-    Assign(normalState._1, mask.l)
-
-    if (isCheckingFraming()) {
+    if (isCheckingFraming() || !closureSC) {
       Statements.EmptyStmt
     }
     else {
+      val mask = getVarDecl("boundedMask", maskType)
+      val r: Seq[Stmt] = Assume(smallerMask(mask.l, normalState._1)) ++
+        Assume(wfMask(Seq(mask.l))) ++
+        Assign(normalState._1, mask.l)
       If(getBounded.l, r, Statements.EmptyStmt)
     }
   }
 
-  def checkFraming(orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false): Stmt = {
+  def checkFraming(orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt = {
 
     println("checkFraming", current_depth, "framing", !checkMono, "length", length(orig_s))
 
@@ -649,7 +647,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       s2 = s2.optimize.asInstanceOf[Stmt]
 
 
-      val nm: VerificationError = SoundnessFailed(orig, DummyReason, "monoOut", id_error, errorType)
+      val nm: VerificationError = SoundnessFailed(orig, DummyReason, if (checkWFM) "WFM" else "monoOut", id_error, errorType)
       val nf: VerificationError = SoundnessFailed(orig, DummyReason, "framing", id_error, errorType)
       val error_ignore: VerificationError = SoundnessFailed(orig, DummyReason, "monoOut (structural)", id_error, errorType)
       val nsm: VerificationError = SoundnessFailed(orig, DummyReason, "safeMono", id_error, errorType)
@@ -676,8 +674,14 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
               Assume(wfMask(Seq(maskPhi1.l)))
           }
           else {
-           */
-              Assume(smallerState(maskPhi2.l, heapPhi2.l, normalState._1, normalState._2)) ++
+           */ {
+          if (checkWFM && !simpleWFM) {
+            Havoc(modif_vars)
+          }
+          else {
+            Assume(smallerState(maskPhi2.l, heapPhi2.l, normalState._1, normalState._2))
+          }
+        } ++
               Assume(wfMask(Seq(maskPhi2.l))) ++
               Assume(sumStateNormal(maskPhi1.l, heapPhi1.l, maskR.l, heapR.l, maskPhi2.l, heapPhi2.l)) ++
               Assume(smallerState(maskPhi1.l, heapPhi1.l, maskPhi2.l, heapPhi2.l)) ++
@@ -761,7 +765,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   // ----------------------------------------------------------------
 
   def ignoreErrorsWhenBounded(stmt: Stmt): Stmt = {
-    if (staticInlining.isDefined) {
+    if (staticInlining.isDefined && closureSC) {
       stmt match {
         case Seqn(stmts) => stmts map ignoreErrorsWhenBounded
         case CommentBlock(c, ss) => CommentBlock(c, ignoreErrorsWhenBounded(ss))
@@ -792,13 +796,17 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     else {
       current_depth += 1
 
+      val r1 = checkFraming(body, w)
+
+      val modif_vars: Seq[LocalVar] = (w.writtenVars filter (v => mainModule.env.isDefinedAt(v))) map translateLocalVar
+
       val check_wfm = {
         val cond_pos: sil.Stmt = sil.Inhale(cond)(cond.pos, cond.info, cond.errT)
         val cond_neg: sil.Stmt = sil.Inhale(sil.Not(cond)(cond.pos, cond.info, cond.errT))(cond.pos, cond.info, cond.errT)
-        MaybeCommentBlock("Check WFM", checkFraming(cond_pos, w, true, true) ++ checkFraming(cond_neg, w, true, true))
+        MaybeCommentBlock("Check WFM", checkFraming(cond_pos, w, true, true, modif_vars=modif_vars)
+          ++ checkFraming(cond_neg, w, true, true, modif_vars=modif_vars))
       }
 
-      val r1 = checkFraming(body, w)
       val oldCheckingFraming = checkingFraming
       if (!inlinable(body)) {
         checkingFraming = true

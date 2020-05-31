@@ -119,6 +119,18 @@ class CarbonConfig(args: Seq[String]) extends SilFrontendConfig(args, "Carbon") 
     noshort = true
   )
 
+  val closureSC = opt[Boolean]("closureSC",
+    descr = "Computes the soundness condition with closure (default: disabled)",
+    default = None,
+    noshort = true
+  )
+
+  val simpleWFM = opt[Boolean]("simpleWFM",
+    descr = "Computes a simpler (bounded) WFM, but potentially unsound (default: disabled)",
+    default = None,
+    noshort = true
+  )
+
   val noSyntacticCheck = opt[Boolean]("noSyntacticCheck",
     descr = "Disable syntactic check to speed up checking soundness condition for inlining (default: enabled)",
     default = None,

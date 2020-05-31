@@ -190,6 +190,8 @@ case class CarbonVerifier(private var _debugInfo: Seq[(String, Any)] = Nil) exte
   def noCheckSC: Boolean = if (config != null) {config.noCheckSC.toOption.getOrElse(false)} else {false}
   def noSyntacticCheck: Boolean = if (config != null) {config.noSyntacticCheck.toOption.getOrElse(false)} else {false}
   def printSC: Boolean = if (config != null) {config.printSC.toOption.getOrElse(false)} else {false}
+  def closureSC: Boolean = if (config != null) {config.closureSC.toOption.getOrElse(false)} else {false}
+  def simpleWFM: Boolean = if (config != null) {config.simpleWFM.toOption.getOrElse(false)} else {false}
   def entry = if (config != null) {config.entry.toOption} else None
 
 }
