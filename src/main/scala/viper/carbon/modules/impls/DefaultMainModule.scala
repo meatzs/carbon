@@ -22,6 +22,8 @@ import viper.silver.verifier.errors
 import viper.carbon.verifier.Verifier
 import viper.silver.ast.utility.rewriter.Traverse
 
+import scala.collection.mutable
+
 /**
  * The default implementation of a [[viper.carbon.modules.MainModule]].
  */
@@ -47,7 +49,7 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
     LocalVarDecl(name, t)
   }
 
-  override def translate(p: sil.Program): Program = {
+  override def translate(p: sil.Program): (Program, Map[String, Map[String, String]]) = {
 
     verifier.replaceProgram(
       p.transform(
@@ -57,6 +59,10 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
         },
         Traverse.TopDown)
     )
+
+    // We record the Boogie names of all Viper variables in this map.
+    // The format is Viper member name -> (Viper variable name -> Boogie variable name).
+    var nameMaps : Map[String, mutable.HashMap[String, String]] = null
 
     val output = verifier.program match {
       case sil.Program(domains, fields, functions, predicates, old_methods, extensions) =>
@@ -74,11 +80,12 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
         // evaluation happens lazily, which can lead to incorrect behaviour (evaluation order is important here)
         val translateFields =
           MaybeCommentedDecl("Translation of all fields", (fields flatMap translateField).toList)
-        val members = ((domains flatMap translateDomainDecl) ++
+        nameMaps = (methods ++ functions ++ predicates).map(_.name -> new mutable.HashMap[String, String]()).toMap
+        val members = (domains flatMap translateDomainDecl) ++
           translateFields ++
-          (functions flatMap translateFunction) ++
-          (predicates flatMap translatePredicate) ++
-          (methods flatMap translateMethodDecl)).toList
+          (functions flatMap (f => translateFunction(f, nameMaps.get(f.name)))) ++
+          (predicates flatMap (p => translatePredicate(p, nameMaps.get(p.name)))) ++
+          (methods flatMap (m => translateMethodDecl(m, nameMaps.get(m.name))))
 
         // get the preambles (only at the end, even if we add it at the beginning)
         val preambles = verifier.allModules flatMap {
@@ -102,11 +109,12 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
         Program(header, preambles ++ members)
     }
 
-    output.optimize.asInstanceOf[Program]
+    (output.optimize.asInstanceOf[Program], nameMaps.map(e => e._1 -> e._2.toMap))
   }
 
-  def translateMethodDecl(m: sil.Method): Seq[Decl] = {
+  def translateMethodDecl(m: sil.Method, names: Option[mutable.Map[String, String]]): Seq[Decl] = {
     env = Environment(verifier, m)
+    ErrorMemberMapping.currentMember = m
         val res = m match {
           case method @ sil.Method(name, formalArgs, formalReturns, pres, posts, _) =>
             val initOldStateComment = "Initializing of old state"
@@ -132,7 +140,15 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
                 checkPost, inliningModule.ignoreErrorsWhenBounded(body), inliningModule.ignoreErrorsWhenBounded(exhalePost)))
         CommentedDecl(s"Translation of method $name", proc)
     }
+
+    if (names.isDefined){
+      val usedNames = env.currentNameMapping
+      // add all local vars
+      names.get ++= usedNames
+    }
+
     env = null
+    ErrorMemberMapping.currentMember = null
     res
   }
 
