@@ -119,6 +119,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       // case sil.Inhale(exp) if (exp.isPure) => sil.LocalVarAssign(exists, sil.And(exists, exp)(exp.pos, exp.info, exp.errT))(a, b, c)
       // Assume
       case sil.MethodCall(methodName, _, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).body.isEmpty =>
+        // Abstract method
         val tempVars: Seq[ast.LocalVar] = targets map ((x: ast.LocalVar) => {
           val name = silNameNotUsed(x.name + "_temp")
           val tempLocalVar = sil.LocalVar(name, x.typ)(x.pos, x.info, x.errT)
@@ -371,7 +372,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         case ast.Apply(_) => true
         case ast.Seqn(ss, _) => ss forall (syntacticFraming(_, checkMono))
         case ast.If(cond, thn, els) => !containsPermOrForperm(cond) && syntacticFraming(thn, checkMono) && syntacticFraming(els, checkMono)
-        case ast.While(cond, invs, body) => false
+        case ast.While(cond, invs, body) => println("While loop in syntactic condition: Should not happen!"); assert(false); false
         case ast.Label(_, _) => true
         case ast.Goto(_) =>
           println("GOTO in SYNTACTIC CHECK, maybe not supported")
@@ -559,11 +560,63 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
-  def checkFraming(orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt = {
+  var recordingSil = false
+  var assigningSil = false
 
+  def inlineSil(s: sil.Stmt, n: Int): sil.Stmt = {
+
+    val (a, b, c) = (s.pos, s.info, s.errT)
+    s match {
+      case sil.MethodCall(methodName, args, targets) if program.findMethod(methodName).body.isDefined =>
+        if (n > 0) {
+          val m = program.findMethod(methodName)
+          val pre_body = m.body.get
+
+          currentRenaming = Map()
+          val body = alphaRename(pre_body)
+          val renamedFormalArgsVars: Seq[sil.LocalVar] = (m.formalArgs map (_.localVar)) map renameVar
+          val renamedFormalReturnsVars: Seq[ast.LocalVar] = (m.formalReturns map (_.localVar)) map renameVar
+
+          val scopeArgs: Seq[ast.LocalVarDecl] = renamedFormalArgsVars map (x => sil.LocalVarDecl(x.name, x.typ)(a, b, c))
+          val scopeRets: Seq[ast.LocalVarDecl] = renamedFormalReturnsVars map (x => sil.LocalVarDecl(x.name, x.typ)(a, b, c))
+
+          val inlined_m: ast.Stmt = inlineSil(body, n - 1)
+
+          val assignArgsPre: Seq[(sil.LocalVar, sil.Exp)] = (renamedFormalArgsVars zip args) filter ((x) => x._1 != x._2)
+          val assignRetsPre: Seq[(sil.LocalVar, sil.Exp)] = (targets zip renamedFormalReturnsVars) filter ((x) => x._1 != x._2)
+          val assignArgs: Seq[sil.LocalVarAssign] = assignArgsPre map (x => sil.LocalVarAssign(x._1, x._2)(a, b, c))
+          val assignRets: Seq[sil.LocalVarAssign] = assignRetsPre map (x => sil.LocalVarAssign(x._1, x._2)(a, b, c))
+
+          sil.Seqn(assignArgs ++ Seq(inlined_m) ++ assignRets, scopeArgs ++ scopeRets)(a, b, c)
+        }
+        else {
+          sil.Inhale(sil.FalseLit()(a, b, c))(a, b, c)
+        }
+      case sil.While(cond, invs, body) =>
+        if (n > 0) {
+          val s_inl: sil.Stmt = inlineSil(body, n - 1)
+          val w_inl: sil.Stmt = inlineSil(s, n - 1)
+          val seq: sil.Seqn = sil.Seqn(Seq(s_inl, w_inl), Seq())(a, b, c)
+          val empty: sil.Seqn = sil.Seqn(Seq(), Seq())(a, b, c)
+          sil.If(cond, seq, empty)(a, b, c)
+        }
+        else {
+          sil.Inhale(sil.Not(cond)(a, b, c))(a, b, c)
+        }
+      case sil.If(cond, thn, els) => sil.If(cond, inlineSil(thn, n).asInstanceOf[sil.Seqn], inlineSil(els, n).asInstanceOf[sil.Seqn])(a, b, c)
+      case sil.Seqn(ss, scopedDecls) => sil.Seqn(ss map (inlineSil(_, n)), scopedDecls)(a, b, c)
+      case _ => s
+    }
+
+  }
+
+  def checkFraming(pre_orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt = {
+
+    val orig_s: ast.Stmt = inlineSil(pre_orig_s, maxDepth - current_depth)
     println("checkFraming", current_depth, "framing", !checkMono, "length", length(orig_s))
 
     var ignore = false
+
 
     if (beginning && checkMono) {
       println("Ignoring first part of the code (trivial)")
@@ -575,6 +628,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       }
       else {
         println("Syntactically framing")
+      }
+      if (verifier.printSC) {
+        println(orig_s)
       }
       ignore = true
     }
@@ -639,7 +695,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       var s2: Stmt = Statements.EmptyStmt
       val old_current_exists = current_exists
       current_exists = Some(exists)
+      recordingSil = true
       s1 = stmtModule.translateStmt(orig_s1)
+      recordingSil = false
+      assigningSil = true
       current_exists = old_current_exists
       s2 = stmtModule.translateStmt(orig_s2)
 
@@ -730,34 +789,41 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   def groupNonInlinableStmts(ss: Seq[sil.Stmt], orig_s: sil.Stmt): Seq[sil.Stmt] = {
-    var currentNonInlinable: Seq[sil.Stmt] = Seq()
-    var r: Seq[sil.Stmt] = Seq()
-    for (s <- ss) {
-      if (!inlinable(s)) {
-        currentNonInlinable :+= s
-      }
-      else {
-        if (currentNonInlinable.nonEmpty) {
-          if (currentNonInlinable.size == 1) {
-            r :+= currentNonInlinable.head
-          }
-          else {
-            r :+= sil.Seqn(currentNonInlinable, Seq())(orig_s.pos, orig_s.info, orig_s.errT)
-          }
-          currentNonInlinable = Seq()
+
+    if (syntacticFraming(inlineSil(orig_s, maxDepth - current_depth))) {
+      ss
+    }
+    else {
+
+      var currentNonInlinable: Seq[sil.Stmt] = Seq()
+      var r: Seq[sil.Stmt] = Seq()
+      for (s <- ss) {
+        if (!inlinable(s)) {
+          currentNonInlinable :+= s
         }
-        r :+= s
+        else {
+          if (currentNonInlinable.nonEmpty) {
+            if (currentNonInlinable.size == 1) {
+              r :+= currentNonInlinable.head
+            }
+            else {
+              r :+= sil.Seqn(currentNonInlinable, Seq())(orig_s.pos, orig_s.info, orig_s.errT)
+            }
+            currentNonInlinable = Seq()
+          }
+          r :+= s
+        }
       }
+      if (currentNonInlinable.nonEmpty) {
+        if (currentNonInlinable.size == 1) {
+          r :+= currentNonInlinable.head
+        }
+        else {
+          r :+= sil.Seqn(currentNonInlinable, Seq())(orig_s.pos, orig_s.info, orig_s.errT)
+        }
+      }
+      r
     }
-    if (currentNonInlinable.nonEmpty) {
-      if (currentNonInlinable.size == 1) {
-        r :+= currentNonInlinable.head
-      }
-      else {
-        r :+= sil.Seqn(currentNonInlinable, Seq())(orig_s.pos, orig_s.info, orig_s.errT)
-      }
-    }
-    r
   }
 
   // ----------------------------------------------------------------
@@ -829,7 +895,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val other_vars: Seq[ast.LocalVar] = (m.formalArgs map (_.localVar)) ++ (m.formalReturns map (_.localVar))
 
       currentRenaming = Map()
-      val body = alphaRename(m.body.get)
+      val pre_body = m.body.get
+      val body = alphaRename(pre_body)
       val renamedFormalArgsVars: Seq[ast.LocalVar] = (m.formalArgs map (_.localVar)) map renameVar
       val renamedFormalReturnsVars: Seq[ast.LocalVar] = ((m.formalReturns map (_.localVar))) map renameVar
 

@@ -269,7 +269,8 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
           val locals = scopedDecls.collect { case l: sil.LocalVarDecl => l }
           locals map (v => mainModule.env.define(v.localVar)) // add local variables to environment
           val ss = {
-            if (isCheckingFraming() || verifier.staticInlining.isEmpty || syntacticFraming(stmt)) {
+            // if (isCheckingFraming() || verifier.staticInlining.isEmpty || syntacticFraming(stmt)) {
+            if (isCheckingFraming() || verifier.staticInlining.isEmpty) {
               old_ss
             }
             else {
