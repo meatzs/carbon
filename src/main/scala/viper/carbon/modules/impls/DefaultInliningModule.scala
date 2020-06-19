@@ -589,29 +589,40 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   var recordingSil = false
   var assigningSil = false
 
-  def inlineSil(s: sil.Stmt, n: Int): sil.Stmt = {
+  def inlineSilAux(s: sil.Stmt, n: Int): sil.Stmt = {
+
+    println("inlineSil", n, s, inRenaming, currentRenaming)
 
     val (a, b, c) = (s.pos, s.info, s.errT)
     s match {
       case sil.MethodCall(methodName, args, targets) if program.findMethod(methodName).body.isDefined =>
+        println("inlineSil", n, s)
         if (n > 0) {
           val m = program.findMethod(methodName)
           val pre_body = m.body.get
 
-          currentRenaming = Map()
+          val oldInRenaming = inRenaming
+          inRenaming = Set()
           val body = alphaRename(pre_body)
+
           val renamedFormalArgsVars: Seq[sil.LocalVar] = (m.formalArgs map (_.localVar)) map renameVar
+
+          println("Before renaming", m.formalArgs, pre_body)
+          println("After renaming", renamedFormalArgsVars, body)
+
           val renamedFormalReturnsVars: Seq[ast.LocalVar] = (m.formalReturns map (_.localVar)) map renameVar
 
           val scopeArgs: Seq[ast.LocalVarDecl] = renamedFormalArgsVars map (x => sil.LocalVarDecl(x.name, x.typ)(a, b, c))
           val scopeRets: Seq[ast.LocalVarDecl] = renamedFormalReturnsVars map (x => sil.LocalVarDecl(x.name, x.typ)(a, b, c))
 
-          val inlined_m: ast.Stmt = inlineSil(body, n - 1)
+          val inlined_m: ast.Stmt = inlineSilAux(body, n - 1)
 
           val assignArgsPre: Seq[(sil.LocalVar, sil.Exp)] = (renamedFormalArgsVars zip args) filter ((x) => x._1 != x._2)
           val assignRetsPre: Seq[(sil.LocalVar, sil.Exp)] = (targets zip renamedFormalReturnsVars) filter ((x) => x._1 != x._2)
           val assignArgs: Seq[sil.LocalVarAssign] = assignArgsPre map (x => sil.LocalVarAssign(x._1, x._2)(a, b, c))
           val assignRets: Seq[sil.LocalVarAssign] = assignRetsPre map (x => sil.LocalVarAssign(x._1, x._2)(a, b, c))
+
+          inRenaming = oldInRenaming
 
           sil.Seqn(assignArgs ++ Seq(inlined_m) ++ assignRets, scopeArgs ++ scopeRets)(a, b, c)
         }
@@ -620,8 +631,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         }
       case sil.While(cond, invs, body) =>
         if (n > 0) {
-          val s_inl: sil.Stmt = inlineSil(body, n - 1)
-          val w_inl: sil.Stmt = inlineSil(s, n - 1)
+          val s_inl: sil.Stmt = inlineSilAux(body, n - 1)
+          val w_inl: sil.Stmt = inlineSilAux(s, n - 1)
           val seq: sil.Seqn = sil.Seqn(Seq(s_inl, w_inl), Seq())(a, b, c)
           val empty: sil.Seqn = sil.Seqn(Seq(), Seq())(a, b, c)
           sil.If(cond, seq, empty)(a, b, c)
@@ -629,16 +640,35 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         else {
           sil.Inhale(sil.Not(cond)(a, b, c))(a, b, c)
         }
-      case sil.If(cond, thn, els) => sil.If(cond, inlineSil(thn, n).asInstanceOf[sil.Seqn], inlineSil(els, n).asInstanceOf[sil.Seqn])(a, b, c)
-      case sil.Seqn(ss, scopedDecls) => sil.Seqn(ss map (inlineSil(_, n)), scopedDecls)(a, b, c)
+      case sil.If(cond, thn, els) => sil.If(cond, inlineSilAux(thn, n).asInstanceOf[sil.Seqn], inlineSilAux(els, n).asInstanceOf[sil.Seqn])(a, b, c)
+      case sil.Seqn(ss, scopedDecls) => sil.Seqn(ss map (inlineSilAux(_, n)), scopedDecls)(a, b, c)
       case _ => s
     }
 
   }
 
+  def inlineSil(s: sil.Stmt, n: Int): sil.Stmt = {
+    println("inlineSilBase")
+    println(mainModule.env.allDefinedVariables())
+    currentRenaming = Map()
+    inRenaming = Set()
+    val r = inlineSilAux(s, n)
+    println("RESULT", r)
+    println()
+    r
+  }
+
   def checkFraming(pre_orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt = {
 
+    println()
+    println()
+    println("CheckFraming...")
     val orig_s: ast.Stmt = inlineSil(pre_orig_s, maxDepth - current_depth)
+    println("CheckFraming...", pre_orig_s)
+    println("CheckFraming, renamed and inlined...", orig_s)
+    println()
+    println()
+    // val orig_s: ast.Stmt = pre_orig_s
     println("checkFraming", current_depth, "framing", !checkMono, "length", length(orig_s))
 
     var ignore = false
@@ -921,6 +951,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val other_vars: Seq[ast.LocalVar] = (m.formalArgs map (_.localVar)) ++ (m.formalReturns map (_.localVar))
 
       currentRenaming = Map()
+      inRenaming = Set()
       val pre_body = m.body.get
       val body = alphaRename(pre_body)
       val renamedFormalArgsVars: Seq[ast.LocalVar] = (m.formalArgs map (_.localVar)) map renameVar
@@ -1029,10 +1060,22 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
+  def readVars(s: sil.Stmt): Set[sil.LocalVar] = {
+    s match {
+      case d: sil.Declaration => readVarsDecl(d).toSet
+      case sil.Seqn(ss, scopedDecls) => Set()
+      case _ => Set()
+    }
+  }
+
   var currentRenaming: Map[ast.LocalVar, ast.LocalVar] = Map()
+  var inRenaming: Set[sil.LocalVar] = Set()
 
   def newString(s: String): String = {
-    val definedVars = (mainModule.env.allDefinedVariables()) map (_.name)
+    var definedVars = (mainModule.env.allDefinedVariables()) map (_.name)
+    definedVars ++= (inRenaming map (_.name))
+    definedVars ++= ((currentRenaming.keySet) map ((x: sil.LocalVar) => x.name))
+    definedVars ++= ((currentRenaming.values.toSet) map ((x: sil.LocalVar) => x.name))
     if (definedVars.contains(s)) {
       newString(s + "_r")
     }
@@ -1042,11 +1085,17 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   def renameVar(x: ast.LocalVar): ast.LocalVar = {
-    if (!currentRenaming.contains(x)) {
+
+    println("Renaming var...", x)
+    // if (!currentRenaming.contains(x)) {
+    if (!inRenaming.contains(x)) {
+      println("Not contained...", inRenaming, currentRenaming)
       val new_name = newString(x.name)
       val xx = ast.LocalVar(new_name, x.typ)(x.pos, x.info, x.errT)
       currentRenaming += (x -> xx)
+      inRenaming += x
     }
+    println("Renamed!", currentRenaming(x), currentRenaming)
     currentRenaming(x)
   }
 
@@ -1085,6 +1134,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   def alphaRename(s: ast.Stmt): ast.Stmt = {
+    println("RENAMING STMT...", s)
     val a = s.pos
     val b = s.info
     val c = s.errT
