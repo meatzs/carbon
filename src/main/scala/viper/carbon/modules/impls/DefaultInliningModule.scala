@@ -647,8 +647,21 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   }
 
+  def read(s: sil.Stmt): Seq[sil.LocalVar] = {
+    // TODO finish
+    s match {
+      case sil.Seqn(ss, scopedDecls) => (ss map read).fold(Seq())(_ ++ _) ++ (scopedDecls map readVarsDecl).fold(Seq())(_ ++ _)
+      case sil.If(cond, thn, els) => readVarsExp(cond).toSeq ++ read(thn) ++ read(els)
+      case _ => Seq()
+    }
+  }
+
   def inlineSil(s: sil.Stmt, n: Int): sil.Stmt = {
-    println("inlineSilBase")
+    println()
+    println()
+    println("inlineSilBase", s)
+    println("READ VARIABLES", read(s))
+    namesAlreadyUsed ++= read(s).toSet
     println(mainModule.env.allDefinedVariables())
     currentRenaming = Map()
     inRenaming = Set()
@@ -1070,12 +1083,14 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   var currentRenaming: Map[ast.LocalVar, ast.LocalVar] = Map()
   var inRenaming: Set[sil.LocalVar] = Set()
+  var namesAlreadyUsed: Set[sil.LocalVar] = Set()
 
   def newString(s: String): String = {
     var definedVars = (mainModule.env.allDefinedVariables()) map (_.name)
     definedVars ++= (inRenaming map (_.name))
     definedVars ++= ((currentRenaming.keySet) map ((x: sil.LocalVar) => x.name))
     definedVars ++= ((currentRenaming.values.toSet) map ((x: sil.LocalVar) => x.name))
+    definedVars ++= (namesAlreadyUsed map (_.name))
     if (definedVars.contains(s)) {
       newString(s + "_r")
     }
