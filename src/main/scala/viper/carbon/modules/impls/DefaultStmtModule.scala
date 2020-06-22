@@ -270,7 +270,7 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
           locals map (v => mainModule.env.define(v.localVar)) // add local variables to environment
           val ss = {
             // if (isCheckingFraming() || verifier.staticInlining.isEmpty || syntacticFraming(stmt)) {
-            if (isCheckingFraming() || verifier.staticInlining.isEmpty) {
+            if (isCheckingFraming() || verifier.staticInlining.isEmpty || inliningModule.alreadyGroupedInlinableStmts(old_ss)) {
               old_ss
             }
             else {

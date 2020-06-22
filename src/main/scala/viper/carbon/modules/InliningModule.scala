@@ -94,6 +94,7 @@ trait InliningModule extends Module with Component {
 
   def inlinable(stmt: sil.Stmt): Boolean
 
+  def alreadyGroupedInlinableStmts(ss: Seq[sil.Stmt]): Boolean
   def groupNonInlinableStmts(ss: Seq[sil.Stmt], orig_s: sil.Stmt): Seq[sil.Stmt]
 
   // ----------------------------------------------------------------
@@ -116,7 +117,7 @@ trait InliningModule extends Module with Component {
 
   var currentRenaming: Map[ast.LocalVar, ast.LocalVar]
 
-  def newString(s: String): String
+  def newString(s: String, n: Int = 1): String
 
   def renameVar(x: ast.LocalVar): ast.LocalVar
 

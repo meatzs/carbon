@@ -60,6 +60,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   private val heap1 = LocalVarDecl(Identifier("Heap1"), heapType)
   private val heap2 = LocalVarDecl(Identifier("Heap2"), heapType)
 
+  private val equalOnInter = Identifier("EqualOnIntersection")
+
   private val smallerState = Identifier("SmallerState")
   private val sumState = Identifier("SumState")
   private val mask1 = LocalVarDecl(Identifier("Mask1"),maskType)
@@ -126,7 +128,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           val name = silNameNotUsed("arg_temp")
           val tempLocalVar = sil.LocalVar(name, x._2.typ)(x._1.pos, x._1.info, x._1.errT)
           mainModule.env.define(tempLocalVar)
-          println(tempLocalVar)
+          // println(tempLocalVar)
           tempLocalVar
         })
         val tempRets: Seq[ast.LocalVar] = targets map ((x: ast.LocalVar) => {
@@ -414,6 +416,12 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   def wfMask(args: Seq[Exp], typ: Type = Bool): Exp = FuncApp(wfMask, args, typ)
   def equalOnMaskFunc(heap1: Var, heap2: Var, mask: Var): Exp = FuncApp(equalOnMask, Seq(heap1, heap2, mask), Bool)
+  def equalOnInterFunc(heap1: Var, heap2: Var, mask1: Var, mask2: Var): Exp = FuncApp(equalOnInter, Seq(heap1, heap2, mask1, mask2), Bool)
+
+
+  def sumMasksFunc(mask1: Var, mask2: Var, mask: Var): Exp = {
+    FuncApp(sumMasks, Seq(mask1, mask2, mask), Bool)
+  }
 
   def sumStateNormal(mask1: Var, heap1: Var, mask2: Var, heap2: Var, mask: Var, heap: Var): Exp = {
     FuncApp(sumState, Seq(mask1, heap1, mask2, heap2, mask, heap), Bool)
@@ -495,6 +503,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     val lookup1 = lookup(heap1.l, obj.l, field.l)
     val lookup2 = lookup(heap2.l, obj.l, field.l)
 
+    val equalOnInterArgs = Seq(heap1, heap2, mask1, mask2)
+    val equalOnInterApp = FuncApp(equalOnInter, equalOnInterArgs map (_.l), Bool)
+    val perm1 = currentPermission(mask1.l, obj.l, field.l)
+    val perm2 = currentPermission(mask2.l, obj.l, field.l)
+
     val smallerStateArgs = Seq(smallMask, smallHeap, bigMask, bigHeap)
     val smallerStateApp = FuncApp(smallerState, smallerStateArgs map (_.l), Bool)
 
@@ -547,7 +560,17 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
               Trigger(Seq(lookup1)) ++ Trigger(Seq(lookup2)),
               perm > noPerm ==> (lookup1 === lookup2),
               field.typ.freeTypeVars)
-        ))) ++
+        )) ++
+        Func(equalOnInter, equalOnInterArgs, Bool) ++
+        Axiom(Forall(
+          equalOnInterArgs,
+          Trigger(equalOnInterApp),
+          equalOnInterApp <==>
+            Forall(obj ++ field,
+              Trigger(Seq(lookup1)) ++ Trigger(Seq(lookup2)) ++ Trigger(Seq(perm1)) ++ Trigger(Seq(perm2)),
+              (perm1 > noPerm && perm2 > noPerm) ==> (lookup1 === lookup2),
+              field.typ.freeTypeVars)
+        )) ++
       Func(smallerState, smallerStateArgs, Bool) ++
       Axiom(Forall(
         smallerStateArgs,
@@ -560,9 +583,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         sumStateArgs,
         Trigger(sumStateApp),
         sumStateApp <==> (sumMaskApp
-          && heap1.l === normalHeap.l
-          && heap2.l === normalHeap.l
-          )))
+          && FuncApp(equalOnMask, Seq(normalHeap.l, heap1.l, mask1.l), Bool)
+          && FuncApp(equalOnMask, Seq(normalHeap.l, heap2.l, mask2.l), Bool)
+          // && heap1.l === normalHeap.l
+          // && heap2.l === normalHeap.l
+          ))))
   }
 
   var current_exists: Option[Var] = None
@@ -591,12 +616,12 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   def inlineSilAux(s: sil.Stmt, n: Int): sil.Stmt = {
 
-    println("inlineSil", n, s, inRenaming, currentRenaming)
+    // println("inlineSil", n, s, inRenaming, currentRenaming)
 
     val (a, b, c) = (s.pos, s.info, s.errT)
     s match {
       case sil.MethodCall(methodName, args, targets) if program.findMethod(methodName).body.isDefined =>
-        println("inlineSil", n, s)
+        // println("inlineSil", n, s)
         if (n > 0) {
           val m = program.findMethod(methodName)
           val pre_body = m.body.get
@@ -604,13 +629,19 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           val oldInRenaming = inRenaming
           inRenaming = Set()
           val body = alphaRename(pre_body)
+          // println("New read variables", read(body))
+
+          namesAlreadyUsed ++= read(body)
 
           val renamedFormalArgsVars: Seq[sil.LocalVar] = (m.formalArgs map (_.localVar)) map renameVar
 
-          println("Before renaming", m.formalArgs, pre_body)
-          println("After renaming", renamedFormalArgsVars, body)
+          namesAlreadyUsed ++= renamedFormalArgsVars
+
+          // println("Before renaming", m.formalArgs, pre_body)
+          // println("After renaming", renamedFormalArgsVars, body)
 
           val renamedFormalReturnsVars: Seq[ast.LocalVar] = (m.formalReturns map (_.localVar)) map renameVar
+          namesAlreadyUsed ++= renamedFormalReturnsVars
 
           val scopeArgs: Seq[ast.LocalVarDecl] = renamedFormalArgsVars map (x => sil.LocalVarDecl(x.name, x.typ)(a, b, c))
           val scopeRets: Seq[ast.LocalVarDecl] = renamedFormalReturnsVars map (x => sil.LocalVarDecl(x.name, x.typ)(a, b, c))
@@ -647,40 +678,67 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   }
 
-  def read(s: sil.Stmt): Seq[sil.LocalVar] = {
-    // TODO finish
+  def readAccPredicate(acc: ast.PredicateAccessPredicate): Set[sil.LocalVar] = {
+    acc match {
+      case sil.PredicateAccessPredicate(pred, perm) =>
+        pred match {
+          case sil.PredicateAccess(args, name) =>
+            (args map readVarsExp).fold(Set())(_ ++ _) ++ readVarsExp(perm)
+        }
+    }
+  }
+
+
+  def readWand(wand: sil.MagicWand): Set[sil.LocalVar] = {
+    wand match {
+      case sil.MagicWand(e1, e2) => readVarsExp(e1) ++ readVarsExp(e2)
+    }
+  }
+
+  def read(s: sil.Stmt): Set[sil.LocalVar] = {
+
     s match {
-      case sil.Seqn(ss, scopedDecls) => (ss map read).fold(Seq())(_ ++ _) ++ (scopedDecls map readVarsDecl).fold(Seq())(_ ++ _)
-      case sil.If(cond, thn, els) => readVarsExp(cond).toSeq ++ read(thn) ++ read(els)
-      case _ => Seq()
+      case sil.Seqn(ss, scopedDecls) => (ss map read).fold(Set())(_ ++ _) ++ (scopedDecls map (readVarsDecl(_).toSet)).fold(Set())(_ ++ _)
+      case sil.If(cond, thn, els) => readVarsExp(cond) ++ read(thn) ++ read(els)
+      case ast.LocalVarAssign(lhs, rhs) => Set(lhs) ++ readVarsExp(rhs)
+      case ast.FieldAssign(ast.FieldAccess(rcv, _), rhs) => readVarsExp(rcv) ++ readVarsExp(rhs)
+      case ast.MethodCall(methodName, args, targets) =>
+        (args map readVarsExp).fold(Set())(_ ++ _) ++ (targets map (Set(_))).fold(Set())(_ ++ _)
+      case ast.Exhale(exp) => readVarsExp(exp)
+      case ast.Inhale(exp) => readVarsExp(exp)
+      case ast.Assert(exp) => readVarsExp(exp)
+      case ast.Assume(exp) => readVarsExp(exp)
+      case ast.Fold(acc) => readAccPredicate(acc)
+      case ast.Unfold(acc) => readAccPredicate(acc)
+      case ast.Package(wand, proofScript) => readWand(wand) ++ read(proofScript)
+      case ast.Apply(wand) => readWand(wand)
+      case ast.While(cond, invs, body) => readVarsExp(cond) ++ (invs map readVarsExp).fold(Set())(_ ++ _) ++ read(body)
+      case ast.Label(name, scope) => (scope map readVarsExp).fold(Set())(_ ++ _)
+      case ast.Goto(_) => Set()
+      case ast.NewStmt(lhs, fields) => Set(lhs)
+      case ast.LocalVarDeclStmt(decl) => readVarsDecl(decl).toSet
+      case _: ast.ExtensionStmt => Set()
+
     }
   }
 
   def inlineSil(s: sil.Stmt, n: Int): sil.Stmt = {
-    println()
-    println()
-    println("inlineSilBase", s)
-    println("READ VARIABLES", read(s))
+    // println("inlineSilBase", s)
+    // println("READ VARIABLES", read(s))
     namesAlreadyUsed ++= read(s).toSet
-    println(mainModule.env.allDefinedVariables())
+    // println(mainModule.env.allDefinedVariables())
     currentRenaming = Map()
     inRenaming = Set()
     val r = inlineSilAux(s, n)
-    println("RESULT", r)
-    println()
+    // println("RESULT", r)
+    // println()
     r
   }
 
   def checkFraming(pre_orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt = {
 
-    println()
-    println()
-    println("CheckFraming...")
+    namesAlreadyUsed = Set()
     val orig_s: ast.Stmt = inlineSil(pre_orig_s, maxDepth - current_depth)
-    println("CheckFraming...", pre_orig_s)
-    println("CheckFraming, renamed and inlined...", orig_s)
-    println()
-    println()
     // val orig_s: ast.Stmt = pre_orig_s
     println("checkFraming", current_depth, "framing", !checkMono, "length", length(orig_s))
 
@@ -811,7 +869,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           }
         } ++
               Assume(wfMask(Seq(maskPhi2.l))) ++
-              Assume(sumStateNormal(maskPhi1.l, heapPhi1.l, maskR.l, heapR.l, maskPhi2.l, heapPhi2.l)) ++
+              // Assume(sumStateNormal(maskPhi1.l, heapPhi1.l, maskR.l, heapR.l, maskPhi2.l, heapPhi2.l)) ++
+              Assume(sumMasksFunc(maskPhi2.l, maskPhi1.l, maskR.l)) ++
+              Assume(heapPhi1.l === heapR.l) ++
+              Assume(heapPhi2.l === heapR.l) ++
+              Assume(heapPhi1.l === heapPhi2.l) ++
               Assume(smallerState(maskPhi1.l, heapPhi1.l, maskPhi2.l, heapPhi2.l)) ++
               Assume(wfMask(Seq(maskPhi1.l))) ++ Assume(wfMask(Seq(maskR.l))) ++
           //}
@@ -827,8 +889,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           Assert(exists && smallerState(maskPhi1.l, heapPhi1.l, normalState._1, normalState._2), nm) ++
           Assert(equalSeq(converted_vars, tempVars), nm) ++ {
         if (!checkMono) {
+            Assert(equalOnInterFunc(heapPhi1.l, heapR.l, maskPhi1.l, maskR.l), nf) ++
             Assume(
               sumStateNormal(maskPhi1.l, heapPhi1.l, maskR.l, heapR.l, sumState._1.l, sumState._2.l)
+              // sumMask(maskPhi1.l, maskR.l, sumState._1.l)
             ) ++
             Assert(exists && smallerState(sumState._1.l, sumState._2.l, normalState._1, normalState._2), nf)
         }
@@ -857,12 +921,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
-  def groupNonInlinableStmts(ss: Seq[sil.Stmt], orig_s: sil.Stmt): Seq[sil.Stmt] = {
+  def alreadyGroupedInlinableStmts(ss: Seq[sil.Stmt]): Boolean = {
+    (ss forall inlinable) || (ss forall (!inlinable(_)))
+  }
 
-    if (syntacticFraming(inlineSil(orig_s, maxDepth - current_depth))) {
-      ss
-    }
-    else {
+  def groupNonInlinableStmts(ss: Seq[sil.Stmt], orig_s: sil.Stmt): Seq[sil.Stmt] = {
 
       var currentNonInlinable: Seq[sil.Stmt] = Seq()
       var r: Seq[sil.Stmt] = Seq()
@@ -893,7 +956,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       }
       r
     }
-  }
 
   // ----------------------------------------------------------------
   // ACTUAL INLINING
@@ -1070,14 +1132,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   def readVarsDecl(d: ast.Declaration): Seq[ast.LocalVar] = {
     d match {
       case decl: ast.LocalVarDecl => Seq(decl.localVar)
-    }
-  }
-
-  def readVars(s: sil.Stmt): Set[sil.LocalVar] = {
-    s match {
-      case d: sil.Declaration => readVarsDecl(d).toSet
-      case sil.Seqn(ss, scopedDecls) => Set()
-      case _ => Set()
+      case _ => Seq()
     }
   }
 
@@ -1085,32 +1140,32 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   var inRenaming: Set[sil.LocalVar] = Set()
   var namesAlreadyUsed: Set[sil.LocalVar] = Set()
 
-  def newString(s: String): String = {
+  def newString(s: String, n: Int = 1): String = {
     var definedVars = (mainModule.env.allDefinedVariables()) map (_.name)
     definedVars ++= (inRenaming map (_.name))
     definedVars ++= ((currentRenaming.keySet) map ((x: sil.LocalVar) => x.name))
     definedVars ++= ((currentRenaming.values.toSet) map ((x: sil.LocalVar) => x.name))
     definedVars ++= (namesAlreadyUsed map (_.name))
-    if (definedVars.contains(s)) {
-      newString(s + "_r")
+    if (definedVars.contains(s + "_" + n.toString)) {
+      newString(s, n + 1)
     }
     else {
-      s
+      s + "_" + n.toString
     }
   }
 
   def renameVar(x: ast.LocalVar): ast.LocalVar = {
 
-    println("Renaming var...", x)
+    // println("Renaming var...", x)
     // if (!currentRenaming.contains(x)) {
     if (!inRenaming.contains(x)) {
-      println("Not contained...", inRenaming, currentRenaming)
+      // println("Not contained...", inRenaming, currentRenaming)
       val new_name = newString(x.name)
       val xx = ast.LocalVar(new_name, x.typ)(x.pos, x.info, x.errT)
       currentRenaming += (x -> xx)
       inRenaming += x
     }
-    println("Renamed!", currentRenaming(x), currentRenaming)
+    // println("Renamed!", currentRenaming(x), currentRenaming)
     currentRenaming(x)
   }
 
@@ -1149,7 +1204,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   def alphaRename(s: ast.Stmt): ast.Stmt = {
-    println("RENAMING STMT...", s)
+    // println("RENAMING STMT...", s)
     val a = s.pos
     val b = s.info
     val c = s.errT
