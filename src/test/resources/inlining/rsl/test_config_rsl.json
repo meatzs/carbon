@@ -1,0 +1,76 @@
+[
+{ 
+  "file":"RelAcqRustARCStronger_inline.sil",
+  "bound":2,
+  "entry":"new_drop",
+  "sc_holds":true,
+  "errors":[]
+},
+{ 
+  "file":"RelAcqRustARCStronger_inline.sil",
+  "bound":2,
+  "entry":"new_drop_read",
+  "sc_holds":true,
+  "errors":[
+    {"tag": "assignment.failed:insufficient.permission"}
+  ]
+},
+{ 
+  "file":"RelAcqRustARCStronger_inline.sil",
+  "bound":2,
+  "entry":"new_drop_drop",
+  "sc_holds":true,
+  "errors":[
+    {"tag": "exhale.failed:assertion.false"},
+    {"tag": "exhale.failed:insufficient.permission"}
+  ]
+},
+{ 
+  "file":"RelAcqRustARCStronger_inline.sil",
+  "bound":2,
+  "entry":"new_drop_drop",
+  "sc_holds":true,
+  "errors":[
+    {"tag": "exhale.failed:assertion.false"},
+    {"tag": "exhale.failed:insufficient.permission"}
+  ]
+},
+{ 
+  "file":"RelAcqRustARCStronger_inline.sil",
+  "bound":2,
+  "entry":"new_clone",
+  "sc_holds":false,
+  "errors":[]
+},
+{ 
+  "file":"RelAcqRustARCStronger_inline.sil",
+  "bound":2,
+  "entry":"new_clone_drop_loop",
+  "sc_holds":true,
+  "errors":[
+    {"tag": "exhale.failed:assertion.false"},
+    {"tag": "exhale.failed:insufficient.permission"}
+  ]
+},
+{
+  "file":"RelAcqDblMsgPassSplit_inline.sil",
+  "bound":2,
+  "entry":"main",
+  "sc_holds":false,
+  "errors":[]
+},
+{
+  "file":"RelAcqDblMsgPassSplit2_inline.sil",
+  "bound":2,
+  "entry":"main_1",
+  "sc_holds":false,
+  "errors":[]
+},
+{
+  "file":"RelAcqDblMsgPassSplit2_inline.sil",
+  "bound":2,
+  "entry":"main_2",
+  "sc_holds":true,
+  "errors":[]
+}
+]
