@@ -1,132 +1,194 @@
-//:: IgnoreFile(/silicon/issue/364/)
 
-// This is a version of the main example from "Tackling Real-Life Relaxed
-// Concurrency with FSL++", by Doko and Vafeiadis.
-// The example is based on the "ARC" reference counting library for Rust.
-// In this version, we modify the original code by making all atomic 
-// accesses synchronise for reads and writes. This makes the verification 
-// simpler, and removes the need for fence instructions in the code.
-// The resulting example is a simplified version of that in ARCStronger, 
-// whose source code is shown in the appendix of our submission (Fig. 16)
+//:: IgnoreFile(/carbon/issue/269/)
 
-// Note that verification times via the web frontend are considerably 
-// longer than with the desktop application.
+// This example includes methods taken from the RWSpinlock implementation in the Facebook Folly library.
+// Two methods fail to verify; we believe these to require reasoning which is beyond the scope of the underlying logics, though
+// perhaps with rich ghost state (as introduced in FSL++) a different specification can be written.
+// The source code for the example can be found at https://github.com/facebook/folly/blob/master/folly/RWSpinLock.h
 
+// PLEASE NOTE: We initially developed a variant of this example in which all access modes for atomic operations
+// were simply relacq. In our evaluation table, we inadvertently reported times for that version of the example.
+// The verification outcomes are identical, but the timings were somewhat faster; the correct timing for this
+// example should have been around 22 seconds (i.e. comparable with our other advanced examples)
+// We will change this entry in the final version of the paper.
+// The version of the code using relacq accesses throughout is in the file FollwRWSpinlock_err_mod, which yields
+// the times reported in the table under FollyRwSpinlock_err.
+
+// Note that verification times via the web frontend are considerably longer than with the desktop application.
 
 // PART 1: translation of code
 
-// ARC(a, b, g) := acc(a,rd) && acc(g,rd) && RMWAcq(b, Q0) && Rel(b,Q0) && Init(b) && realRef(a) && realRef(b) && ghostRef(g) 
-// Q0(v) := v>=0 && acc(ghost, 1 - v*rd) && (v >= 1 ==> acc(data, 1 - v*rd)) 
+// Q0 :=  (v < 0 ? false : ghostRef(ghost) && acc(ghost, leftover(v)) && realRef(bits) && acc(resource(bits), leftover(v)) && ghostRef(readsGhost) && acc(readsGhost, write - rd * (v/4)))
+// leftover(v) (v % 2 == 1 ? 0 : (secondBit(v) == 1 ? upgradeable - rd * (v/4) : 1 - rd * (v/4))))
+// Lock(bits) := Rel(bits,Q0) && RMWAcq(bits,Q0) && Init(bits) && realRef(bits)
+// (see PART 2 of encoded file for further definitions)
 
-
-method new_method(v : Int) returns (data: Ref, count: Ref, ghost: Ref)
-  requires true
-  ensures ARC(data,count,ghost) && data.val == v
+// we pass the real lock location and two ghost locations (ghost and readsGhost) around together, instead of encoding composite objects here.
+method try_lock(bits: Ref, ghost: Ref, readsGhost: Ref) returns (res: Bool)
+  requires Lock(bits)
+  ensures Lock(bits) && (res ==> exclusiveResource)  
 {
-// data := alloc_na()
-  allocNonAtomic(data) 
-// ghost := alloc_ghost()
-  allocGhost(ghost) 
-  
-// count := alloc_RMW(Q0)
-  allocAtomic(count, 0, true)
+  var valRead : Int
+// valRead := CAS(bits,0,1)_relacq
+  CAS(bits,0,1,valRead,true,true)
 
-// [data]_NA := v
-  assert acc(data.init)
-  data.val := v
-  data.init := true
-  
-// [count]_rel := 1
-  releaseWrite(count,1)  // simplification with respect to original code (was relaxed write)
+// return (valRead == 0)
+  res := (valRead == 0)
 }
 
-method read(data:Ref, count:Ref, ghost:Ref) returns (v: Int)
-  requires ARC(data,count,ghost)
-  ensures ARC(data,count,ghost) && data.val == v
+method main1(bits: Ref, ghost: Ref, readsGhost: Ref)
+  requires Lock(bits)
 {
-// v := [data]_NA
-  v := data.val
+  lock(bits, ghost, readsGhost)
 }
 
-method drop(data:Ref, count: Ref, ghost:Ref)
-  requires ARC(data,count,ghost)
-  ensures true
+method main2(bits: Ref, ghost: Ref, readsGhost: Ref)
+  requires Lock(bits)
 {
-  var t : Int
-// t := fetch_and_decrement(count)_relacq
-  fetchUpdate(count, t, t-1, true, true)  // simplification with respect to original code (was release CAS - acq/rel here)
-  
-  if(t == 1) { 
-    // FENCEAcq - not needed for this version
-    // deallocate data - modelled as giving up the (full) permission to the location
-    // free(data)
-    exhale acc(data.val)
-  }
+  lock(bits, ghost, readsGhost)
+  lock(bits, ghost, readsGhost)
 }
 
-method clone(data:Ref, count: Ref, ghost:Ref)
-  requires ARC(data,count,ghost)
-  ensures ARC(data,count,ghost) && ARC(data,count,ghost)
-  {
-    var t: Int
-// t := fetch_and_decrement(count)_acq
-    fetchUpdate(count, t, t+1, true, false) // simplification of real code (was relaxed, here acquire)
-  }
-
-method main() {
-  var data: Ref
-  var count: Ref
-  var ghost: Ref
-
-//all tests using Z3 4.8.4
-/* fundamental error as expected (and SC holds) in approx. 10 seconds
-  data, count, ghost := new_method(0);
-  drop(data, count, ghost);
-  drop(data, count, ghost);
-  */
-
-  /*no fundamental error as expected (and SC holds); approx. 10 seconds
-  data, count, ghost := new_method(0);
-  drop(data, count, ghost);
-  */
-
-  var i: Int := 0
-  var n: Int
-
-  data, count, ghost := new_method(0)
-  while (i < n)
-  {
-    clone(data, count, ghost)
-    i := i + 1
-  }
-  while (i >= 0)
-  {
-    drop(data, count, ghost)
-    i := i - 1
-  }
-
-  assert n <= 2
-  drop(data, count, ghost)
-  
-  /* does not satisfy SC; approx. 40 seconds; but works if one changes fetchUpdate in clone to (true,true)
-  data, count, ghost := new_method(0);
-  clone(data, count, ghost)
-*/
-
+method main3(bits: Ref, ghost: Ref, readsGhost: Ref)
+  requires Lock(bits)
+{
+  lock(bits, ghost, readsGhost)
+  unlock(bits, ghost, readsGhost)
 }
+
+method lock(bits: Ref, ghost: Ref, readsGhost: Ref)
+  requires Lock(bits)
+  ensures Lock(bits) && exclusiveResource
+  {
+    var count : Int := 0;
+    var outcome : Bool
+
+// outcome := try_lock(bits)
+    outcome := try_lock(bits, ghost, readsGhost); 
+    while(!outcome)  
+      invariant Lock(bits) && (outcome ==> exclusiveResource)
+    {
+      count := count + 1;
+      if(count > 1000) {
+        // sched_yield(); - modelled as skip
+      }
+// outcome := try_lock(bits)
+      outcome := try_lock(bits, ghost, readsGhost)
+    }
+  }
+
+  method unlock(bits: Ref, ghost: Ref, readsGhost: Ref) 
+    requires Lock(bits) && exclusiveResource
+    ensures Lock(bits)  
+    { 
+      var tmpInt : Int // dummy variable only needed because our fetch-update macro always returns a value
+// fetch-and-bitwise-and(bits,~(0x3))_rel
+      fetchUpdate(bits,tmpInt,setFirstBit(setSecondBit(tmpInt,0),0),false, true)
+    }
+
+// This (original) implementation of the operation fails to verify:
+// The reason is that the atomic invariants fail to capture the conceptual
+// correlation between *two* successive updates on the atomic location.
+// In FollyRWSpinlockStronger.vpr we give an alternative implementation
+// of this method (with the same specification) whose correctness
+// can be captured by the supported logics 
+  method try_lock_shared(bits: Ref, ghost: Ref, readsGhost: Ref) returns (res: Bool)
+    requires Lock(bits)
+    ensures Lock(bits) && (res ==> readResource)  
+    {
+      var value : Int
+// value := fetch-and-increment(bits,4)_acq
+      fetchUpdate(bits,value,value + 4,true,false)
+      if(firstBit(value) == 1 || secondBit(value) == 1) {
+// value := fetch-and-increment(bits,-4)_rel
+        // FAILS - we cannot prove that we need not give up a read permission here
+        
+        fetchUpdate(bits,value,value - 4, false,true) 
+        res := false
+        goto return // return false
+      } 
+      res := true
+      label return
+    }
+
+
+
+method lock_shared(bits: Ref, ghost:Ref, readsGhost:Ref)
+  requires Lock(bits)
+  ensures Lock(bits) && readResource
+{
+  var count : Int := 0
+  var success : Bool := false
+  while(!success) 
+    invariant Lock(bits) && (success ==> readResource)
+    {
+      success := try_lock_shared(bits, ghost, readsGhost)
+    }
+}
+
+method unlock_shared(bits: Ref, ghost:Ref, readsGhost:Ref)
+  requires Lock(bits) && readResource
+  ensures Lock(bits)
+  {
+    var tmpValue : Int 
+// fetch-and-increment(bits,-4)_rel
+    fetchUpdate(bits,tmpValue,tmpValue - 4,false,true)
+  }
+
+// In FollyRWSpinlockStronger.vpr we give an alternative implementation
+// of this method (with the same specification) whose correctness
+// can be captured by the supported logics 
+method unlock_and_lock_shared(bits:Ref, ghost:Ref, readsGhost:Ref)
+  requires Lock(bits) && exclusiveResource
+  //:: ExpectedOutput(postcondition.violated:insufficient.permission)
+  ensures Lock(bits) && readResource // FAILS - cannot capture cumulative effect of updates - why do we still have a read permission, here?
+  {
+    var tmpValue : Int 
+// fetch-and-increment(bits,4)_acq
+    fetchUpdate(bits,tmpValue,tmpValue + 4,true,false)
+    unlock(bits, ghost, readsGhost) 
+  }
+
+ 
+
 
 
 // PART 2: invariant definitions + example-specific background definitions
+predicate resource(l : Ref) // represents data protected by lock
 
-// Q0(v) := v>=0 && acc(ghost, 1 - v*rd) && (v >= 1 ==> acc(data, 1 - v*rd)) 
-define INV0TempOrMaybeUp(v,sync) v >= 0 && ghostRef(ghost) && acc(maybeUp(ghost,!sync).val, write - rds(v) - min(write - rds(v),perm(temp(ghost).val))) && acc(temp(ghost).val, min(write - rds(v),perm(temp(ghost).val))) && (v >= 1 ==> realRef(data) && acc(maybeUp(data,!sync).val, write - rds(v) - min(write - rds(v),perm(temp(data).val))) && acc(temp(data).val, min(write - rds(v),perm(temp(data).val))))
-define INV0Temp(v) v >= 0 && ghostRef(ghost) && acc(temp(ghost).val, write - rds(v)) && (v >= 1 ==> realRef(data) && acc(temp(data).val, write - rds(v)))
-define INV0MaybeUp(v,sync) v >= 0 && ghostRef(ghost) && acc(maybeUp(ghost,!sync).val, write - rds(v)) && (v >= 1 ==> realRef(data) && acc(maybeUp(data,!sync).val, write - rds(v))) 
-define INV0MaybeDown(v,sync) v >= 0 && ghostRef(ghost) && acc(maybeDown(ghost,!sync).val, write - rds(v)) && (v >= 1 ==> realRef(data) && acc(maybeDown(data,!sync).val, write - rds(v)))
+// Define lock concepts: what it means to know a reference is a "Lock", when exclusive, upgradeable and read access to the lock are represented by 
 
-// ARC(a, b, g) := acc(a,rd) && acc(g,rd) && RMWAcq(b, Q0) && Rel(b,Q0) && Init(b) && realRef(a) && realRef(b) && ghostRef(g) 
-define ARC(a, b, g) realRef(a) && realRef(b) && ghostRef(g) && acc(a.val,rd()) && acc(g.val,rd()) && RMWAcq(b, 0) && Rel(b,0) && Init(b)
+// Q0 :=  (v < 0 ? false : ghostRef(ghost) && acc(ghost, leftover(v)) && realRef(bits) && acc(resource(bits), leftover(v)) && ghostRef(readsGhost) && acc(readsGhost, write - rd * (v/4)))
 
+// permissions conceptually "left" in the atomic location's invariant
+// leftover(v) (v % 2 == 1 ? 0 : (secondBit(v) == 1 ? upgradeable - rd * (v/4) : 1 - rd * (v/4))))
+define leftover(v) (v % 2 == 1 ? none : (secondBit(v) == 1 ? upgradeable - rds(divide(v,4)) : write - rds(divide(v,4))))
+
+
+// Lock(bits) := Rel(bits,Q0) && RMWAcq(bits,Q0) && Init(bits) && realRef(bits)
+define Lock(bits) realRef(bits) && Rel(bits,0) && RMWAcq(bits,0) && Init(bits)
+
+// "write" is a full permission
+define upgradeable (write*2)/3  // amount of permission representing an upgradeable lock - note: other values e.g. write/3 also work  
+
+// read permission to each of: the resource guarded by the lock, and the two ghost locations
+define readResource realRef(bits) && acc(resource(bits),rd()) && ghostRef(ghost) && acc(ghost.val,rd()) && ghostRef(readsGhost) && acc(readsGhost.val,rd())
+
+// full permission to the resource, and the "ghost" ghost reference.
+define exclusiveResource realRef(bits) && acc(resource(bits),write) && ghostRef(ghost) && acc(ghost.val,write)
+
+
+define INV0MaybeUp(v,sync) (v < 0 ? false : ghostRef(ghost) && acc(maybeUp(ghost,!sync).val, leftover(v)) && realRef(bits) && acc(resource(maybeUp(bits,!sync)), leftover(v)) && ghostRef(readsGhost) && acc(maybeUp(readsGhost,!sync).val, write - rds(divide(v,4))))
+define INV0MaybeDown(v,sync) (v < 0 ? false : ghostRef(ghost) && acc(maybeDown(ghost,!sync).val, leftover(v)) && realRef(bits) && acc(resource(maybeDown(bits,!sync)), leftover(v)) && ghostRef(readsGhost) && acc(maybeDown(readsGhost,!sync).val, write - rds(divide(v,4))))
+define INV0TempOrMaybeUp(v,sync) (v < 0 ? false : ghostRef(ghost) 
+  && acc(maybeUp(ghost,!sync).val, leftover(v) - min(leftover(v),perm(temp(ghost).val))) && acc(temp(ghost).val, min(leftover(v),perm(temp(ghost).val)))
+  && realRef(bits) 
+  && acc(resource(maybeUp(bits,!sync)), leftover(v) - min(leftover(v),perm(resource(temp(bits))))) && acc(resource(temp(bits)), min(leftover(v),perm(resource(temp(bits))))) 
+  && ghostRef(readsGhost) 
+&& acc(maybeUp(readsGhost,!sync).val, write - rds(divide(v,4)) - min(write - rds(divide(v,4)), perm(temp(readsGhost).val))))
+&& acc(temp(readsGhost).val, min(write - rds(divide(v,4)), perm(temp(readsGhost).val)))
+
+define INV0Temp(v) (v < 0 ? false : ghostRef(ghost) && acc(temp(ghost).val, leftover(v)) && realRef(bits) && acc(resource(temp(bits)), leftover(v)) && ghostRef(readsGhost) && acc(temp(readsGhost).val, write - rds(divide(v,4))))
 
 
 // counting permissions
@@ -142,9 +204,40 @@ function rds(i: Int) : Perm
 // An alternative formulation which would not depend on triggering for soundness, would be to make the notion of a machine integer value
 // an explicit concept in the axiomatisation, and to guard the axiom body with the condition that i is such an integer; this could be done routinely,
 // but the extra clutter involved would be better generated by a front-end, rather than encoded by hand, as for these examples.
-axiom bounds { forall i : Int :: {rds(i)} rds(0) == none && (i >= 0 ==> rds(i) < write) }
+axiom bounds { forall i : Int :: {rds(i)} rds(0) == none && (i >= 0 ==> rds(i) < upgradeable) }
 axiom rdPositive { rd() > none }
 axiom addition {forall i:Int, j:Int :: {rds(i),rds(j)} i+1 == j ==> rds(i) + rd() == rds(j) }
+}
+
+define divide(a,b) a/b
+//define divide(a,b) (a - (a % b))/b // this works better than Z3's native division, when dealing with non-linear arithmetic
+
+// Viper does not support bit-wise operations - add them here
+define firstBit(v) v % 2
+define secondBit(v) divide(v % 4, 2)
+
+function zeroFirstBit(v:Int) : Int // set first bit of v to 0
+//  requires v >= 0
+{  
+  (v % 2 == 0 ? v : v - 1)
+}
+
+function zeroSecondBit(v: Int) : Int // set second bit of v to 0
+//  requires v >= 0
+{
+  (v % 4 == 0 || v % 4 == 1) ? v : v - 2
+}
+
+function setFirstBit(v: Int, b: Int) : Int // set first bit of v to b
+//  requires v >= 0 && (b == 0 || b == 1)  
+{  
+  (v % 2 == b ? v : v + (b == 0 ? -1 : 1))
+}
+
+function setSecondBit(v: Int, b:Int) : Int // set second bit of v to b
+//  requires v >= 0 && (b == 0 || b == 1)
+{
+  (v % 4 == b * 2 || v % 4 == b * 2 + 1) ? v : v + (b == 0 ? -2 : 2)
 }
 
 
@@ -154,12 +247,12 @@ define INV1Temp(v) true // not used for this example
 define INV1TempOrMaybeUp(v,sync) true // not used for this example
 define INV1MaybeUp(v,sync) true // not used for this example
 define INV1MaybeDown(v,sync) true  // not used for this example
+define INV1True(v) true // not used for this example
 define INV2Temp(v) true // not used for this example
 define INV2TempOrMaybeUp(v,sync) true // not used for this example
 define INV2MaybeUp(v,sync) true // not used for this example
 define INV2MaybeDown(v,sync) true  // not used for this example
-
-
+define INV2True(v) true // not used for this example
 
 
 
@@ -447,6 +540,13 @@ define FENCEAcqWithVars(refSet) {
   assume forall r: Ref :: {r in refSet} {down(r)} r in refSet ==> valsRead(r,2) == valsRead(down(r),2)
   exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(AcqConjunct(down(r),2), perm(AcqConjunct(down(r),2)))
 
+   refSet := havocedRefSet()
+// move all locations r to which permission to "resource(r)" is held from "down" heap to normal heap
+  assume forall r: Ref :: {r in refSet} r in refSet ==> heap(r) == 0 && !is_ghost(r) && perm(resource(down(r))) > none
+  assume forall r: Ref :: {down(r)} perm(resource(down(r))) > none && !is_ghost(r) ==> r in refSet
+  inhale forall r: Ref :: {r in refSet} {down(r)} r in refSet ==> acc(resource(r), perm(resource(down(r))))  
+  exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(resource(down(r)), perm(resource(down(r))))
+
 }  
 
 define moveTempHeap(refSet, readSync) {
@@ -508,6 +608,13 @@ define moveTempHeap(refSet, readSync) {
   assume forall r: Ref :: {r in refSet} {down(r)} r in refSet ==> valsRead(maybeDown(r,!readSync),2) == valsRead(temp(r),2)
   exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(AcqConjunct(temp(r),2), perm(AcqConjunct(temp(r),2)))
 
+   refSet := havocedRefSet()
+// move all locations r to which permission to "resource(r)" is held from "temp" heap to normal heap
+  assume forall r: Ref :: {r in refSet} r in refSet ==> heap(r) == 0 && !is_ghost(r) && perm(resource(temp(r))) > none
+  assume forall r: Ref :: {temp(r)} perm(resource(temp(r))) > none && !is_ghost(r) ==> r in refSet
+  inhale forall r: Ref :: {r in refSet} r in refSet ==> acc(resource(maybeDown(r,!readSync)), perm(resource(temp(r))))  
+  exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(resource(temp(r)), perm(resource(temp(r))))
+
 }  
 
 
@@ -517,13 +624,11 @@ define rewriteAcqConjunctsWithVar(x,isRMW,oldAcqSet,newAcqSet,tmpBool,tmpInt)
   tmpBool := havocedBool()
   if(tmpBool) { // check rewriting is justified
     // remove all permissions from current state
-    exhale forall r: Ref :: r != null ==> acc(r.init, perm(r.init))
-    exhale forall r: Ref :: r != null ==> acc(r.val, perm(r.val))
-    exhale forall r: Ref :: r != null ==> acc(r.rel, perm(r.rel))
-    exhale forall r: Ref :: r != null ==> acc(r.acq, perm(r.acq))
-    //exhale forall r: Ref :: r != null ==> acc(AcqConjunct(r,0), (perm(AcqConjunct(r,0)) > none ? perm(AcqConjunct(r,0)) : none))
-    //exhale forall r: Ref :: r != null ==> acc(AcqConjunct(r,1), perm(AcqConjunct(r,1)))
-    //exhale forall r: Ref :: r != null ==> acc(AcqConjunct(r,2), perm(AcqConjunct(r,2)))   
+    exhale forall r: Ref :: {r.init} r != null ==> acc(r.init, perm(r.init))
+    exhale forall r: Ref :: {r.val} r != null ==> acc(r.val, perm(r.val))
+    exhale forall r: Ref :: {r.rel} r != null ==> acc(r.rel, perm(r.rel))
+    exhale forall r: Ref :: {r.acq} r != null ==> acc(r.acq, perm(r.acq))
+
     tmpInt := havocedInt()
     // UNROLL per numbered invariant
     if(0 in oldAcqSet) {
@@ -550,15 +655,14 @@ define rewriteAcqConjunctsWithVar(x,isRMW,oldAcqSet,newAcqSet,tmpBool,tmpInt)
   }
 
   if(isRMW) {
-    exhale forall i:Int :: i in oldAcqSet ==> acc(AcqConjunct(x,i),perm(AcqConjunct(x,i)))
-    inhale forall i:Int :: i in newAcqSet ==> acc(AcqConjunct(x,i),wildcard)
+    exhale forall i:Int :: {i in oldAcqSet} i in oldAcqSet ==> acc(AcqConjunct(x,i),perm(AcqConjunct(x,i)))
+    inhale forall i:Int :: {i in newAcqSet} i in newAcqSet ==> acc(AcqConjunct(x,i),wildcard)
   } else {
-    exhale forall i:Int :: i in oldAcqSet ==> AcqConjunct(x,i) && valsRead(x,i) == Set[Int]()
-    inhale forall i:Int :: i in newAcqSet ==> AcqConjunct(x,i) && valsRead(x,i) == Set[Int]()
-  }
-  
+    exhale forall i:Int :: {i in oldAcqSet} i in oldAcqSet ==> AcqConjunct(x,i) && valsRead(x,i) == Set[Int]()
+    inhale forall i:Int :: {i in newAcqSet} i in newAcqSet ==> AcqConjunct(x,i) && valsRead(x,i) == Set[Int]()
+  }  
 }
-
+ 
 
 
 
