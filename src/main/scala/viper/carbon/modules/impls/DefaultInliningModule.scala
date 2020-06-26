@@ -14,6 +14,8 @@ import viper.silver.ast
 
 class DefaultInliningModule(val verifier: Verifier) extends InliningModule with Component {
 
+  private val relaxedAbstractPrecondChecking = true
+
   import verifier._
   import expModule._
   import heapModule._
@@ -124,7 +126,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       // case sil.Inhale(exp) if (exp.isPure) => sil.LocalVarAssign(exists, sil.And(exists, exp)(exp.pos, exp.info, exp.errT))(a, b, c)
       // Assume
       case sil.MethodCall(methodName, args, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).body.isEmpty
-        && program.findMethod(methodName).pres.isEmpty // COMMENT OUT THIS LINE FOR NAGINI
+        && (program.findMethod(methodName).pres.isEmpty || relaxedAbstractPrecondChecking)
          =>
         // Abstract method
         val formalArgs: Seq[ast.LocalVarDecl] = program.findMethod(methodName).formalArgs
@@ -179,7 +181,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         // val if_assign: ast.Stmt = sil.If(check, sil.Seqn(assign, Seq())(a, b, c), silEmptyStmt()(a, b, c))(a, b, c)
         sil.Seqn(assign ++ ss map (assignVarsSil(_, exists)), scopedDecls)(a, b, c)
       case sil.MethodCall(methodName, args, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).body.isEmpty
-        && program.findMethod(methodName).pres.isEmpty // COMMENT OUT THIS LINE FOR NAGINI
+        && (program.findMethod(methodName).pres.isEmpty || relaxedAbstractPrecondChecking)
        =>
         val tempArgs: Seq[ast.LocalVar] = recordedScopes.head
         recordedScopes = recordedScopes.tail
