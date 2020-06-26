@@ -101,8 +101,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   var recordedScopes: Seq[Seq[sil.LocalVar]] = Seq()
 
+  var altExists: Seq[sil.LocalVar] = Seq()
+  var altExistsAll: Set[sil.LocalVar] = Set()
+
   // Record the values of variables at the beginning of scopes, and ensure return variables are the same (neither sound nor complete)
-  def recordVarsSil(s: sil.Stmt): sil.Stmt = {
+  def recordVarsSil(s: sil.Stmt, exists: sil.LocalVar): sil.Stmt = {
     val a = s.pos
     val b = s.info
     val c = s.errT
@@ -117,11 +120,12 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         })
         recordedScopes :+= tempVars
         val assign: Seq[LocalVarAssign] = (tempVars zip locals) map { (x: (sil.LocalVar, sil.LocalVarDecl)) => sil.LocalVarAssign(x._1, x._2.localVar)(a, b, c) }
-        sil.Seqn(assign ++ ss map recordVarsSil, scopedDecls)(a, b, c)
+        sil.Seqn(assign ++ ss map (recordVarsSil(_, exists)), scopedDecls)(a, b, c)
       // case sil.Inhale(exp) if (exp.isPure) => sil.LocalVarAssign(exists, sil.And(exists, exp)(exp.pos, exp.info, exp.errT))(a, b, c)
       // Assume
       case sil.MethodCall(methodName, args, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).body.isEmpty
-        && program.findMethod(methodName).pres.isEmpty =>
+        && program.findMethod(methodName).pres.isEmpty // COMMENT OUT THIS LINE FOR NAGINI
+         =>
         // Abstract method
         val formalArgs: Seq[ast.LocalVarDecl] = program.findMethod(methodName).formalArgs
         val tempArgs: Seq[ast.LocalVar] = (args zip formalArgs) map ((x: (sil.Exp, sil.LocalVarDecl)) => {
@@ -142,16 +146,26 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         recordedScopes :+= tempRets
         val assignArgs: Seq[LocalVarAssign] = (tempArgs zip args) map { (x: (sil.LocalVar, sil.Exp)) => sil.LocalVarAssign(x._1, x._2)(a, b, c) }
         val assignRets: Seq[LocalVarAssign] = (tempRets zip targets) map { (x: (sil.LocalVar, sil.LocalVar)) => sil.LocalVarAssign(x._1, x._2)(a, b, c) }
-        sil.Seqn(assignArgs ++ Seq(s) ++ assignRets, Seq())(a, b, c)
+
+        val existAlter: ast.LocalVarDecl = sil.LocalVarDecl(silNameNotUsed("__altExists"), sil.Bool)(a, b, c)
+//         val existAlter: sil.LocalVar = getVarDecl("altExists", Bool).l
+        altExists :+= existAlter.localVar
+        altExistsAll += existAlter.localVar
+
+        val assignExists: sil.LocalVarAssign = sil.LocalVarAssign(existAlter.localVar, exists)(a, b, c)
+
+        val ifAssignRets = sil.If(existAlter.localVar, sil.Seqn(assignRets, Seq())(a, b, c), sil.Seqn(Seq(), Seq())(a, b, c))(a, b, c)
+
+        sil.Seqn(assignArgs ++ Seq(assignExists, s, ifAssignRets), Seq(existAlter))(a, b, c)
       case sil.If(cond, s1: sil.Seqn, s2: sil.Seqn) =>
-        val ss1 = recordVarsSil(s1).asInstanceOf[sil.Seqn]
-        val ss2 = recordVarsSil(s2).asInstanceOf[sil.Seqn]
+        val ss1 = recordVarsSil(s1, exists).asInstanceOf[sil.Seqn]
+        val ss2 = recordVarsSil(s2, exists).asInstanceOf[sil.Seqn]
         sil.If(cond, ss1, ss2)(a, b, c)
       case _ => s
     }
   }
 
-  def assignVarsSil(s: sil.Stmt): sil.Stmt = {
+  def assignVarsSil(s: sil.Stmt, exists: sil.LocalVar): sil.Stmt = {
     val a = s.pos
     val b = s.info
     val c = s.errT
@@ -163,9 +177,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         recordedScopes = recordedScopes.tail
         val assign: Seq[LocalVarAssign] = (locals zip tempVars) map { (x: (sil.LocalVarDecl, sil.LocalVar)) => sil.LocalVarAssign(x._1.localVar, x._2)(a, b, c) }
         // val if_assign: ast.Stmt = sil.If(check, sil.Seqn(assign, Seq())(a, b, c), silEmptyStmt()(a, b, c))(a, b, c)
-        sil.Seqn(assign ++ ss map assignVarsSil, scopedDecls)(a, b, c)
+        sil.Seqn(assign ++ ss map (assignVarsSil(_, exists)), scopedDecls)(a, b, c)
       case sil.MethodCall(methodName, args, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).body.isEmpty
-        && program.findMethod(methodName).pres.isEmpty =>
+        && program.findMethod(methodName).pres.isEmpty // COMMENT OUT THIS LINE FOR NAGINI
+       =>
         val tempArgs: Seq[ast.LocalVar] = recordedScopes.head
         recordedScopes = recordedScopes.tail
         val tempRets: Seq[ast.LocalVar] = recordedScopes.head
@@ -181,12 +196,13 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         val same_args_true: LocalVarAssign = LocalVarAssign(same_args, sil.TrueLit()(a, b, c))(a, b, c)
         val assign_same_args: Seq[LocalVarAssign] = same_seq map ((exp: sil.Exp) => sil.LocalVarAssign(same_args, sil.And(same_args, exp)(a, b, c))(a, b, c))
 
-        val assign: Seq[LocalVarAssign] = (tempRets zip targets) map { (x: (sil.LocalVar, sil.LocalVar)) => sil.LocalVarAssign(x._2, x._1)(a, b, c) }
+        // val assign: Seq[LocalVarAssign] = (tempRets zip targets) map { (x: (sil.LocalVar, sil.LocalVar)) => sil.LocalVarAssign(x._2, x._1)(a, b, c) }
+        val assign: Seq[sil.Stmt] = (tempRets zip targets) map { (x: (sil.LocalVar, sil.LocalVar)) => sil.Inhale(sil.EqCmp(x._1, x._2)(a, b, c))(a, b, c) }
         val if_assign: ast.Stmt = sil.If(same_args, sil.Seqn(assign, Seq())(a, b, c), sil.Seqn(Seq(), Seq())(a, b, c))(a, b, c)
         sil.Seqn(Seq(same_args_true) ++ assign_same_args ++ Seq(s) ++ Seq(if_assign), Seq())(a, b, c)
       case sil.If(cond, s1, s2) =>
-        val ss1 = assignVarsSil(s1).asInstanceOf[sil.Seqn]
-        val ss2 = assignVarsSil(s2).asInstanceOf[sil.Seqn]
+        val ss1 = assignVarsSil(s1, exists).asInstanceOf[sil.Seqn]
+        val ss2 = assignVarsSil(s2, exists).asInstanceOf[sil.Seqn]
         sil.If(cond, ss1, ss2)(a, b, c)
       case _ => s
     }
@@ -361,6 +377,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       case Seqn(stmts) => stmts map (addIfExists(_, exists))
       case CommentBlock(c, ss) =>
         CommentBlock(c, addIfExists(ss, exists))
+      case If(cond: LocalVar, thn, els) if cond.name.name.startsWith("__altExists") => If(cond, thn, addIfExists(els, exists))
       case If(cond, thn, els) => If(cond, addIfExists(thn, exists), addIfExists(els, exists))
       case NondetIf(thn, els) => NondetIf(addIfExists(thn, exists), addIfExists(els, exists))
       case ss => If(exists, ss, Statements.EmptyStmt)
@@ -795,10 +812,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
 
       // val orig_s1: sil.Stmt = sil.Seqn(Seq(sil.LocalVarAssign(silExistsDecl.localVar, sil.TrueLit()(aa, bb, cc))(aa, bb, cc),
-      val orig_s1: sil.Stmt = recordVarsSil(orig_s)
+      val orig_s1: sil.Stmt = recordVarsSil(orig_s, silExistsDecl.localVar)
         //Seq(silExistsDecl))(aa, bb, cc)
         //Seq())(aa, bb, cc)
-      val orig_s2: sil.Stmt = assignVarsSil(orig_s)
+      val orig_s2: sil.Stmt = assignVarsSil(orig_s, silExistsDecl.localVar)
       // val orig_s1 = orig_s
 
       val converted_vars: Seq[LocalVar] = (orig_s.writtenVars filter (v => mainModule.env.isDefinedAt(v))) map translateLocalVar

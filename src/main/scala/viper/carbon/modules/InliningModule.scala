@@ -38,9 +38,9 @@ trait InliningModule extends Module with Component {
 
   var recordedScopes: Seq[Seq[sil.LocalVar]]
 
-  def recordVarsSil(s: sil.Stmt): sil.Stmt
+  def recordVarsSil(s: sil.Stmt, exists: sil.LocalVar): sil.Stmt
 
-  def assignVarsSil(s: sil.Stmt): sil.Stmt
+  def assignVarsSil(s: sil.Stmt, exists: sil.LocalVar): sil.Stmt
 
   // Only changes "assume state" into "exists := exists && wfState"
   def changeStateWfState(s: Stmt, exists: LocalVar): Stmt
