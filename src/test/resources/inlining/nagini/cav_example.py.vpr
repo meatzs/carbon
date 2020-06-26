@@ -648,11 +648,6 @@ method get_seats(_cthread_159: Ref, _caller_measures_159: Seq[Measure$], _residu
   ensures _err == null ==> int___eq__(__prim__int___box__(list___len__(_res)), num_0)
   ensures _err != null && issubtype(typeof(_err), SoldoutException()) ==> true
   ensures _err != null ==> issubtype(typeof(_err), SoldoutException())
-{
-  var _cwl_159: Perm
-  _res := null
-  inhale false
-}
 
 method order_tickets(_cthread_160: Ref, _caller_measures_160: Seq[Measure$], _residue_160: Perm, num_1: Ref, show_id: Ref, code_0: Ref) returns (_current_wait_level_160: Perm, _res: Ref, _err: Ref)
   requires _cthread_160 != null
@@ -701,8 +696,7 @@ method order_tickets(_cthread_160: Ref, _caller_measures_160: Seq[Measure$], _re
   _cwl_160, get_seats_res, _err := get_seats(_cthread_160, _method_measures_160, _residue_160, show_id_0, num_2)
   if (_err != null) {
     _err := _err
-    goto __end
-  }
+  } else {
   seats := get_seats_res
   inhale _isDefined(4193048254836808333)
   _cwl_160, list_0 := list___init__(_cthread_160, _method_measures_160, _residue_160)
@@ -771,7 +765,6 @@ method order_tickets(_cthread_160: Ref, _caller_measures_160: Seq[Measure$], _re
       _checkDefined(ticket, 3869200241183725196).Ticket_discount_code := code_1
     }
     _cwl_160 := list_append(_cthread_160, _method_measures_160, _residue_161, _checkDefined(res, 7562610), _checkDefined(ticket, 3869200241183725196))
-    label loop_end
     _cwl_160, loop_target, iter_err := Iterator___next__(_cthread_160, _method_measures_160, _residue_160, iter)
     if (iter_err == null) {
       row_0 := tuple___getitem__(loop_target, 0)
@@ -789,13 +782,10 @@ method order_tickets(_cthread_160: Ref, _caller_measures_160: Seq[Measure$], _re
   _cwl_160 := Iterator___del__(_cthread_160, _method_measures_160, _residue_161, iter)
   _res := null
   _err := null
-  label post_loop
   _res := null
   _err := null
   _res := _checkDefined(res, 7562610)
-  goto __end
-  goto __end
-  label __end
+  }
 }
 
 method Ticket___init__(_cthread_156: Ref, _caller_measures_156: Seq[Measure$], _residue_156: Perm, self: Ref, show: Ref, row: Ref, seat: Ref) returns (_current_wait_level_156: Perm)
@@ -847,8 +837,6 @@ method Ticket___init__(_cthread_156: Ref, _caller_measures_156: Seq[Measure$], _
   }
   self_2.Ticket_seat := tuple___getitem__(tuple___create2__(row_1, seat_1, int(), int(), 0), 1)
   fold acc(Ticket_state(self_2), write)
-  goto __end
-  label __end
 }
 
 method Ticket_set_discount(_cthread_157: Ref, _caller_measures_157: Seq[Measure$], _residue_157: Perm, self_0: Ref, code: Ref) returns (_current_wait_level_157: Perm)
@@ -877,8 +865,6 @@ method Ticket_set_discount(_cthread_157: Ref, _caller_measures_157: Seq[Measure$
     inhale acc(self_3.Ticket_discount_code, write)
   }
   self_3.Ticket_discount_code := code_2
-  goto __end
-  label __end
 }
 
 method main(_cthread_161: Ref, _caller_measures_161: Seq[Measure$], _residue_162: Perm) returns (_current_wait_level_161: Perm)
@@ -912,8 +898,6 @@ method main(_cthread_161: Ref, _caller_measures_161: Seq[Measure$], _residue_162
   module_names_0 := (module_names_0 union Set(_single(3869200172464248492)))
   assert true
   module_names_0 := (module_names_0 union Set(_single(1642638104364138653452329868584521105)))
-  goto __end
-  label __end
 }
 
 method Iterator___next__(_cthread_149: Ref, _caller_measures_149: Seq[Measure$], _residue_149: Perm, self: Ref) returns (_current_wait_level_149: Perm, _res: Ref, _err: Ref)
@@ -939,10 +923,7 @@ method Iterator___next__(_cthread_149: Ref, _caller_measures_149: Seq[Measure$],
   ensures |self.list_acc| > 0 ==> _res == self.list_acc[self.__iter_index - 1] && (_res in self.list_acc)
   ensures |self.list_acc| > 0 ==> issubtype(typeof(_res), Iterator_arg(typeof(self), 0))
   ensures (forall r: Ref :: { (r in self.__previous) } (r in self.__previous) == ((r in old(self.__previous)) || (self.__iter_index > 1 && (r == self.list_acc[self.__iter_index - 2] && _err == null) || self.__iter_index > 0 && (_err != null && r == self.list_acc[self.__iter_index - 1]))))
-{
-  var _cwl_149: Perm
-  inhale false
-}
+
 
 method Iterator___del__(_cthread_150: Ref, _caller_measures_150: Seq[Measure$], _residue_150: Perm, self: Ref) returns (_current_wait_level_150: Perm)
   requires _cthread_150 != null
@@ -956,10 +937,7 @@ method Iterator___del__(_cthread_150: Ref, _caller_measures_150: Seq[Measure$], 
   ensures issubtype(typeof(self.__container), list(list_arg(typeof(self.__container), 0))) ==> acc(self.__container.list_acc, 1 / 20)
   ensures issubtype(typeof(self.__container), dict(dict_arg(typeof(self.__container), 0), dict_arg(typeof(self.__container), 1))) ==> acc(self.__container.dict_acc, 1 / 20) && acc(self.__container.dict_acc2, 1 / 20)
   ensures issubtype(typeof(self.__container), set(set_arg(typeof(self.__container), 0))) ==> acc(self.__container.set_acc, 1 / 20)
-{
-  var _cwl_150: Perm
-  inhale false
-}
+
 
 method list___init__(_cthread_8: Ref, _caller_measures_8: Seq[Measure$], _residue_8: Perm) returns (_current_wait_level_8: Perm, res: Ref)
   requires _cthread_8 != null
@@ -971,10 +949,7 @@ method list___init__(_cthread_8: Ref, _caller_measures_8: Seq[Measure$], _residu
   ensures res.list_acc == Seq[Ref]()
   ensures typeof(res) == list(list_arg(typeof(res), 0))
   ensures Low(res)
-{
-  var _cwl_8: Perm
-  inhale false
-}
+
 
 method list_append(_cthread_9: Ref, _caller_measures_9: Seq[Measure$], _residue_9: Perm, self: Ref, item: Ref) returns (_current_wait_level_9: Perm)
   requires _cthread_9 != null
@@ -987,10 +962,7 @@ method list_append(_cthread_9: Ref, _caller_measures_9: Seq[Measure$], _residue_
   ensures [(forperm _r_21: Ref [_r_21.MustReleaseBounded] :: Level(_r_21) <= _current_wait_level_9) && ((forperm _r_21: Ref [_r_21.MustReleaseUnbounded] :: Level(_r_21) <= _current_wait_level_9) && _residue_9 <= _current_wait_level_9), true]
   ensures acc(self.list_acc, write)
   ensures self.list_acc == old(self.list_acc) ++ Seq(item)
-{
-  var _cwl_9: Perm
-  inhale false
-}
+
 
 method list___iter__(_cthread_13: Ref, _caller_measures_13: Seq[Measure$], _residue_13: Perm, self: Ref) returns (_current_wait_level_13: Perm, _res: Ref)
   requires _cthread_13 != null
@@ -1008,7 +980,3 @@ method list___iter__(_cthread_13: Ref, _caller_measures_13: Seq[Measure$], _resi
   ensures acc(_res.__iter_index, write) && _res.__iter_index == 0
   ensures acc(_res.__previous, write) && _res.__previous == Seq[Ref]()
   ensures issubtype(typeof(_res), Iterator(list_arg(typeof(self), 0)))
-{
-  var _cwl_13: Perm
-  inhale false
-}
