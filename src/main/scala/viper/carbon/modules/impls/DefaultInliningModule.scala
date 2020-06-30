@@ -408,7 +408,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         case ast.FieldAssign(ast.FieldAccess(rcv, _), rhs) => !containsPermOrForperm(rcv) && !containsPermOrForperm(rhs)
         case ast.MethodCall(methodName, args, _) =>
           val method = verifier.program.findMethod(methodName)
-          (args forall (!containsPermOrForperm(_))) && method.body.isEmpty
+          (args forall (!containsPermOrForperm(_))) && method.body.isEmpty &&
+            method.pres.forall(!containsPermOrForperm(_)) &&
+            method.posts.forall(exp => !containsPermOrForperm(exp) && (!containsWildcard(exp) || checkMono))
         case ast.Exhale(exp) => !containsPermOrForperm(exp) && (!containsWildcard(exp) || checkMono)
         case ast.Inhale(exp) => !containsPermOrForperm(exp)
         case ast.Assert(exp) => !containsPermOrForperm(exp)
