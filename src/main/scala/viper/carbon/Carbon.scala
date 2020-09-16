@@ -125,6 +125,12 @@ class CarbonConfig(args: Seq[String]) extends SilFrontendConfig(args, "Carbon") 
     noshort = true
   )
 
+  val modularSC = opt[Boolean]("modularSC",
+    descr = "Uses a modular approximation for the soundness condition (default: disabled)",
+    default = None,
+    noshort = true
+  )
+
   val simpleWFM = opt[Boolean]("simpleWFM",
     descr = "Computes a simpler (bounded) WFM, but potentially unsound (default: disabled)",
     default = None,

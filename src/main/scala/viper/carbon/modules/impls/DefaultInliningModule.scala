@@ -14,8 +14,6 @@ import viper.silver.ast
 
 class DefaultInliningModule(val verifier: Verifier) extends InliningModule with Component {
 
-  private val relaxedAbstractPrecondChecking = true
-
   import verifier._
   import expModule._
   import heapModule._
@@ -126,9 +124,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       // case sil.Inhale(exp) if (exp.isPure) => sil.LocalVarAssign(exists, sil.And(exists, exp)(exp.pos, exp.info, exp.errT))(a, b, c)
       // Assume
       case sil.MethodCall(methodName, args, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).body.isEmpty
-        && (program.findMethod(methodName).pres.isEmpty || relaxedAbstractPrecondChecking)
+        // && program.findMethod(methodName).pres.isEmpty
          =>
         // Abstract method
+        /*
         val formalArgs: Seq[ast.LocalVarDecl] = program.findMethod(methodName).formalArgs
         val tempArgs: Seq[ast.LocalVar] = (args zip formalArgs) map ((x: (sil.Exp, sil.LocalVarDecl)) => {
           val name = silNameNotUsed("arg_temp")
@@ -137,6 +136,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           // println(tempLocalVar)
           tempLocalVar
         })
+         */
         val tempRets: Seq[ast.LocalVar] = targets map ((x: ast.LocalVar) => {
           val name = silNameNotUsed(x.name + "_temp")
           val tempLocalVar = sil.LocalVar(name, x.typ)(x.pos, x.info, x.errT)
@@ -144,9 +144,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           tempLocalVar
         })
 
-        recordedScopes :+= tempArgs
+        // recordedScopes :+= tempArgs
         recordedScopes :+= tempRets
-        val assignArgs: Seq[LocalVarAssign] = (tempArgs zip args) map { (x: (sil.LocalVar, sil.Exp)) => sil.LocalVarAssign(x._1, x._2)(a, b, c) }
+        // val assignArgs: Seq[LocalVarAssign] = (tempArgs zip args) map { (x: (sil.LocalVar, sil.Exp)) => sil.LocalVarAssign(x._1, x._2)(a, b, c) }
         val assignRets: Seq[LocalVarAssign] = (tempRets zip targets) map { (x: (sil.LocalVar, sil.LocalVar)) => sil.LocalVarAssign(x._1, x._2)(a, b, c) }
 
         val existAlter: ast.LocalVarDecl = sil.LocalVarDecl(silNameNotUsed("__altExists"), sil.Bool)(a, b, c)
@@ -158,7 +158,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
         val ifAssignRets = sil.If(existAlter.localVar, sil.Seqn(assignRets, Seq())(a, b, c), sil.Seqn(Seq(), Seq())(a, b, c))(a, b, c)
 
-        sil.Seqn(assignArgs ++ Seq(assignExists, s, ifAssignRets), Seq(existAlter))(a, b, c)
+        // sil.Seqn(assignArgs ++ Seq(assignExists, s, ifAssignRets), Seq(existAlter))(a, b, c)
+        sil.Seqn(Seq(assignExists, s, ifAssignRets), Seq(existAlter))(a, b, c)
       case sil.If(cond, s1: sil.Seqn, s2: sil.Seqn) =>
         val ss1 = recordVarsSil(s1, exists).asInstanceOf[sil.Seqn]
         val ss2 = recordVarsSil(s2, exists).asInstanceOf[sil.Seqn]
@@ -181,27 +182,33 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         // val if_assign: ast.Stmt = sil.If(check, sil.Seqn(assign, Seq())(a, b, c), silEmptyStmt()(a, b, c))(a, b, c)
         sil.Seqn(assign ++ ss map (assignVarsSil(_, exists)), scopedDecls)(a, b, c)
       case sil.MethodCall(methodName, args, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).body.isEmpty
-        && (program.findMethod(methodName).pres.isEmpty || relaxedAbstractPrecondChecking)
+        // && program.findMethod(methodName).pres.isEmpty
        =>
+        /*
         val tempArgs: Seq[ast.LocalVar] = recordedScopes.head
         recordedScopes = recordedScopes.tail
+         */
         val tempRets: Seq[ast.LocalVar] = recordedScopes.head
         recordedScopes = recordedScopes.tail
-        assert(args.size == tempArgs.size)
+        // assert(args.size == tempArgs.size)
         assert(targets.size == tempRets.size)
 
         // We need to make sure the arguments from the two method calls are the same, with a boolean variable
+        // Actually no
+        /*
         val same_seq: Seq[sil.Exp] = (tempArgs zip args) map { (x: (sil.LocalVar, sil.Exp)) => sil.EqCmp(x._1, x._2)(a, b, c) }
         val same_args_name = silNameNotUsed("sameArgs")
         val same_args: ast.LocalVar = sil.LocalVar(same_args_name, sil.Bool)(a, b, c)
         mainModule.env.define(same_args)
         val same_args_true: LocalVarAssign = LocalVarAssign(same_args, sil.TrueLit()(a, b, c))(a, b, c)
         val assign_same_args: Seq[LocalVarAssign] = same_seq map ((exp: sil.Exp) => sil.LocalVarAssign(same_args, sil.And(same_args, exp)(a, b, c))(a, b, c))
+         */
 
         // val assign: Seq[LocalVarAssign] = (tempRets zip targets) map { (x: (sil.LocalVar, sil.LocalVar)) => sil.LocalVarAssign(x._2, x._1)(a, b, c) }
         val assign: Seq[sil.Stmt] = (tempRets zip targets) map { (x: (sil.LocalVar, sil.LocalVar)) => sil.Inhale(sil.EqCmp(x._1, x._2)(a, b, c))(a, b, c) }
-        val if_assign: ast.Stmt = sil.If(same_args, sil.Seqn(assign, Seq())(a, b, c), sil.Seqn(Seq(), Seq())(a, b, c))(a, b, c)
-        sil.Seqn(Seq(same_args_true) ++ assign_same_args ++ Seq(s) ++ Seq(if_assign), Seq())(a, b, c)
+        // val if_assign: ast.Stmt = sil.If(same_args, sil.Seqn(assign, Seq())(a, b, c), sil.Seqn(Seq(), Seq())(a, b, c))(a, b, c)
+        // sil.Seqn(Seq(same_args_true) ++ assign_same_args ++ Seq(s) ++ Seq(if_assign), Seq())(a, b, c)
+        sil.Seqn(Seq(s) ++ assign, Seq())(a, b, c)
       case sil.If(cond, s1, s2) =>
         val ss1 = assignVarsSil(s1, exists).asInstanceOf[sil.Seqn]
         val ss2 = assignVarsSil(s2, exists).asInstanceOf[sil.Seqn]
@@ -614,8 +621,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   var current_exists: Option[Var] = None
   var id_checkFraming = 0
   var id_checkMono = 0
+  var id_checkWfm = 0
 
   var beginning: Boolean = true
+  var isAtTop: Boolean = true
 
   val getBounded = getVarDecl("getBounded", Bool)
 
@@ -756,7 +765,35 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     r
   }
 
+  // Wrapper for modular approximation
   def checkFraming(pre_orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt = {
+    println("Wrapper for checkFraming")
+    if (modularSC) {
+      println("Modular approximation")
+      if (checkMono) {
+        if (isAtTop) {
+          checkFramingAux(pre_orig_s, orig, true, checkWFM, modif_vars)
+        }
+        else {
+          checkFramingAux(pre_orig_s, orig, false, checkWFM, modif_vars)
+        }
+      }
+      else {
+        if (!inlinable(pre_orig_s)) {
+          checkFramingAux(pre_orig_s, orig, checkMono, checkWFM, modif_vars)
+        }
+        else {
+          println("?????????????????????????????")
+          Statements.EmptyStmt
+        }
+      }
+    }
+    else {
+      checkFramingAux(pre_orig_s, orig, checkMono, checkWFM, modif_vars)
+    }
+  }
+
+  def checkFramingAux(pre_orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt = {
 
     namesAlreadyUsed = Set()
     val orig_s: ast.Stmt = inlineSil(pre_orig_s, maxDepth - current_depth)
@@ -771,6 +808,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       ignore = true
     }
     else if (syntacticFraming(orig_s, checkMono)) {
+      if (verifier.printSC) {
+        println("___________________________________________________________")
+      }
       if (checkMono) {
         println("Syntactically mono")
       }
@@ -778,7 +818,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         println("Syntactically framing")
       }
       if (verifier.printSC) {
+        println("-----------------------------------------------------------")
         println(orig_s)
+        println("¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯")
       }
       ignore = true
     }
@@ -794,13 +836,19 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
     else {
 
-      if (checkMono) {id_checkMono += 1} else {id_checkFraming += 1}
-      val id_error = {if (checkMono) id_checkMono else id_checkFraming}
-      val errorType = {if (checkMono) "MONO" else "FRAMING"}
+      if (verifier.printSC) {
+        println("___________________________________________________________")
+      }
+
+      if (checkMono) {if (checkWFM) {id_checkWfm += 1} else {id_checkMono += 1}} else {id_checkFraming += 1}
+      val id_error = {if (checkMono) {if (checkWFM) id_checkWfm else id_checkMono} else id_checkFraming}
+      val errorType = {if (checkMono) {if (checkWFM) "WFM" else "MONO"} else "FRAMING"}
       println(errorType + " " + id_error)
 
       if (verifier.printSC) {
+        println("-----------------------------------------------------------")
         println(orig_s)
+        println("¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯")
       }
 
       val aa = orig_s.pos
@@ -1001,6 +1049,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   def inlineLoop(w: sil.Stmt, cond: ast.Exp, invs: Seq[ast.Exp], body: ast.Seqn): Stmt = {
+    val oldIsAtTop = isAtTop
     println("inlineLoop", current_depth, cond, "length", length(w))
     val guard = translateExp(cond)
 
@@ -1009,6 +1058,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     if (current_depth == maxDepth) {
       val cond_neg: sil.Stmt = sil.Inhale(sil.Not(cond)(cond.pos, cond.info, cond.errT))(cond.pos, cond.info, cond.errT)
       val wfm: Stmt = checkFraming(cond_neg, w, true, true)
+      isAtTop = oldIsAtTop
       MaybeCommentBlock("0: Check SC and cut branch (loop)", wfm ++ Assume(guard ==> FalseLit()))
     }
     else {
@@ -1033,13 +1083,22 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       checkingFraming = oldCheckingFraming
       val remaining = inlineLoop(w, cond, invs, body)
       current_depth -= 1
+      isAtTop = oldIsAtTop
       MaybeCommentBlock(depth + ": Inlined loop", check_wfm ++ If(guard, r1 ++ getBoundedComplete() ++ r2 ++ remaining, Statements.EmptyStmt) ++ getBoundedComplete())
     }
   }
 
   def inlineMethod(m: Method, args: Seq[ast.Exp], targets: Seq[ast.LocalVar]): Stmt = {
+
+    val oldIsAtTop = isAtTop
+    isAtTop = false
+    if (beginning) {
+      isAtTop = true
+    }
+
     println("inlineMethod", current_depth, m.name, "length", length(m.body.get))
     if (current_depth == maxDepth) {
+      isAtTop = oldIsAtTop
       MaybeComment("0: Cut branch (method call)", Assume(FalseLit()))
     }
     else {
@@ -1092,6 +1151,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         }
       }
 
+      isAtTop = oldIsAtTop
       Seqn(assignArgs) ++ r1  ++ getBoundedComplete() ++ r2 ++ Seqn(assignRets) ++ getBoundedComplete()
     }
   }

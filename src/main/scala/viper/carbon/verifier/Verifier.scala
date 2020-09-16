@@ -79,6 +79,7 @@ trait Verifier {
   def printSC: Boolean
   def simpleWFM: Boolean
   def closureSC: Boolean
+  def modularSC: Boolean
   def noSyntacticCheck: Boolean
   def entry: Option[String]
 
