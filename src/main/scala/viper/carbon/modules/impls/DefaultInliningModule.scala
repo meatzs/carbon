@@ -262,8 +262,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           val b = getVarDecl("BranchTakenForExhale", Bool)
           declareFalseAtBegin :+= b
           val pre = getVarDecl("PreExhaleHeap", heapType)
+          val preMask = getVarDecl("PreExhaleMask", maskType)
           val h = getVarDecl("ExhaleHeap", heapType)
-          (Seqn(Seq(Assign(b.l, TrueLit()), Assign(pre.l, currentHeap.head), s, Assign(h.l, v))), Seq(b, pre, h))
+          (Seqn(Seq(Assign(b.l, TrueLit()), Assign(pre.l, currentHeap.head), Assign(preMask.l, currentMask.head), s, Assign(h.l, v))), Seq(b, pre, preMask, h))
         }
         else if (v.name.name == "newVersion") {
           // val nv = newVar(v.typ)
@@ -335,18 +336,20 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         else if (v.name.name == "ExhaleHeap") {
           val b = l.head
           val pre = l.tail.head
-          val h = l.tail.tail.head
+          val preMask = l.tail.tail.head
+          val h = l.tail.tail.tail.head
           /*val ss = If(check,
             Assert(b.l ==> (pre.l === currentHeap.head), e) ++
               Assume(v === h.l), Statements.EmptyStmt)
            */
           val ss = If(b.l,
             Assert(
-              equalOnMaskFunc(pre.l, currentHeap.head.asInstanceOf[Var], currentMask.head.asInstanceOf[Var])
+              equalOnMaskFunc(pre.l, currentHeap.head.asInstanceOf[Var], preMask.l)
+                //currentMask.head.asInstanceOf[Var])
               //pre.l === currentHeap.head
             , e) ++
               Assume(v === h.l), Statements.EmptyStmt)
-          (s ++ ss, l.tail.tail.tail)
+          (s ++ ss, l.tail.tail.tail.tail)
         }
         else {
           (s, l)
