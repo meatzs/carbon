@@ -6,7 +6,7 @@ import viper.carbon.boogie._
 import viper.carbon.verifier.Verifier
 import Implicits._
 import viper.carbon.modules.components.Component
-import viper.silver.ast.{CurrentPerm, ErrorTrafo, FieldAccess, FieldAssign, ForPerm, Info, LocalVarAssign, LocationAccess, Method, Position, WildcardPerm}
+import viper.silver.ast.{CurrentPerm, ErrorTrafo, FieldAccess, FieldAssign, ForPerm, Info, LocalVarAssign, LocationAccess, Method, Position, PredicateAccessPredicate, WildcardPerm}
 import viper.silver.verifier.{DummyReason, VerificationError}
 import viper.silver.ast.utility.Expressions
 import viper.silver.verifier.errors.SoundnessFailed
@@ -425,8 +425,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         case ast.Inhale(exp) => !containsPermOrForperm(exp)
         case ast.Assert(exp) => !containsPermOrForperm(exp)
         case ast.Assume(exp) => !containsPermOrForperm(exp) && !containsAcc(exp)
-        case ast.Fold(acc) => !containsPermOrForperm(acc)
-        case ast.Unfold(acc) => !containsPermOrForperm(acc)
+        case sil.Fold(acc) => !containsPermOrForperm(acc) && !containsWildcard(acc) &&
+          !containsWildcard(acc.loc.predicateBody(verifier.program, mainModule.env.allDefinedNames(program)).get)
+        case ast.Unfold(acc) => !containsPermOrForperm(acc) && !containsWildcard(acc)
         case ast.Package(_, proofScript) => syntacticFraming(proofScript, checkMono)
         case ast.Apply(_) => true
         case ast.Seqn(ss, _) => ss forall (syntacticFraming(_, checkMono))
@@ -786,7 +787,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           checkFramingAux(pre_orig_s, orig, checkMono, checkWFM, modif_vars)
         }
         else {
-          println("?????????????????????????????")
+          println("Avoiding to check framing thanks to compositional property")
           Statements.EmptyStmt
         }
       }
