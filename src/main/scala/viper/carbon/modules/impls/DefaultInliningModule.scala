@@ -419,8 +419,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         case ast.MethodCall(methodName, args, _) =>
           val method = verifier.program.findMethod(methodName)
           (args forall (!containsPermOrForperm(_))) && method.body.isEmpty &&
-            method.pres.forall(!containsPermOrForperm(_)) &&
-            method.posts.forall(exp => !containsPermOrForperm(exp) && (!containsWildcard(exp) || checkMono))
+            method.posts.forall(!containsPermOrForperm(_)) &&
+            method.pres.forall(exp => !containsPermOrForperm(exp) && (!containsWildcard(exp) || checkMono))
         case ast.Exhale(exp) => !containsPermOrForperm(exp) && (!containsWildcard(exp) || checkMono)
         case ast.Inhale(exp) => !containsPermOrForperm(exp)
         case ast.Assert(exp) => !containsPermOrForperm(exp)
@@ -475,6 +475,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       case If(cond, thn, els) if conditionToAvoid(cond, id_check) =>
         If(cond, thn, doubleErrorSafeMono(els, error, check, id_check))
       case If(cond, thn, els) => If(cond, doubleErrorSafeMono(thn, error, check, id_check), doubleErrorSafeMono(els, error, check, id_check))
+      case NondetIf(thn, els) => NondetIf(doubleErrorSafeMono(thn, error, check, id_check), doubleErrorSafeMono(els, error, check, id_check))
       // case Assert(BinExp(e1, Implies,  _), _) if conditionToAvoid(e1, id_check) => s
       case Assert(exp, _) => Assert(exp, error)
       case _ => s
