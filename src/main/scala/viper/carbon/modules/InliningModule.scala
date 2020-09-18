@@ -70,7 +70,8 @@ trait InliningModule extends Module with Component {
 
   def smallerState(smallMask: Var, smallHeap: Var, bigMask: Var, bigHeap: Var): Exp
 
-  def doubleErrorSafeMono(s: Stmt, error: VerificationError, check: Exp, id_check: Int): Stmt
+  //def doubleErrorSafeMono(s: Stmt, error: VerificationError, check: Exp, id_check: Int): Stmt
+  def doubleErrorSafeMono(s: Stmt, orig: sil.Stmt, id_error: Int, type_error: String, check: Exp, id_check: Int): Stmt
 
   def assumify(s: Stmt): Stmt
 

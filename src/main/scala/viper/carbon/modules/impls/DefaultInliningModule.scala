@@ -467,17 +467,19 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     FuncApp(smallerMask, Seq(smallMask, bigMask), Bool)
   }
 
-  def doubleErrorSafeMono(s: Stmt, error: VerificationError, check: Exp, id_check: Int): Stmt = {
+  def doubleErrorSafeMono(s: Stmt, orig: sil.Stmt, id_error: Int, type_error: String, check: Exp, id_check: Int): Stmt = {
     s match {
-      case Seqn(stmts) => stmts map (doubleErrorSafeMono(_, error, check, id_check))
-      case CommentBlock(c, ss) => CommentBlock(c, doubleErrorSafeMono(ss, error, check, id_check))
+      case Seqn(stmts) => stmts map (doubleErrorSafeMono(_, orig, id_error, type_error, check, id_check))
+      case CommentBlock(c, ss) => CommentBlock(c, doubleErrorSafeMono(ss, orig, id_error, type_error, check, id_check))
       // case If(cond: LocalVar, thn, els) if (used_checks.contains(cond.name.name) && cond.name.name != check.name.name) =>
       case If(cond, thn, els) if conditionToAvoid(cond, id_check) =>
-        If(cond, thn, doubleErrorSafeMono(els, error, check, id_check))
-      case If(cond, thn, els) => If(cond, doubleErrorSafeMono(thn, error, check, id_check), doubleErrorSafeMono(els, error, check, id_check))
-      case NondetIf(thn, els) => NondetIf(doubleErrorSafeMono(thn, error, check, id_check), doubleErrorSafeMono(els, error, check, id_check))
+        If(cond, thn, doubleErrorSafeMono(els, orig, id_error, type_error, check, id_check))
+      case If(cond, thn, els) => If(cond, doubleErrorSafeMono(thn, orig, id_error, type_error, check, id_check), doubleErrorSafeMono(els, orig, id_error, type_error, check, id_check))
+      case NondetIf(thn, els) => NondetIf(doubleErrorSafeMono(thn, orig, id_error, type_error, check, id_check), doubleErrorSafeMono(els, orig, id_error, type_error, check, id_check))
       // case Assert(BinExp(e1, Implies,  _), _) if conditionToAvoid(e1, id_check) => s
-      case Assert(exp, _) => Assert(exp, error)
+      case Assert(exp, old_error) =>
+        val nsm: VerificationError = SoundnessFailed(orig, DummyReason, "safeMono", id_error, type_error, old_error.toString)
+        Assert(exp, nsm)
       case _ => s
     }
   }
@@ -916,7 +918,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val (modif_s, l) = recordDeterminism(assumify(addIfExists(changeStateWfState(s1, exists), exists)))
       val assign_false_branches_taken: Seq[Stmt] = declareFalseAtBegin map ((x) => Assign(x.l, FalseLit()))
 
-      val (modif_s2, ll) = determinize(doubleErrorSafeMono(s2, nsm, check, id_check), l, check, id_check, error_ignore)
+      val (modif_s2, ll) = determinize(doubleErrorSafeMono(s2, orig, id_error, errorType, check, id_check), l, check, id_check, error_ignore)
 
       val sumState = (getVarDecl("sumMask", maskType), getVarDecl("sumHeap", heapType))
 
