@@ -228,6 +228,27 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   var declareFalseAtBegin: Seq[LocalVarDecl] = Seq()
 
+  // TODO: Improve
+  def remove_assume_false(s: Stmt): Stmt = {
+    s match {
+      case Seqn(stmts) => Seqn(stmts.dropRight(1) ++ Seq(remove_assume_false(stmts.last)))
+      case Assume(FalseLit()) => Statements.EmptyStmt
+      case If(cond, thn, els) => assert(els.toString() == "")
+        assert(cond.toString.contains("vexists"))
+        If(cond, remove_assume_false(thn), els)
+      case _ => println("Unknown", s)
+        s
+    }
+  }
+
+  def handleFunctionPrecondition(s: Stmt): Stmt = {
+      val beforeMask = getVarDecl("beforeMask", maskType)
+      val beforeHeap = getVarDecl("beforeHeap", heapType)
+      MaybeComment("Record state before", Assign(beforeMask.l, normalState._1) ++ Assign(beforeHeap.l, normalState._2)) ++
+      remove_assume_false(s) ++
+      MaybeComment("Back to the former state", Assign(normalState._1, beforeMask.l) ++ Assign(normalState._2, beforeHeap.l))
+  }
+
   // Records:
   // - exhale heaps
   // - wildcard values
@@ -257,6 +278,14 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         // val w = newWildcard()
         val w = getVarDecl("wildcard", permType)
         (Assign(w.l, v) ++ s, Seq(w))
+      case NondetIf(thn, els) =>
+        if (verifier.pureFunctionsSC) {
+          assert(els.toString() == "")
+          (handleFunctionPrecondition(thn), Seq())
+        }
+        else {
+          (s, Seq())
+        }
       case HavocImpl(Seq(v)) =>
         if (v.name.name == "ExhaleHeap") {
           val b = getVarDecl("BranchTakenForExhale", Bool)

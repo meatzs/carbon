@@ -125,6 +125,12 @@ class CarbonConfig(args: Seq[String]) extends SilFrontendConfig(args, "Carbon") 
     noshort = true
   )
 
+  val pureFunctionsSC = opt[Boolean]("pureFunctionsSC",
+    descr = "Assumes the preconditions of the functions present in soundness checks are pure (default: disabled)",
+    default = None,
+    noshort = true
+  )
+
   val modularSC = opt[Boolean]("modularSC",
     descr = "Uses a modular approximation for the soundness condition (default: disabled)",
     default = None,
