@@ -608,8 +608,7 @@ method client_1_1(_cthread_164: Ref, _caller_measures_164: Seq[Measure$], _resid
   _cwl_164, get_res := A_get(_cthread_164, _method_measures_164, _residue_164, _checkDefined(a, 97))
   assert int___eq__(get_res, _checkDefined(a, 97).A_b)
   assert int___eq__(_checkDefined(a, 97).A_b, __prim__int___box__(56))
-  goto __end
-  label __end
+  
 }
 
 method client_1_2(_cthread_165: Ref, _caller_measures_165: Seq[Measure$], _residue_165: Perm) returns (_current_wait_level_165: Perm)
@@ -638,8 +637,7 @@ method client_1_2(_cthread_165: Ref, _caller_measures_165: Seq[Measure$], _resid
   _cwl_165, get_res_0 := A_get(_cthread_165, _method_measures_165, _residue_165, _checkDefined(a_0, 3170145))
   assert int___eq__(get_res_0, _checkDefined(a_0, 3170145).A_b)
   assert int___eq__(_checkDefined(a_0, 3170145).A_b, __prim__int___box__(56))
-  goto __end
-  label __end
+  
 }
 
 method client_2(_cthread_166: Ref, _caller_measures_166: Seq[Measure$], _residue_166: Perm) returns (_current_wait_level_166: Perm)
@@ -667,8 +665,7 @@ method client_2(_cthread_166: Ref, _caller_measures_166: Seq[Measure$], _residue
   inhale _isDefined(3235681)
   _cwl_166, get_res_1 := A_get(_cthread_166, _method_measures_166, _residue_166, _checkDefined(a_1, 3235681))
   expr_res := get_res_1
-  goto __end
-  label __end
+  
 }
 
 method client_3_1(_cthread_167: Ref, _caller_measures_167: Seq[Measure$], _residue_167: Perm) returns (_current_wait_level_167: Perm)
@@ -698,8 +695,7 @@ method client_3_1(_cthread_167: Ref, _caller_measures_167: Seq[Measure$], _resid
   _cwl_167, get_res_2 := A_get(_cthread_167, _method_measures_167, _residue_167, _checkDefined(a_2, 3301217))
   assert int___eq__(get_res_2, _checkDefined(a_2, 3301217).A_b)
   assert int___eq__(_checkDefined(a_2, 3301217).A_b, __prim__int___box__(56))
-  goto __end
-  label __end
+  
 }
 
 method client_3_2(_cthread_168: Ref, _caller_measures_168: Seq[Measure$], _residue_168: Perm) returns (_current_wait_level_168: Perm)
@@ -723,11 +719,11 @@ method client_3_2(_cthread_168: Ref, _caller_measures_168: Seq[Measure$], _resid
   _cwl_168 := A___init__(_cthread_168, _method_measures_168, _residue_168, A_res_3)
   a_3 := A_res_3
   inhale _isDefined(3366753)
+  inhale acc(_checkDefined(a_3, 3366753).A_b, write)
   _cwl_168 := A_set2(_cthread_168, _method_measures_168, _residue_168, _checkDefined(a_3, 3366753), __prim__int___box__(56))
   _cwl_168 := A_set(_cthread_168, _method_measures_168, _residue_168, _checkDefined(a_3, 3366753), __prim__int___box__(43))
   assert false
-  goto __end
-  label __end
+  
 }
 
 method client_3_3(_cthread_169: Ref, _caller_measures_169: Seq[Measure$], _residue_169: Perm) returns (_current_wait_level_169: Perm)
@@ -753,8 +749,7 @@ method client_3_3(_cthread_169: Ref, _caller_measures_169: Seq[Measure$], _resid
   inhale _isDefined(3432289)
   _cwl_169 := A_set2(_cthread_169, _method_measures_169, _residue_169, _checkDefined(a_4, 3432289), __prim__int___box__(56))
   _cwl_169 := A_set3(_cthread_169, _method_measures_169, _residue_169, _checkDefined(a_4, 3432289), __prim__int___box__(43))
-  goto __end
-  label __end
+  
 }
 
 method client_4(_cthread_170: Ref, _caller_measures_170: Seq[Measure$], _residue_170: Perm) returns (_current_wait_level_170: Perm)
@@ -786,8 +781,7 @@ method client_4(_cthread_170: Ref, _caller_measures_170: Seq[Measure$], _residue
   _checkDefined(a_5, 3497825).A_b := __prim__int___box__(12)
   assert int___eq__(_checkDefined(a_5, 3497825).A_b, __prim__int___box__(12))
   assert int___eq__(_checkDefined(a_5, 3497825).A_b, __prim__int___box__(56))
-  goto __end
-  label __end
+  
 }
 
 method client_5(_cthread_171: Ref, _caller_measures_171: Seq[Measure$], _residue_171: Perm) returns (_current_wait_level_171: Perm)
@@ -815,8 +809,7 @@ method client_5(_cthread_171: Ref, _caller_measures_171: Seq[Measure$], _residue
   _cwl_171 := A_set3(_cthread_171, _method_measures_171, _residue_171, _checkDefined(a_6, 3563361), __prim__int___box__(23))
   b := _checkDefined(a_6, 3563361).A_b
   inhale _isDefined(98)
-  goto __end
-  label __end
+  
 }
 
 method client_6(_cthread_172: Ref, _caller_measures_172: Seq[Measure$], _residue_172: Perm) returns (_current_wait_level_172: Perm)
@@ -851,8 +844,7 @@ method client_6(_cthread_172: Ref, _caller_measures_172: Seq[Measure$], _residue
   inhale _isDefined(3170146)
   assert int___eq__(_checkDefined(b_0, 3170146), __prim__int___box__(2323))
   assert false
-  goto __end
-  label __end
+  
 }
 
 method client_8(_cthread_173: Ref, _caller_measures_173: Seq[Measure$], _residue_173: Perm) returns (_current_wait_level_173: Perm)
@@ -878,8 +870,7 @@ method client_8(_cthread_173: Ref, _caller_measures_173: Seq[Measure$], _residue
   inhale _isDefined(3694433)
   _cwl_173 := A_set3(_cthread_173, _method_measures_173, _residue_173, _checkDefined(a_8, 3694433), __prim__int___box__(23))
   _cwl_173 := A_set2(_cthread_173, _method_measures_173, _residue_173, _checkDefined(a_8, 3694433), __prim__int___box__(1))
-  goto __end
-  label __end
+  
 }
 
 method A___init__(_cthread_156: Ref, _caller_measures_156: Seq[Measure$], _residue_156: Perm, self: Ref) returns (_current_wait_level_156: Perm)
@@ -909,8 +900,7 @@ method A___init__(_cthread_156: Ref, _caller_measures_156: Seq[Measure$], _resid
     inhale acc(self_7.A_a, write)
   }
   self_7.A_a := __prim__int___box__(12)
-  goto __end
-  label __end
+  
 }
 
 method A_set(_cthread_157: Ref, _caller_measures_157: Seq[Measure$], _residue_157: Perm, self_0: Ref, v: Ref) returns (_current_wait_level_157: Perm)
@@ -940,8 +930,7 @@ method A_set(_cthread_157: Ref, _caller_measures_157: Seq[Measure$], _residue_15
     inhale acc(self_8.A_b, write)
   }
   self_8.A_b := v_5
-  goto __end
-  label __end
+  
 }
 
 method A_set2(_cthread_158: Ref, _caller_measures_158: Seq[Measure$], _residue_158: Perm, self_1: Ref, v_0: Ref) returns (_current_wait_level_158: Perm)
@@ -971,8 +960,7 @@ method A_set2(_cthread_158: Ref, _caller_measures_158: Seq[Measure$], _residue_1
     inhale acc(self_9.A_b, write)
   }
   self_9.A_b := v_6
-  goto __end
-  label __end
+  
 }
 
 method A_set3(_cthread_159: Ref, _caller_measures_159: Seq[Measure$], _residue_159: Perm, self_2: Ref, v_1: Ref) returns (_current_wait_level_159: Perm)
@@ -1002,8 +990,7 @@ method A_set3(_cthread_159: Ref, _caller_measures_159: Seq[Measure$], _residue_1
     inhale acc(self_10.A_b, write)
   }
   self_10.A_b := v_7
-  goto __end
-  label __end
+  
 }
 
 method A_set4(_cthread_160: Ref, _caller_measures_160: Seq[Measure$], _residue_160: Perm, self_3: Ref, v_2: Ref) returns (_current_wait_level_160: Perm)
@@ -1033,8 +1020,7 @@ method A_set4(_cthread_160: Ref, _caller_measures_160: Seq[Measure$], _residue_1
     inhale acc(self_11.A_b, write)
   }
   self_11.A_b := v_8
-  goto __end
-  label __end
+  
 }
 
 method A_set5(_cthread_161: Ref, _caller_measures_161: Seq[Measure$], _residue_161: Perm, self_4: Ref, v_3: Ref) returns (_current_wait_level_161: Perm)
@@ -1064,8 +1050,7 @@ method A_set5(_cthread_161: Ref, _caller_measures_161: Seq[Measure$], _residue_1
     inhale acc(self_12.A_b, write)
   }
   self_12.A_b := v_9
-  goto __end
-  label __end
+  
 }
 
 method A_set6(_cthread_162: Ref, _caller_measures_162: Seq[Measure$], _residue_162: Perm, self_5: Ref, v_4: Ref) returns (_current_wait_level_162: Perm)
@@ -1095,8 +1080,7 @@ method A_set6(_cthread_162: Ref, _caller_measures_162: Seq[Measure$], _residue_1
     inhale acc(self_13.A_b, write)
   }
   self_13.A_b := v_10
-  goto __end
-  label __end
+  
 }
 
 method A_get(_cthread_163: Ref, _caller_measures_163: Seq[Measure$], _residue_163: Perm, self_6: Ref) returns (_current_wait_level_163: Perm, _res: Ref)
@@ -1121,9 +1105,7 @@ method A_get(_cthread_163: Ref, _caller_measures_163: Seq[Measure$], _residue_16
   _err := null
   self_14 := self_6
   _res := self_14.A_b
-  goto __end
-  goto __end
-  label __end
+  
 }
 
 method main(_cthread_174: Ref, _caller_measures_174: Seq[Measure$], _residue_174: Perm) returns (_current_wait_level_174: Perm)
@@ -1174,6 +1156,5 @@ method main(_cthread_174: Ref, _caller_measures_174: Seq[Measure$], _residue_174
   module_names_0 := (module_names_0 union Set(_single(2960037722218468253)))
   assert true
   module_names_0 := (module_names_0 union Set(_single(3104152910294324125)))
-  goto __end
-  label __end
+  
 }

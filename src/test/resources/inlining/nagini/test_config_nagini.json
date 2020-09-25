@@ -1,0 +1,92 @@
+[
+{ 
+  "file":"iap_bst.vpr",
+  "bound":5,
+  "entry":"client",
+  "sc_holds":true,
+  "modular_sc":true,
+  "pure_function_sc":true,
+  "errors":[]
+},
+{ 
+  "file":"iap_bst.vpr",
+  "bound":5,
+  "entry":"client",
+  "sc_holds":true,
+  "modular_sc":true,
+  "pure_function_sc":true,
+  "errors":["some error"]
+},
+{ 
+  "file":"parkinson_recell.vpr",
+  "bound":3,
+  "entry":"cell_client_1",
+  "sc_holds":true,
+  "modular_sc":true,
+  "pure_function_sc":true,
+  "errors":[]
+},
+{ 
+  "file":"parkinson_recell.vpr",
+  "bound":3,
+  "entry":"cell_client_2",
+  "sc_holds":true,
+  "modular_sc":true,
+  "pure_function_sc":true,
+  "errors":["some error"]
+},
+{ 
+  "file":"parkinson_recell.vpr",
+  "bound":3,
+  "entry":"recell_client_1",
+  "sc_holds":true,
+  "modular_sc":true,
+  "pure_function_sc":true,
+  "errors":[]
+},
+{ 
+  "file":"parkinson_recell.vpr",
+  "bound":3,
+  "entry":"recell_client_2",
+  "sc_holds":true,
+  "modular_sc":true,
+  "pure_function_sc":true,
+  "errors":["some error"]
+},
+{ 
+  "file":"parkinson_recell.vpr",
+  "bound":3,
+  "entry":"loop_client",
+  "sc_holds":true,
+  "modular_sc":true,
+  "pure_function_sc":true,
+  "errors":["some error"]
+},
+{ 
+  "file":"cav_example.vpr",
+  "bound":3,
+  "entry":"order_tickets",
+  "sc_holds":true,
+  "modular_sc":true,
+  "pure_function_sc":true,
+  "errors":[]
+},
+{ 
+  "file":"cav_example.vpr",
+  "bound":3,
+  "entry":"order_tickets_client_1",
+  "sc_holds":true,
+  "modular_sc":true,
+  "pure_function_sc":true,
+  "errors":["some error"]
+},
+{ 
+  "file":"cav_example.vpr",
+  "bound":3,
+  "entry":"order_tickets_client_2",
+  "sc_holds":true,
+  "modular_sc":true,
+  "pure_function_sc":true,
+  "errors":[]
+}
+]

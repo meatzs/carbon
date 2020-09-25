@@ -50,4 +50,23 @@ def order_tickets(num: int, show_id: int, code: str = None) -> List[Ticket]:
         if code is not None:
             ticket.discount_code = code
         res.append(ticket)
+
     return res
+
+def order_tickets_client_1(num: int, show_id: int) -> None:
+    Requires(num > 0)
+    Exsures(SoldoutException, True)
+    tickets = order_tickets(num, show_id, None)
+    for ticket in tickets:
+        # should fail, because ticket.discount code does not exist (because "None" is the code input for order_tickets) --> don't have permission to read discount code
+        #:: ExpectedOutput(assert.failed:insufficient.permission)        
+        if(ticket.discount_code != None):
+            print("found code")
+
+def order_tickets_client_2(num: int, show_id: int) -> None:
+    Requires(num > 0)
+    Exsures(SoldoutException, True)
+    tickets = order_tickets(num, show_id, "code")
+    for ticket in tickets:
+        if(ticket.discount_code == "code"):
+            print("found code")
