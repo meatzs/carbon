@@ -1,0 +1,407 @@
+/*
+
+A Viper encoding of https://github.com/verifast/verifast/blob/master/examples/composite5.c
+
+run --modularSC --printSC --SI 2 --entry main composite5.vpr
+--> One framing block to check
+--> 1 error in 1m15s (assert false)
+*/
+
+field childrenGhostListId: Int // Ghost
+field firstChild: Ref
+field nextSibling: Ref
+field parent: Ref
+
+// Ghost field
+field fchildren: Seq[Ref]
+
+// Fixed wildcard
+function dummy(): Perm
+   ensures result > none && result < write
+
+/*
+method duplicate_dummy(n: Ref)
+    requires acc(n.childrenGhostListId, dummy())
+    ensures acc(n.childrenGhostListId, dummy()) && acc(n.childrenGhostListId, dummy())
+*/
+
+// ----------------------------------------------------
+// Handling foreach
+// ----------------------------------------------------
+
+function remove(l: Seq[Ref], x: Ref): Seq[Ref]
+
+predicate foreach_node(id: Int, nodes: Seq[Ref])
+
+method foreach_remove(id: Int, nodes: Seq[Ref], node: Ref)
+    requires foreach_node(id, nodes) && node in nodes
+    ensures foreach_node(id, remove(nodes, node)) && Node(id, node)
+
+method foreach_unremove(id: Int, nodes: Seq[Ref], node: Ref)
+    requires foreach_node(id, remove(nodes, node)) && Node(id, node) && node in nodes
+    ensures foreach_node(id, nodes)
+
+method foreach_empty(id: Int)
+    ensures foreach_node(id, Seq())
+
+method foreach_fold(id: Int, nodes: Seq[Ref], node: Ref)
+    requires foreach_node(id, nodes) && Node(id, node)
+    ensures foreach_node(id, Seq(node) ++ nodes)
+
+// ----------------------------------------------------
+// Ghost lists
+// ----------------------------------------------------
+
+predicate ghost_list(id: Int, xs: Seq[Ref])
+
+predicate ghost_list_member_handle(id: Int, n: Ref)
+
+// Ghost: f1, f2
+method ghost_list_member_handle_lemma(id: Int, d: Ref, f1: Perm, ds: Seq[Ref], f2: Perm)
+    requires acc(ghost_list(id, ds), f1) && acc(ghost_list_member_handle(id, d), f2)
+    ensures acc(ghost_list(id, ds), f1) && acc(ghost_list_member_handle(id, d), f2) && d in ds
+
+method create_ghost_list() returns (id: Int)
+    ensures ghost_list(id, Seq())
+
+method ghost_list_add(id: Int, d: Ref, ds: Seq[Ref])
+    requires ghost_list(id, ds)
+    ensures ghost_list(id, Seq(d) ++ ds) && ghost_list_member_handle(id, d)
+
+// ----------------------------------------------------
+// Predicates for tree
+// ----------------------------------------------------
+
+predicate Children(c: Ref, children: Seq[Ref]) {
+    c == null ? children == Seq() : c == children[0] && acc(c.nextSibling) && Children(c.nextSibling, children[1..])
+}
+
+predicate child(id: Int, parent_arg: Ref, c: Ref) {
+    acc(ghost_list_member_handle(id, c), dummy()) &&
+    acc(c.parent, 1/2) && c.parent == parent_arg
+}
+
+predicate Node(id: Int, n: Ref) {
+    n != null &&
+    acc(n.firstChild) &&
+    acc(n.fchildren) && // Custom
+    acc(n.childrenGhostListId, dummy()) &&
+    acc(n.parent, 1/2) &&
+    // Children(n.firstChild, n.fchildren) &&
+    // foreach2(children, ?childrenCounts, child(id, n)) &*&
+    // n.count == 1 + sum(childrenCounts) &&
+    ghost_list(n.childrenGhostListId, n.fchildren) &&
+    (n.parent == null ?
+    acc(n.parent, 1/2) && acc(n.nextSibling)
+  :
+    (n.parent != n &&
+    acc(ghost_list_member_handle(id, n.parent), dummy()) &&   // My parent is in the tree.
+    acc(n.parent.childrenGhostListId, dummy()) &&
+    acc(ghost_list_member_handle(n.parent.childrenGhostListId, n), dummy())))
+}
+
+
+predicate tree(id: Int, nodes: Seq[Ref]) {
+    ghost_list(id, nodes) && foreach_node(id, nodes)
+}
+
+predicate tree_membership_fact(id: Int, n: Ref) {
+    ghost_list_member_handle(id, n)
+}
+
+predicate tree_id(id: Int) {true}
+
+// ----------------------------------------------------
+// Helper methods for trees
+// ----------------------------------------------------
+
+method create_node(p: Ref, next: Ref) returns (n: Ref)
+    ensures n != null && acc(n.childrenGhostListId, dummy())
+    && ghost_list(n.childrenGhostListId, Seq()) &&
+    acc(n.firstChild) && n.firstChild == null &&
+    acc(n.nextSibling) && n.nextSibling == next &&
+    acc(n.parent) && n.parent == p &&
+    acc(n.fchildren) && n.fchildren == Seq() // Added
+{
+    // struct node *n = malloc(sizeof(struct node));
+    n := new(*)
+    // if (n == 0) abort();
+    // Ignored
+    //@ int childrenGhostListId = create_ghost_list();
+    var childrenGhostListIdVar: Int
+    childrenGhostListIdVar := create_ghost_list()
+    //@ n->childrenGhostListId = childrenGhostListId;
+    n.childrenGhostListId := childrenGhostListIdVar
+    //@ leak node_childrenGhostListId(n, childrenGhostListId);
+    exhale acc(n.childrenGhostListId, write - dummy())
+    // n->firstChild = 0;
+    n.firstChild := null
+    // n->nextSibling = next;
+    n.nextSibling := next
+    // n->parent = p;
+    n.parent := p
+    // n->count = 1;
+    // Ignored
+    //@ leak malloc_block_node(n);
+    // Ignored
+    // return n;
+    // Ignored
+    n.fchildren := Seq() // ghost
+}
+
+// struct node *create_tree()
+method create_tree() returns (n: Ref, id: Int)
+    //@ ensures tree(?id) &*& [_]tree_membership_fact(id, result);
+    ensures tree(id, Seq(n)) && acc(tree_membership_fact(id, n), dummy())
+{
+    // struct node *n = create_node(0, 0);
+    n := create_node(null, null)
+    //@ int id = create_ghost_list();
+    id := create_ghost_list()
+    //@ ghost_list_add(id, n);
+    ghost_list_add(id, n, Seq())
+    //@ close children(0, nil);
+    // fold Children(null, Seq())
+    //@ close foreach2(nil, nil, child(id, n));
+    // Ignored
+    //@ close node(id)(n);
+    fold Node(id, n)
+    //@ close foreach(nil, node(id));
+    foreach_empty(id)
+    //@ close foreach(cons(n, nil), node(id));
+    foreach_fold(id, Seq(), n)
+    //@ close tree(id);
+    fold tree(id, Seq(n))
+    //@ close tree_membership_fact(id, n);
+    fold tree_membership_fact(id, n)
+    //@ leak tree_membership_fact(id, n);
+    // Ignored
+    // return n;
+    // Ignored
+}
+
+// ----------------------------------------------------
+// Important methods for trees
+// ----------------------------------------------------
+
+method helper() {assert true}
+
+// struct node *tree_add(struct node *node)
+// Ghost: id, nodes
+method tree_add(node: Ref, id: Int, nodes: Seq[Ref]) returns (n: Ref)
+    //@ requires tree(?id) &*& [_]tree_membership_fact(id, node);
+    requires tree(id, nodes) && acc(tree_membership_fact(id, node), dummy())
+    //@ ensures tree(id) &*& [_]tree_membership_fact(id, result);
+    ensures tree(id, Seq(n) ++ nodes) && acc(tree_membership_fact(id, n), dummy())
+{
+    //@ open tree(_);
+    unfold tree(id, nodes)
+
+    //@ open tree_membership_fact(_, _);
+    // var f: Perm := perm(tree_membership_fact(id, node))
+    unfold acc(tree_membership_fact(id, node), dummy())
+
+    //@ ghost_list_member_handle_lemma(id, node);
+    ghost_list_member_handle_lemma(id, node, write, nodes, dummy())
+    //@ assert ghost_list(id, ?nodes);
+    assert ghost_list(id, nodes)
+    //@ foreach_remove(node, nodes);
+    foreach_remove(id, nodes, node)
+    assert foreach_node(id, remove(nodes, node)) // Helper
+
+    //@ open node(id)(node);
+    unfold Node(id, node)
+
+    // struct node *n = create_node(node, node->firstChild);
+    n := create_node(node, node.firstChild)
+
+    // node->firstChild = n;
+    node.firstChild := n
+    // Update ghost field fchildren
+    node.fchildren := Seq(n) ++ node.fchildren // Added
+
+    //@ close tree_id(id);
+    fold tree_id(id)
+    // ---> 10s
+
+    //@ close children(n, _);
+    // fold Children(n, node.fchildren)
+    //@ assert [_]node->childrenGhostListId |-> ?childrenGhostListId;
+    assert acc(node.childrenGhostListId, dummy())
+
+    //@ ghost_list_add(childrenGhostListId, n);
+    ghost_list_add(node.childrenGhostListId, n, node.fchildren[1..])
+
+    //@ leak ghost_list_member_handle(childrenGhostListId, n);
+    // Ignored
+
+    //@ ghost_list_add(id, n);
+    ghost_list_add(id, n, nodes)
+
+    //@ leak ghost_list_member_handle(id, n);
+    // Ignored
+
+    //@ close child(id, node)(n, 1);
+    // fold child(id, node, n)
+
+    //@ close children(0, nil);
+    // fold Children(null, Seq())
+    //@ close foreach2(nil, nil, child(id, n));
+    // Ignored
+
+    //@ assert [?f]ghost_list_member_handle(id, n);
+    var f: Perm := perm(ghost_list_member_handle(id, n))
+    //@ close [f]tree_membership_fact(id, n);
+    fold acc(tree_membership_fact(id, n), f)
+    helper()
+
+    inhale acc(node.childrenGhostListId, dummy())
+    //@ close node(id)(n);
+    assume n.parent.childrenGhostListId != id
+    fold Node(id, n)
+
+    // ---> 3m05
+
+    //@ close foreach(cons(n, remove(node, nodes)), node(id));
+    // Ignored
+    //@ assert foreach2<struct node *, int>(?children, ?childrenCounts, child(id, node));
+    // Ignored
+    //@ close foreach2(cons(n, children), cons(1, childrenCounts), child(id, node));
+    // Ignored
+    // add_to_count(node, 1);
+    // Ignored
+
+    // return n
+    // Ignored
+
+    assert acc(foreach_node(id, remove(nodes, node)))
+    fold Node(id, node)
+    // ---> 7m
+
+    assert acc(foreach_node(id, remove(nodes, node)))
+    foreach_unremove(id, nodes, node)
+    foreach_fold(id, nodes, n)
+    fold tree(id, Seq(n) ++ nodes)
+}
+
+// struct node *tree_get_parent(struct node *node)
+// Ghost: id, nodes
+method tree_get_parent(node: Ref, id: Int, nodes: Seq[Ref]) returns (p: Ref)
+    //@ requires tree(?id) &*& [_]tree_membership_fact(id, node);
+    requires tree(id, nodes) && acc(tree_membership_fact(id, node), dummy())
+    //@ ensures tree(id) &*& (result == 0 ? true : [_]tree_membership_fact(id, result));
+    ensures tree(id, nodes) && (p == null ? true : acc(tree_membership_fact(id, p), dummy())) 
+{
+
+    //@ open tree(id);
+    unfold tree(id, nodes)
+
+    //@ open tree_membership_fact(id, node);
+    // var f: Perm := perm(tree_membership_fact(id, node))
+    unfold acc(tree_membership_fact(id, node), dummy())
+    
+    //@ ghost_list_member_handle_lemma(id, node);
+    ghost_list_member_handle_lemma(id, node, write, nodes, dummy())
+    //@ assert ghost_list(id, ?nodes);
+    assert ghost_list(id, nodes)
+    //@ foreach_remove(node, nodes);
+    assert node in nodes
+    foreach_remove(id, nodes, node)
+    //@ open node(id)(node);
+    // unfold Node(id, node)
+
+    // struct node *p = node->parent;
+    p := unfolding Node(id, node) in node.parent
+    assert unfolding Node(id, node) in p != node
+
+    //@ close node(id)(node);
+    //fold Node(id, node)
+    //@ foreach_unremove(node, nodes);
+    foreach_unremove(id, nodes, node)
+    //@ close tree(id);
+    fold tree(id, nodes)
+
+    /*@
+    if (p != 0) {
+        assert [?f]ghost_list_member_handle(id, p);
+        close [f]tree_membership_fact(id, p);
+    }
+    @*/
+
+    fold acc(tree_membership_fact(id, node), dummy())
+
+    helper()
+
+    if (p != null) {
+        var f: Perm
+        f := perm(ghost_list_member_handle(id, p))
+        fold acc(tree_membership_fact(id, p), f)
+    }
+    
+    // return p;
+    // Ignored
+    
+}
+
+// ----------------------------------------------------
+// Main methods
+// ----------------------------------------------------
+
+method main0() {
+    var nodes: Seq[Ref] // ghost
+    
+    var node: Ref
+    var id: Int
+
+    node, id := create_tree()
+    nodes := Seq(node) // ghost
+    node := tree_add(node, id, nodes)
+
+    nodes := Seq(node) ++ nodes // ghost
+    node := tree_add(node, id, nodes)
+    nodes := Seq(node) ++ nodes // ghost
+    node := tree_get_parent(node, id, nodes)
+
+/*
+    if (node != null) {
+        node := tree_add(node, id, nodes)
+        nodes := Seq(node) ++ nodes // ghost
+        node := tree_get_parent(node, id, nodes)
+        if (node != null) {
+            node := tree_get_parent(node, id, nodes)
+        }
+    }
+    */
+}
+
+method main() {
+    var nodes: Seq[Ref] // ghost
+    var root: Ref
+    var id: Int
+    root, id := create_tree()
+    nodes := Seq(root) // ghost
+    
+    var p: Ref
+    p := tree_get_parent(root, id, nodes)
+
+    var left: Ref
+    left := tree_add(root, id, nodes)
+    nodes := Seq(left) ++ nodes // ghost
+   
+   /*
+    var leftRight: Ref
+    leftRight := tree_add(left, id, nodes)
+    */
+    
+    /*
+    nodes := Seq(leftRight) ++ nodes // ghost
+    var leftRightParent: Ref
+    leftRightParent := tree_get_parent(root, id, nodes)
+    var leftLeft: Ref
+    leftLeft := tree_add(left, id, nodes)
+    nodes := Seq(leftLeft) ++ nodes // ghost
+    var leftRightRight: Ref
+    leftRightRight := tree_add(leftRight, id, nodes)
+    */
+    assert false
+}
