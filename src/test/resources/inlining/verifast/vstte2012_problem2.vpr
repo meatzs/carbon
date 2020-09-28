@@ -2,9 +2,9 @@
 
 Partial Viper encoding of https://github.com/verifast/verifast/blob/master/examples/vstte2012/problem2/problem2.java
 
-run --modularSC --printSC --SI 2 --entry main vstte2012_problem2.vpr
---> "23" framing blocks to check (but most of them are not reachable)
---> 1 error in 36s (assert false)
+run --modularSC --printSC --z3Exe /usr/bin/z3 --boogieExe /usr/bin/boogie --print /home/thibault/test.bpl --entry main --SI 4 src/test/resources/inlining/verifast/vstte2012_problem2.vpr
+--> "23" non syntactically framing blocks to check (but most of them are not reachable)
+--> 1 error in 35s (assert false)
 
 */
 
@@ -18,15 +18,6 @@ field right: Ref
 
 field ghost_left_state: Term
 field ghost_right_state: Term
-
-/*
-function test(x: Ref): Perm {
-    perm(x.type)
-}
-*/
-
-function dummy(): Perm
-    ensures result > none && result < write
 
 domain Term {
 
@@ -154,19 +145,25 @@ method duplicate_wildcard(t: Ref, state: Term, p: Perm)
 function step(t: Term): Term
 
 // static Term do_step(Term t)
-method do_step(t: Ref, state: Term, p: Perm) returns (res: Ref, ghost: Term)
+method do_step(t: Ref, state: Term, initial_p: Perm) returns (res: Ref, ghost: Term, p: Perm)
     //@ requires [_]term(t, ?state);
-    requires acc(term_pred(t, state), p) && p > none
+    requires acc(term_pred(t, state), initial_p) && initial_p > none
     //@ ensures result == null ? step(state) == none : [_]term(result, ?state2) &*& step(state) == some(state2);
-    ensures res == null ? step(state) == None() : acc(term_pred(res, ghost), p / 2)
+    // ensures res == null ? step(state) == None() : acc(term_pred(res, ghost), p / 2)
+    ensures p > none && p <= initial_p
+    ensures res == null ? true : acc(term_pred(res, ghost), p)
     // && step(state) == ghost
 {
+  // assume false
   var reduced: Ref
   var reduced_state: Term
   var temp: Ref
   var temp_state: Term
   var temp_2: Ref
   var temp_state_2: Term
+
+  p := initial_p
+
   /* if(t.type == K_TERM) {
       return null;
   }
@@ -187,7 +184,7 @@ method do_step(t: Ref, state: Term, p: Perm) returns (res: Ref, ghost: Term)
     if (t.left.type == K_TERM || t.left.type == S_TERM) {
       // Term reduced = do_step(t.right);
       // increase_wildcard(t.right, t.ghost_right_state)
-      reduced, reduced_state := do_step(t.right, t.ghost_right_state, p / 2)
+      reduced, reduced_state, p := do_step(t.right, t.ghost_right_state, p / 2)
       if (reduced == null) {
         // return null;
         res := null
@@ -196,7 +193,8 @@ method do_step(t: Ref, state: Term, p: Perm) returns (res: Ref, ghost: Term)
       else {
         // return createApply(t.left, reduced);
         // fold acc(term_pred(t.left, t.ghost_left_state), 1/2)
-        res, ghost := createApply(t.left, reduced, t.ghost_left_state, reduced_state, p / 4)
+        res, ghost := createApply(t.left, reduced, t.ghost_left_state, reduced_state, p / 2)
+        p := p / 4
       }
     }
     else {
@@ -204,36 +202,42 @@ method do_step(t: Ref, state: Term, p: Perm) returns (res: Ref, ghost: Term)
       // duplicate_wildcard(t.left.left, t.left.ghost_left_state, p / 4)
       unfold acc(term_pred(t.left.left, t.left.ghost_left_state), p / 16)
       if (t.left.left.type == K_TERM) {
+        assume false
         // Term reduced = do_step(t.left.right);
         // increase_wildcard(t.left.right, t.left.ghost_right_state)
-        reduced, reduced_state := do_step(t.left.right, t.left.ghost_right_state, p/8)
+        reduced, reduced_state, p := do_step(t.left.right, t.left.ghost_right_state, p/16)
         if (reduced == null) {
+
           // reduced = do_step(t.right);
           // increase_wildcard(t.right, t.ghost_right_state)
-          reduced, reduced_state := do_step(t.right, t.ghost_right_state, p/4)
+          reduced, reduced_state, p := do_step(t.right, t.ghost_right_state, p/4)
           if(reduced == null) {
             // return t.left.right;
             res := t.left.right
             ghost := t.left.ghost_right_state
+            p := initial_p / 16
+            assert acc(term_pred(t.left.right, t.left.ghost_right_state), wildcard)
           }
           else {
             // return createApply(t.left, reduced);
             res, ghost := createApply(t.left, reduced, t.ghost_left_state, reduced_state, p/16)
+            p := p / 32
           }
         }
         else {
           // return createApply(createApply(t.left.left, reduced), t.right);
           temp, temp_state := createApply(t.left.left, reduced, t.left.ghost_left_state, reduced_state, p/16)
           res, ghost := createApply(temp, t.right, temp_state, t.ghost_right_state, p/32)
+          p := p / 64
         }
       }
       else {
         if (t.left.left.type == S_TERM) {
           // Term reduced = do_step(t.left.right);
-          reduced, reduced_state := do_step(t.left.right, t.left.ghost_right_state, p/16)
+          reduced, reduced_state, p := do_step(t.left.right, t.left.ghost_right_state, p/16)
           if (reduced == null) {
             // reduced = do_step(t.right);
-            reduced, reduced_state := do_step(t.right, t.ghost_right_state, p/4)
+            reduced, reduced_state, p := do_step(t.right, t.ghost_right_state, p)
             if(reduced == null) {
               // return null;
               res := null
@@ -243,11 +247,13 @@ method do_step(t: Ref, state: Term, p: Perm) returns (res: Ref, ghost: Term)
               // return createApply(createApply(t.left.left, t.left.right), reduced);
               temp, temp_state := createApply(t.left.left, t.left.right, t.left.ghost_left_state, t.left.ghost_right_state, p/32)
               res, ghost := createApply(temp, t.left.right, temp_state, t.left.ghost_right_state, p/64)
+              p := p / 128
             }
           }
           else {
             temp, temp_state := createApply(t.left.left, reduced, t.left.ghost_left_state, reduced_state, p/32)
             res, ghost := createApply(temp, t.right, temp_state, t.ghost_right_state, p/64)
+            p := p / 128
           }
         }
         else {
@@ -256,11 +262,11 @@ method do_step(t: Ref, state: Term, p: Perm) returns (res: Ref, ghost: Term)
           unfold acc(term_pred(t.left.left.left, t.left.left.ghost_left_state), p/64)
           if(t.left.left.left.type == K_TERM) {
             // Term reduced = do_step(t.left);
-            reduced, reduced_state := do_step(t.left, t.ghost_left_state, p / 8)
+            reduced, reduced_state, p := do_step(t.left, t.ghost_left_state, p / 8)
             if(reduced == null) {
               // reduced = do_step(t.right);
               // increase_wildcard(t.right, t.ghost_right_state)
-              reduced, reduced_state := do_step(t.right, t.ghost_right_state, p / 8)
+              reduced, reduced_state, p := do_step(t.right, t.ghost_right_state, p / 8)
               if(reduced == null) {
                 // return null;
                 res := null
@@ -269,35 +275,39 @@ method do_step(t: Ref, state: Term, p: Perm) returns (res: Ref, ghost: Term)
               else {
                 // return createApply(t.left, reduced);
                 res, ghost := createApply(t.left, reduced, t.ghost_left_state, reduced_state, p / 128)
+                p := p / 256
               }
             }
             else {
               // return createApply(reduced, t.right);
               // inhale acc(term_pred(t.right, t.ghost_right_state), 1/2) // TODO: It is inside reduced
               res, ghost := createApply(reduced, t.right, reduced_state, t.ghost_right_state, p / 16)
+              p := p / 32
             }
           }
           else {
             if(t.left.left.left.type == S_TERM) {
               // Term reduced = do_step(t.left.left.right);
               // duplicate_wildcard(t.left.left.right, t.left.left.ghost_right_state, p/8)
-              reduced, reduced_state := do_step(t.left.left.right, t.left.left.ghost_right_state, p/64)
+              reduced, reduced_state, p := do_step(t.left.left.right, t.left.left.ghost_right_state, p/64)
               if(reduced == null) {
                 // reduced = do_step(t.left.right);
                 // duplicate_wildcard(t.left.right, t.left.ghost_right_state, p/4)
-                reduced, reduced_state := do_step(t.left.right, t.left.ghost_right_state, p/8)             
+                reduced, reduced_state, p := do_step(t.left.right, t.left.ghost_right_state, p/8)             
                 if(reduced == null) {
                   // reduced = do_step(t.right);
-                  reduced, reduced_state := do_step(t.right, t.ghost_right_state, p/4)
+                  reduced, reduced_state, p := do_step(t.right, t.ghost_right_state, p/4)
                   if(reduced == null) {
                    // return createApply(createApply(t.left.left.right, t.right), createApply(t.left.right, t.right));
                     temp, temp_state := createApply(t.left.left.right, t.right, t.left.left.ghost_right_state, t.ghost_right_state, p/128)
                     temp_2, temp_state_2 := createApply(t.left.left.right, t.right, t.left.left.ghost_right_state, t.ghost_right_state, p/128)
                     res, ghost := createApply(temp, temp_2, temp_state, temp_state_2, p/256)
+                    p := p / 512
                   }
                   else {
                     // return createApply(t.left, reduced);
                     res, ghost := createApply(t.left, reduced, t.ghost_left_state, reduced_state, p/8)
+                    p := p / 16
                   }
                 }
                 else {
@@ -311,6 +321,7 @@ method do_step(t: Ref, state: Term, p: Perm) returns (res: Ref, ghost: Term)
                   assert p / 256 > none
 
                   res, ghost := createApply(temp, t.right, temp_state, t.ghost_right_state, p/256)
+                  p := p / 512
                 }
               }
               else {
@@ -318,16 +329,17 @@ method do_step(t: Ref, state: Term, p: Perm) returns (res: Ref, ghost: Term)
                 temp, temp_state := createApply(t.left.left.left, reduced, t.left.left.ghost_left_state, reduced_state, p / 128)
                 temp, temp_state := createApply(temp, t.left.right, temp_state, t.left.ghost_right_state, p / 256)
                 res, ghost := createApply(temp, t.right, temp_state, t.ghost_right_state, p / 512)
+                p := p / 1024
               }
             }
             else { // ((((_, _), _), _))
               // Term reduced = do_step(t.left);
               // duplicate_wildcard(t.left, t.ghost_left_state, p / 2)
-              reduced, reduced_state := do_step(t.left, t.ghost_left_state, p / 8)
+              reduced, reduced_state, p := do_step(t.left, t.ghost_left_state, p / 8)
               if(reduced == null) {
                 // reduced = do_step(t.right);
                 // duplicate_wildcard(t.right, t.ghost_right_state, p / 2)
-                reduced, reduced_state := do_step(t.right, t.ghost_right_state, p / 2)
+                reduced, reduced_state, p := do_step(t.right, t.ghost_right_state, p / 2)
                 if(reduced == null) {
                   // return null;
                   res := null
@@ -336,11 +348,13 @@ method do_step(t: Ref, state: Term, p: Perm) returns (res: Ref, ghost: Term)
                 else {
                   // return createApply(t.left, reduced);
                   res, ghost := createApply(t.left, reduced, t.ghost_left_state, reduced_state, p / 8)
+                  p := p / 16
                 }
               }
               else {
                 // return createApply(reduced, t.right);
                 res, ghost := createApply(reduced, t.right, reduced_state, t.ghost_right_state, p / 16)
+                p := p / 32
               }
             }
           }
@@ -348,7 +362,45 @@ method do_step(t: Ref, state: Term, p: Perm) returns (res: Ref, ghost: Term)
       }
     }
   }
-  // assume false
+}
+
+// static Term reduction(Term t)
+method reduction(t: Ref, state: Term, initial_p: Perm) returns (curr: Ref, state2: Term, p: Perm)
+  //@ requires [_]term(t, ?state);
+  requires acc(term_pred(t, state), initial_p) && initial_p > none
+  //@ ensures [_]term(result, ?state2) &*& exists(?n) &*& nsteps(n, state) == state2 &*& step(state2) == none;
+  ensures acc(term_pred(curr, state2), p) && p > none
+{
+  //@ nat count = zero;
+  // Ignored
+  // Term curr = t;
+  curr := t
+  state2 := state
+  p := initial_p
+
+  var newCur: Ref
+  var newState: Term
+  assume newCur != null
+
+  while(newCur != null)
+    //@ invariant [_]term(curr, ?state2) &*& nsteps(count, state) == state2;
+    invariant acc(term_pred(curr, state2), p) && p > none
+  {
+    // Term newCur = do_step(curr);
+    newCur, newState, p := do_step(curr, state2, p / 2)
+
+    //if(newCur == null) { 
+    //  return curr;
+    //@ close exists(count);
+    //}
+    //@ count = succ(count); 
+    //curr = newCur;
+
+    if(newCur != null) {
+      curr := newCur
+      state2 := newState
+    }
+  }
 }
 
 method main()
@@ -363,9 +415,9 @@ method main()
     var ghost: Term
     res, ghost := createApply(s, k, S(), K(), 1/2)
 
-    res, ghost := do_step(res, ghost, 1/4)
-
-    // assert acc(term_pred(res, apply_term(S(), K())), 1/2)
+    var p: Perm
+    res, ghost, p := reduction(res, ghost, 1/4)
+    // res, ghost := do_step(res, ghost, 1/4)
 
     assert false
 }
