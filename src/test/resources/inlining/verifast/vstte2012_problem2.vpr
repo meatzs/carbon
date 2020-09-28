@@ -2,7 +2,7 @@
 
 Partial Viper encoding of https://github.com/verifast/verifast/blob/master/examples/vstte2012/problem2/problem2.java
 
-run --modularSC --printSC --SI 2 --entry main vstte2012_problem2_java.vpr
+run --modularSC --printSC --SI 2 --entry main vstte2012_problem2.vpr
 --> "23" framing blocks to check (but most of them are not reachable)
 --> 1 error in 36s (assert false)
 
