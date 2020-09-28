@@ -290,6 +290,7 @@ method tree_get_parent(node: Ref, id: Int, nodes: Seq[Ref]) returns (p: Ref)
     //@ requires tree(?id) &*& [_]tree_membership_fact(id, node);
     requires tree(id, nodes) && acc(tree_membership_fact(id, node), dummy())
     //@ ensures tree(id) &*& (result == 0 ? true : [_]tree_membership_fact(id, result));
+    ensures acc(tree_membership_fact(id, node), dummy())
     ensures tree(id, nodes) && (p == null ? true : acc(tree_membership_fact(id, p), dummy())) 
 {
 
@@ -331,7 +332,7 @@ method tree_get_parent(node: Ref, id: Int, nodes: Seq[Ref]) returns (p: Ref)
     fold acc(tree_membership_fact(id, node), dummy())
 
     helper()
-
+    assert p != null
     if (p != null) {
         var f: Perm
         f := perm(ghost_list_member_handle(id, p))
