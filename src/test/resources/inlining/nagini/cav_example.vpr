@@ -381,6 +381,10 @@ domain ThreadingID {
   
   unique function order_tickets_threading(): ThreadingID
   
+  unique function order_tickets_client_1_threading(): ThreadingID
+  
+  unique function order_tickets_client_2_threading(): ThreadingID
+  
   unique function __init___threading_2(): ThreadingID
   
   unique function set_discount_threading(): ThreadingID
@@ -642,11 +646,6 @@ method get_seats(_cthread_159: Ref, _caller_measures_159: Seq[Measure$], _residu
   ensures _err == null ==> int___eq__(__prim__int___box__(list___len__(_res)), num_0)
   ensures _err != null && issubtype(typeof(_err), SoldoutException()) ==> true
   ensures _err != null ==> issubtype(typeof(_err), SoldoutException())
-{
-  var _cwl_159: Perm
-  _res := null
-  inhale false
-}
 
 method order_tickets(_cthread_160: Ref, _caller_measures_160: Seq[Measure$], _residue_160: Perm, num_1: Ref, show_id: Ref, code_0: Ref) returns (_current_wait_level_160: Perm, _res: Ref, _err: Ref)
   requires _cthread_160 != null
@@ -667,8 +666,8 @@ method order_tickets(_cthread_160: Ref, _caller_measures_160: Seq[Measure$], _re
   var row_0: Ref
   var seat_0: Ref
   var ticket: Ref
-  var num_2: Ref
-  var show_id_0: Ref
+  var num_4: Ref
+  var show_id_2: Ref
   var code_1: Ref
   var get_seats_res: Ref
   var list_0: Ref
@@ -681,21 +680,20 @@ method order_tickets(_cthread_160: Ref, _caller_measures_160: Seq[Measure$], _re
   var _loop_check_before: Bool
   var _loop_termination_flag: Bool
   var _loop_original_must_terminate: Perm
-  var _residue_161: Perm
+  var _residue_163: Perm
   var Ticket_res: Ref
   var _cwl_160: Perm
   var _method_measures_160: Seq[Measure$]
   _method_measures_160 := Seq[Measure$]()
   _res := null
   _err := null
-  num_2 := num_1
-  show_id_0 := show_id
+  num_4 := num_1
+  show_id_2 := show_id
   code_1 := code_0
-  _cwl_160, get_seats_res, _err := get_seats(_cthread_160, _method_measures_160, _residue_160, show_id_0, num_2)
+  _cwl_160, get_seats_res, _err := get_seats(_cthread_160, _method_measures_160, _residue_160, show_id_2, num_4)
   if (_err != null) {
     _err := _err
-    goto __end
-  }
+  } else {
   seats := get_seats_res
   inhale _isDefined(4193048254836808333)
   _cwl_160, list_0 := list___init__(_cthread_160, _method_measures_160, _residue_160)
@@ -719,7 +717,7 @@ method order_tickets(_cthread_160: Ref, _caller_measures_160: Seq[Measure$], _re
   // We are before loop.
   _loop_check_before := true
   while (iter_err == null)
-    invariant [(forperm _r_1: Ref [_r_1.MustReleaseBounded] :: Level(_r_1) <= _residue_161) && ((forperm _r_1: Ref [_r_1.MustReleaseUnbounded] :: Level(_r_1) <= _residue_161) && _residue_160 <= _residue_161), true]
+    invariant [(forperm _r_1: Ref [_r_1.MustReleaseBounded] :: Level(_r_1) <= _residue_163) && ((forperm _r_1: Ref [_r_1.MustReleaseUnbounded] :: Level(_r_1) <= _residue_163) && _residue_160 <= _residue_163), true]
     invariant acc(iterable.list_acc, 1 / 20)
     invariant acc(iter.list_acc, 1 / 20)
     invariant iter.list_acc == iterable.list_acc
@@ -752,7 +750,7 @@ method order_tickets(_cthread_160: Ref, _caller_measures_160: Seq[Measure$], _re
     inhale acc(_MaySet(Ticket_res, 6200637029036010647710820692), write)
     inhale acc(_MaySet(Ticket_res, 6495510852419858703010982228), write)
     inhale acc(_MaySet(Ticket_res, 51801156363862143343239011653515778841600684581256468140), write)
-    _cwl_160 := Ticket___init__(_cthread_160, _method_measures_160, _residue_161, Ticket_res, show_id_0, _checkDefined(row_0, 3439544950181105806), _checkDefined(seat_0, 4193100945495595661))
+    _cwl_160 := Ticket___init__(_cthread_160, _method_measures_160, _residue_163, Ticket_res, show_id_2, _checkDefined(row_0, 3439544950181105806), _checkDefined(seat_0, 4193100945495595661))
     ticket := Ticket_res
     inhale _isDefined(3869200241183725196)
     if (code_1 != null) {
@@ -762,8 +760,8 @@ method order_tickets(_cthread_160: Ref, _caller_measures_160: Seq[Measure$], _re
       }
       _checkDefined(ticket, 3869200241183725196).Ticket_discount_code := code_1
     }
-    _cwl_160 := list_append(_cthread_160, _method_measures_160, _residue_161, _checkDefined(res, 7562610), _checkDefined(ticket, 3869200241183725196))
-    label loop_end
+    _cwl_160 := list_append(_cthread_160, _method_measures_160, _residue_163, _checkDefined(res, 7562610), _checkDefined(ticket, 3869200241183725196))
+    
     _cwl_160, loop_target, iter_err := Iterator___next__(_cthread_160, _method_measures_160, _residue_160, iter)
     if (iter_err == null) {
       row_0 := tuple___getitem__(loop_target, 0)
@@ -778,16 +776,216 @@ method order_tickets(_cthread_160: Ref, _caller_measures_160: Seq[Measure$], _re
   }
   // Reset MustTerminate amount to original level.
   exhale perm(MustTerminate(_cthread_160)) > none ==> acc(MustTerminate(_cthread_160), perm(MustTerminate(_cthread_160)) - _loop_original_must_terminate)
-  _cwl_160 := Iterator___del__(_cthread_160, _method_measures_160, _residue_161, iter)
+  _cwl_160 := Iterator___del__(_cthread_160, _method_measures_160, _residue_163, iter)
   _res := null
   _err := null
-  label post_loop
+  
   _res := null
   _err := null
   _res := _checkDefined(res, 7562610)
-  goto __end
-  goto __end
-  label __end
+  }  
+}
+
+method order_tickets_client_1(_cthread_161: Ref, _caller_measures_161: Seq[Measure$], _residue_161: Perm, num_2: Ref, show_id_0: Ref) returns (_current_wait_level_161: Perm, _err: Ref)
+  requires _cthread_161 != null
+  requires issubtype(typeof(_cthread_161), Thread_0())
+  requires issubtype(typeof(num_2), int())
+  requires issubtype(typeof(show_id_0), int())
+  requires int___gt__(int___unbox__(num_2), 0)
+  requires [true, perm(MustTerminate(_cthread_161)) == none && ((forperm _r_10: Ref [MustInvokeBounded(_r_10)] :: false) && ((forperm _r_10: Ref [MustInvokeUnbounded(_r_10)] :: false) && ((forperm _r_10: Ref [_r_10.MustReleaseBounded] :: false) && (forperm _r_10: Ref [_r_10.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_8: Ref [_r_8.MustReleaseBounded] :: Level(_r_8) <= _current_wait_level_161) && ((forperm _r_8: Ref [_r_8.MustReleaseUnbounded] :: Level(_r_8) <= _current_wait_level_161) && _residue_161 <= _current_wait_level_161), true]
+  ensures _err != null && issubtype(typeof(_err), SoldoutException()) ==> true
+  ensures _err != null ==> issubtype(typeof(_err), SoldoutException())
+  ensures [true, (forperm _r_9: Ref [MustInvokeBounded(_r_9)] :: false) && ((forperm _r_9: Ref [MustInvokeUnbounded(_r_9)] :: false) && ((forperm _r_9: Ref [_r_9.MustReleaseBounded] :: false) && (forperm _r_9: Ref [_r_9.MustReleaseUnbounded] :: false)))]
+{
+  var tickets: Ref
+  var ticket_0: Ref
+  var num_5: Ref
+  var show_id_3: Ref
+  var order_tickets_res: Ref
+  var iterable_0: Ref
+  var iter_0: Ref
+  var loop_target_0: Ref
+  var iter_err_0: Ref
+  var seqtmp_0: Seq[Ref]
+  var _loop_measures_0: Seq[Measure$]
+  var _loop_check_before_0: Bool
+  var _loop_termination_flag_0: Bool
+  var _loop_original_must_terminate_0: Perm
+  var _residue_164: Perm
+  var _cwl_161: Perm
+  var _method_measures_161: Seq[Measure$]
+  _method_measures_161 := Seq[Measure$]()
+  _err := null
+  num_5 := num_2
+  show_id_3 := show_id_0
+  _cwl_161, order_tickets_res, _err := order_tickets(_cthread_161, _method_measures_161, _residue_161, num_5, show_id_3, null)
+  if (_err != null) {
+    _err := _err
+  } else {
+  tickets := order_tickets_res
+  inhale _isDefined(3901569863505450636)
+  iterable_0 := _checkDefined(tickets, 3901569863505450636)
+  _cwl_161, iter_0 := list___iter__(_cthread_161, _method_measures_161, _residue_161, iterable_0)
+  _cwl_161, loop_target_0, iter_err_0 := Iterator___next__(_cthread_161, _method_measures_161, _residue_161, iter_0)
+  if (iter_err_0 == null) {
+    ticket_0 := loop_target_0
+    inhale _isDefined(2743018863659357836)
+  }
+  seqtmp_0 := iterable_0.list_acc
+  // Save current MustTerminate amount.
+  _loop_original_must_terminate_0 := perm(MustTerminate(_cthread_161))
+  // Save loop termination promise.
+  _loop_termination_flag_0 := false
+  // We are before loop.
+  _loop_check_before_0 := true
+  while (iter_err_0 == null)
+    invariant [(forperm _r_6: Ref [_r_6.MustReleaseBounded] :: Level(_r_6) <= _residue_164) && ((forperm _r_6: Ref [_r_6.MustReleaseUnbounded] :: Level(_r_6) <= _residue_164) && _residue_161 <= _residue_164), true]
+    invariant acc(iterable_0.list_acc, 1 / 20)
+    invariant acc(iter_0.list_acc, 1 / 20)
+    invariant iter_0.list_acc == iterable_0.list_acc
+    invariant seqtmp_0 == iterable_0.list_acc
+    invariant acc(iter_0.__iter_index, write)
+    invariant acc(iter_0.__previous, write)
+    invariant iter_err_0 == null ==> iter_0.__iter_index - 1 == |iter_0.__previous|
+    invariant iter_err_0 != null ==> iter_0.__iter_index == |iter_0.__previous|
+    invariant iter_err_0 == null ==> |iter_0.list_acc| > 0
+    invariant iter_0.__iter_index >= 0 && iter_0.__iter_index <= |iter_0.list_acc|
+    invariant |iter_0.list_acc| > 0 ==> iter_0.__iter_index > 0
+    invariant |iter_0.list_acc| > 0 ==> loop_target_0 == iter_0.list_acc[iter_0.__iter_index - 1]
+    invariant |iter_0.list_acc| > 0 ==> (loop_target_0 in iter_0.list_acc)
+    invariant iter_err_0 == null ==> iter_0.__previous == iter_0.list_acc[..iter_0.__iter_index - 1]
+    invariant |iter_0.list_acc| > 0 ==> issubtype(typeof(loop_target_0), Ticket())
+    invariant |iter_0.list_acc| > 0 ==> ticket_0 == loop_target_0 && _isDefined(2743018863659357836)
+    invariant iter_err_0 != null ==> iter_0.__previous == iter_0.list_acc
+    invariant |iter_0.list_acc| == 0 ==> iter_err_0 != null
+    invariant true
+    invariant [true, _loop_check_before_0 ==> _loop_termination_flag_0 || (!(iter_err_0 == null) || perm(MustTerminate(_cthread_161)) == none && ((forperm _r_7: Ref [MustInvokeBounded(_r_7)] :: false) && ((forperm _r_7: Ref [MustInvokeUnbounded(_r_7)] :: false) && ((forperm _r_7: Ref [_r_7.MustReleaseBounded] :: false) && (forperm _r_7: Ref [_r_7.MustReleaseUnbounded] :: false)))))]
+    invariant [true, !_loop_check_before_0 ==> (forperm _r_7: Ref [MustInvokeBounded(_r_7)] :: false) && ((forperm _r_7: Ref [MustInvokeUnbounded(_r_7)] :: false) && ((forperm _r_7: Ref [_r_7.MustReleaseBounded] :: false) && (forperm _r_7: Ref [_r_7.MustReleaseUnbounded] :: false)))] 
+  {
+    _loop_measures_0 := Seq[Measure$]()
+    if (!str___eq__(_checkDefined(ticket_0, 2743018863659357836).Ticket_discount_code, null)) {
+      _cwl_161 := print(_cthread_161, _method_measures_161, _residue_164, str___create__(10, 5976104901924933785047363430))
+    }
+    
+    _cwl_161, loop_target_0, iter_err_0 := Iterator___next__(_cthread_161, _method_measures_161, _residue_161, iter_0)
+    if (iter_err_0 == null) {
+      ticket_0 := loop_target_0
+      inhale _isDefined(2743018863659357836)
+    }
+    // We are after loop body.
+    _loop_check_before_0 := false
+    // Check if loop continues to terminate.
+    assert _loop_termination_flag_0 ==> !(iter_err_0 == null)
+  }
+  // Reset MustTerminate amount to original level.
+  exhale perm(MustTerminate(_cthread_161)) > none ==> acc(MustTerminate(_cthread_161), perm(MustTerminate(_cthread_161)) - _loop_original_must_terminate_0)
+  _cwl_161 := Iterator___del__(_cthread_161, _method_measures_161, _residue_164, iter_0)
+  _err := null
+  
+  _err := null
+  }
+}
+
+method order_tickets_client_2(_cthread_162: Ref, _caller_measures_162: Seq[Measure$], _residue_162: Perm, num_3: Ref, show_id_1: Ref) returns (_current_wait_level_162: Perm, _err: Ref)
+  requires _cthread_162 != null
+  requires issubtype(typeof(_cthread_162), Thread_0())
+  requires issubtype(typeof(num_3), int())
+  requires issubtype(typeof(show_id_1), int())
+  requires int___gt__(int___unbox__(num_3), 0)
+  requires [true, perm(MustTerminate(_cthread_162)) == none && ((forperm _r_15: Ref [MustInvokeBounded(_r_15)] :: false) && ((forperm _r_15: Ref [MustInvokeUnbounded(_r_15)] :: false) && ((forperm _r_15: Ref [_r_15.MustReleaseBounded] :: false) && (forperm _r_15: Ref [_r_15.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_13: Ref [_r_13.MustReleaseBounded] :: Level(_r_13) <= _current_wait_level_162) && ((forperm _r_13: Ref [_r_13.MustReleaseUnbounded] :: Level(_r_13) <= _current_wait_level_162) && _residue_162 <= _current_wait_level_162), true]
+  ensures _err != null && issubtype(typeof(_err), SoldoutException()) ==> true
+  ensures _err != null ==> issubtype(typeof(_err), SoldoutException())
+  ensures [true, (forperm _r_14: Ref [MustInvokeBounded(_r_14)] :: false) && ((forperm _r_14: Ref [MustInvokeUnbounded(_r_14)] :: false) && ((forperm _r_14: Ref [_r_14.MustReleaseBounded] :: false) && (forperm _r_14: Ref [_r_14.MustReleaseUnbounded] :: false)))]
+{
+  var tickets_0: Ref
+  var ticket_1: Ref
+  var num_6: Ref
+  var show_id_4: Ref
+  var order_tickets_res_0: Ref
+  var iterable_1: Ref
+  var iter_1: Ref
+  var loop_target_1: Ref
+  var iter_err_1: Ref
+  var seqtmp_1: Seq[Ref]
+  var _loop_measures_1: Seq[Measure$]
+  var _loop_check_before_1: Bool
+  var _loop_termination_flag_1: Bool
+  var _loop_original_must_terminate_1: Perm
+  var _residue_165: Perm
+  var _cwl_162: Perm
+  var _method_measures_162: Seq[Measure$]
+  _method_measures_162 := Seq[Measure$]()
+  _err := null
+  num_6 := num_3
+  show_id_4 := show_id_1
+  _cwl_162, order_tickets_res_0, _err := order_tickets(_cthread_162, _method_measures_162, _residue_162, num_6, show_id_4, str___create__(4, 1701080931))
+  if (_err != null) {
+    _err := _err
+  } else {
+  tickets_0 := order_tickets_res_0
+  inhale _isDefined(3272055719110457894514157940)
+  iterable_1 := _checkDefined(tickets_0, 3272055719110457894514157940)
+  _cwl_162, iter_1 := list___iter__(_cthread_162, _method_measures_162, _residue_162, iterable_1)
+  _cwl_162, loop_target_1, iter_err_1 := Iterator___next__(_cthread_162, _method_measures_162, _residue_162, iter_1)
+  if (iter_err_1 == null) {
+    ticket_1 := loop_target_1
+    inhale _isDefined(2815076457697285772)
+  }
+  seqtmp_1 := iterable_1.list_acc
+  // Save current MustTerminate amount.
+  _loop_original_must_terminate_1 := perm(MustTerminate(_cthread_162))
+  // Save loop termination promise.
+  _loop_termination_flag_1 := false
+  // We are before loop.
+  _loop_check_before_1 := true
+  while (iter_err_1 == null)
+    invariant [(forperm _r_11: Ref [_r_11.MustReleaseBounded] :: Level(_r_11) <= _residue_165) && ((forperm _r_11: Ref [_r_11.MustReleaseUnbounded] :: Level(_r_11) <= _residue_165) && _residue_162 <= _residue_165), true]
+    invariant acc(iterable_1.list_acc, 1 / 20)
+    invariant acc(iter_1.list_acc, 1 / 20)
+    invariant iter_1.list_acc == iterable_1.list_acc
+    invariant seqtmp_1 == iterable_1.list_acc
+    invariant acc(iter_1.__iter_index, write)
+    invariant acc(iter_1.__previous, write)
+    invariant iter_err_1 == null ==> iter_1.__iter_index - 1 == |iter_1.__previous|
+    invariant iter_err_1 != null ==> iter_1.__iter_index == |iter_1.__previous|
+    invariant iter_err_1 == null ==> |iter_1.list_acc| > 0
+    invariant iter_1.__iter_index >= 0 && iter_1.__iter_index <= |iter_1.list_acc|
+    invariant |iter_1.list_acc| > 0 ==> iter_1.__iter_index > 0
+    invariant |iter_1.list_acc| > 0 ==> loop_target_1 == iter_1.list_acc[iter_1.__iter_index - 1]
+    invariant |iter_1.list_acc| > 0 ==> (loop_target_1 in iter_1.list_acc)
+    invariant iter_err_1 == null ==> iter_1.__previous == iter_1.list_acc[..iter_1.__iter_index - 1]
+    invariant |iter_1.list_acc| > 0 ==> issubtype(typeof(loop_target_1), Ticket())
+    invariant |iter_1.list_acc| > 0 ==> ticket_1 == loop_target_1 && _isDefined(2815076457697285772)
+    invariant iter_err_1 != null ==> iter_1.__previous == iter_1.list_acc
+    invariant |iter_1.list_acc| == 0 ==> iter_err_1 != null
+    invariant true
+    invariant [true, _loop_check_before_1 ==> _loop_termination_flag_1 || (!(iter_err_1 == null) || perm(MustTerminate(_cthread_162)) == none && ((forperm _r_12: Ref [MustInvokeBounded(_r_12)] :: false) && ((forperm _r_12: Ref [MustInvokeUnbounded(_r_12)] :: false) && ((forperm _r_12: Ref [_r_12.MustReleaseBounded] :: false) && (forperm _r_12: Ref [_r_12.MustReleaseUnbounded] :: false)))))]
+    invariant [true, !_loop_check_before_1 ==> (forperm _r_12: Ref [MustInvokeBounded(_r_12)] :: false) && ((forperm _r_12: Ref [MustInvokeUnbounded(_r_12)] :: false) && ((forperm _r_12: Ref [_r_12.MustReleaseBounded] :: false) && (forperm _r_12: Ref [_r_12.MustReleaseUnbounded] :: false)))] 
+  {
+    _loop_measures_1 := Seq[Measure$]()
+    if (str___eq__(_checkDefined(ticket_1, 2815076457697285772).Ticket_discount_code, str___create__(4, 1701080931))) {
+      _cwl_162 := print(_cthread_162, _method_measures_162, _residue_165, str___create__(10, 5976104901924933785047363430))
+    }
+    
+    _cwl_162, loop_target_1, iter_err_1 := Iterator___next__(_cthread_162, _method_measures_162, _residue_162, iter_1)
+    if (iter_err_1 == null) {
+      ticket_1 := loop_target_1
+      inhale _isDefined(2815076457697285772)
+    }
+    // We are after loop body.
+    _loop_check_before_1 := false
+    // Check if loop continues to terminate.
+    assert _loop_termination_flag_1 ==> !(iter_err_1 == null)
+  }
+  // Reset MustTerminate amount to original level.
+  exhale perm(MustTerminate(_cthread_162)) > none ==> acc(MustTerminate(_cthread_162), perm(MustTerminate(_cthread_162)) - _loop_original_must_terminate_1)
+  _cwl_162 := Iterator___del__(_cthread_162, _method_measures_162, _residue_165, iter_1)
+  _err := null
+  
+  _err := null
+  }  
 }
 
 method Ticket___init__(_cthread_156: Ref, _caller_measures_156: Seq[Measure$], _residue_156: Perm, self: Ref, show: Ref, row: Ref, seat: Ref) returns (_current_wait_level_156: Perm)
@@ -803,10 +1001,10 @@ method Ticket___init__(_cthread_156: Ref, _caller_measures_156: Seq[Measure$], _
   requires issubtype(typeof(row), int())
   requires issubtype(typeof(seat), int())
   requires self != null
-  requires [true, perm(MustTerminate(_cthread_156)) == none && ((forperm _r_8: Ref [MustInvokeBounded(_r_8)] :: false) && ((forperm _r_8: Ref [MustInvokeUnbounded(_r_8)] :: false) && ((forperm _r_8: Ref [_r_8.MustReleaseBounded] :: false) && (forperm _r_8: Ref [_r_8.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_6: Ref [_r_6.MustReleaseBounded] :: Level(_r_6) <= _current_wait_level_156) && ((forperm _r_6: Ref [_r_6.MustReleaseUnbounded] :: Level(_r_6) <= _current_wait_level_156) && _residue_156 <= _current_wait_level_156), true]
+  requires [true, perm(MustTerminate(_cthread_156)) == none && ((forperm _r_18: Ref [MustInvokeBounded(_r_18)] :: false) && ((forperm _r_18: Ref [MustInvokeUnbounded(_r_18)] :: false) && ((forperm _r_18: Ref [_r_18.MustReleaseBounded] :: false) && (forperm _r_18: Ref [_r_18.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_16: Ref [_r_16.MustReleaseBounded] :: Level(_r_16) <= _current_wait_level_156) && ((forperm _r_16: Ref [_r_16.MustReleaseUnbounded] :: Level(_r_16) <= _current_wait_level_156) && _residue_156 <= _current_wait_level_156), true]
   ensures acc(Ticket_state(self), write) && acc(_MaySet(self, 51801156363862143343239011653515778841600684581256468140), write)
-  ensures [true, (forperm _r_7: Ref [MustInvokeBounded(_r_7)] :: false) && ((forperm _r_7: Ref [MustInvokeUnbounded(_r_7)] :: false) && ((forperm _r_7: Ref [_r_7.MustReleaseBounded] :: false) && (forperm _r_7: Ref [_r_7.MustReleaseUnbounded] :: false)))]
+  ensures [true, (forperm _r_17: Ref [MustInvokeBounded(_r_17)] :: false) && ((forperm _r_17: Ref [MustInvokeUnbounded(_r_17)] :: false) && ((forperm _r_17: Ref [_r_17.MustReleaseBounded] :: false) && (forperm _r_17: Ref [_r_17.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var self_2: Ref
@@ -838,8 +1036,7 @@ method Ticket___init__(_cthread_156: Ref, _caller_measures_156: Seq[Measure$], _
   }
   self_2.Ticket_seat := tuple___getitem__(tuple___create2__(row_1, seat_1, int(), int(), 0), 1)
   fold acc(Ticket_state(self_2), write)
-  goto __end
-  label __end
+  
 }
 
 method Ticket_set_discount(_cthread_157: Ref, _caller_measures_157: Seq[Measure$], _residue_157: Perm, self_0: Ref, code: Ref) returns (_current_wait_level_157: Perm)
@@ -849,9 +1046,9 @@ method Ticket_set_discount(_cthread_157: Ref, _caller_measures_157: Seq[Measure$
   requires issubtype(typeof(code), str())
   requires self_0 != null
   requires acc(_MaySet(self_0, 51801156363862143343239011653515778841600684581256468140), write)
-  requires [true, perm(MustTerminate(_cthread_157)) == none && ((forperm _r_11: Ref [MustInvokeBounded(_r_11)] :: false) && ((forperm _r_11: Ref [MustInvokeUnbounded(_r_11)] :: false) && ((forperm _r_11: Ref [_r_11.MustReleaseBounded] :: false) && (forperm _r_11: Ref [_r_11.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_9: Ref [_r_9.MustReleaseBounded] :: Level(_r_9) <= _current_wait_level_157) && ((forperm _r_9: Ref [_r_9.MustReleaseUnbounded] :: Level(_r_9) <= _current_wait_level_157) && _residue_157 <= _current_wait_level_157), true]
-  ensures [true, (forperm _r_10: Ref [MustInvokeBounded(_r_10)] :: false) && ((forperm _r_10: Ref [MustInvokeUnbounded(_r_10)] :: false) && ((forperm _r_10: Ref [_r_10.MustReleaseBounded] :: false) && (forperm _r_10: Ref [_r_10.MustReleaseUnbounded] :: false)))]
+  requires [true, perm(MustTerminate(_cthread_157)) == none && ((forperm _r_21: Ref [MustInvokeBounded(_r_21)] :: false) && ((forperm _r_21: Ref [MustInvokeUnbounded(_r_21)] :: false) && ((forperm _r_21: Ref [_r_21.MustReleaseBounded] :: false) && (forperm _r_21: Ref [_r_21.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_19: Ref [_r_19.MustReleaseBounded] :: Level(_r_19) <= _current_wait_level_157) && ((forperm _r_19: Ref [_r_19.MustReleaseUnbounded] :: Level(_r_19) <= _current_wait_level_157) && _residue_157 <= _current_wait_level_157), true]
+  ensures [true, (forperm _r_20: Ref [MustInvokeBounded(_r_20)] :: false) && ((forperm _r_20: Ref [MustInvokeUnbounded(_r_20)] :: false) && ((forperm _r_20: Ref [_r_20.MustReleaseBounded] :: false) && (forperm _r_20: Ref [_r_20.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var self_3: Ref
@@ -868,22 +1065,21 @@ method Ticket_set_discount(_cthread_157: Ref, _caller_measures_157: Seq[Measure$
     inhale acc(self_3.Ticket_discount_code, write)
   }
   self_3.Ticket_discount_code := code_2
-  goto __end
-  label __end
+  
 }
 
-method main(_cthread_161: Ref, _caller_measures_161: Seq[Measure$], _residue_162: Perm) returns (_current_wait_level_161: Perm)
-  requires _cthread_161 != null
-  requires issubtype(typeof(_cthread_161), Thread_0())
-  requires [true, perm(MustTerminate(_cthread_161)) == none && ((forperm _r_14: Ref [MustInvokeBounded(_r_14)] :: false) && ((forperm _r_14: Ref [MustInvokeUnbounded(_r_14)] :: false) && ((forperm _r_14: Ref [_r_14.MustReleaseBounded] :: false) && (forperm _r_14: Ref [_r_14.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_12: Ref [_r_12.MustReleaseBounded] :: Level(_r_12) <= _current_wait_level_161) && ((forperm _r_12: Ref [_r_12.MustReleaseUnbounded] :: Level(_r_12) <= _current_wait_level_161) && _residue_162 <= _current_wait_level_161), true]
-  ensures [true, (forperm _r_13: Ref [MustInvokeBounded(_r_13)] :: false) && ((forperm _r_13: Ref [MustInvokeUnbounded(_r_13)] :: false) && ((forperm _r_13: Ref [_r_13.MustReleaseBounded] :: false) && (forperm _r_13: Ref [_r_13.MustReleaseUnbounded] :: false)))]
+method main(_cthread_163: Ref, _caller_measures_163: Seq[Measure$], _residue_166: Perm) returns (_current_wait_level_163: Perm)
+  requires _cthread_163 != null
+  requires issubtype(typeof(_cthread_163), Thread_0())
+  requires [true, perm(MustTerminate(_cthread_163)) == none && ((forperm _r_24: Ref [MustInvokeBounded(_r_24)] :: false) && ((forperm _r_24: Ref [MustInvokeUnbounded(_r_24)] :: false) && ((forperm _r_24: Ref [_r_24.MustReleaseBounded] :: false) && (forperm _r_24: Ref [_r_24.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_22: Ref [_r_22.MustReleaseBounded] :: Level(_r_22) <= _current_wait_level_163) && ((forperm _r_22: Ref [_r_22.MustReleaseUnbounded] :: Level(_r_22) <= _current_wait_level_163) && _residue_166 <= _current_wait_level_163), true]
+  ensures [true, (forperm _r_23: Ref [MustInvokeBounded(_r_23)] :: false) && ((forperm _r_23: Ref [MustInvokeUnbounded(_r_23)] :: false) && ((forperm _r_23: Ref [_r_23.MustReleaseBounded] :: false) && (forperm _r_23: Ref [_r_23.MustReleaseUnbounded] :: false)))]
 {
   var module_defined_0: Bool
   var module_names_0: Set[_Name]
-  var _cwl_161: Perm
-  var _method_measures_161: Seq[Measure$]
-  _method_measures_161 := Seq[Measure$]()
+  var _cwl_163: Perm
+  var _method_measures_163: Seq[Measure$]
+  _method_measures_163 := Seq[Measure$]()
   module_defined_0 := true
   module_names_0 := Set[_Name]()
   module_names_0 := (module_names_0 union Set(_single(3106082509126931487350218591)))
@@ -903,9 +1099,20 @@ method main(_cthread_161: Ref, _caller_measures_161: Seq[Measure$], _residue_162
   module_names_0 := (module_names_0 union Set(_single(3869200172464248492)))
   assert true
   module_names_0 := (module_names_0 union Set(_single(1642638104364138653452329868584521105)))
-  goto __end
-  label __end
+  assert true
+  module_names_0 := (module_names_0 union Set(_single(39780122021775928874837051279546742048279140878782270865)))
+  assert true
+  module_names_0 := (module_names_0 union Set(_single(39780496166195085585984111422863917416732172797513272721)))
+  
 }
+
+method print(_cthread_155: Ref, _caller_measures_155: Seq[Measure$], _residue_155: Perm, r: Ref) returns (_current_wait_level_155: Perm)
+  requires _cthread_155 != null
+  requires Measure$check(_caller_measures_155, _cthread_155, 1)
+  requires issubtype(typeof(_cthread_155), Thread_0())
+  requires [true, Measure$check(_caller_measures_155, _cthread_155, 1)]
+  ensures [(forperm _r_25: Ref [_r_25.MustReleaseBounded] :: Level(_r_25) <= _current_wait_level_155) && ((forperm _r_25: Ref [_r_25.MustReleaseUnbounded] :: Level(_r_25) <= _current_wait_level_155) && _residue_155 <= _current_wait_level_155), true]
+
 
 method Iterator___next__(_cthread_149: Ref, _caller_measures_149: Seq[Measure$], _residue_149: Perm, self: Ref) returns (_current_wait_level_149: Perm, _res: Ref, _err: Ref)
   requires _cthread_149 != null
@@ -915,7 +1122,7 @@ method Iterator___next__(_cthread_149: Ref, _caller_measures_149: Seq[Measure$],
   requires acc(self.__iter_index, write)
   requires acc(self.__previous, write)
   requires [true, Measure$check(_caller_measures_149, _cthread_149, 1)]
-  ensures [(forperm _r_15: Ref [_r_15.MustReleaseBounded] :: Level(_r_15) <= _current_wait_level_149) && ((forperm _r_15: Ref [_r_15.MustReleaseUnbounded] :: Level(_r_15) <= _current_wait_level_149) && _residue_149 <= _current_wait_level_149), true]
+  ensures [(forperm _r_27: Ref [_r_27.MustReleaseBounded] :: Level(_r_27) <= _current_wait_level_149) && ((forperm _r_27: Ref [_r_27.MustReleaseUnbounded] :: Level(_r_27) <= _current_wait_level_149) && _residue_149 <= _current_wait_level_149), true]
   ensures acc(self.list_acc, 1 / 40) && self.list_acc == old(self.list_acc)
   ensures acc(self.__iter_index, write)
   ensures self.__iter_index <= |self.list_acc| + 1
@@ -930,10 +1137,6 @@ method Iterator___next__(_cthread_149: Ref, _caller_measures_149: Seq[Measure$],
   ensures |self.list_acc| > 0 ==> _res == self.list_acc[self.__iter_index - 1] && (_res in self.list_acc)
   ensures |self.list_acc| > 0 ==> issubtype(typeof(_res), Iterator_arg(typeof(self), 0))
   ensures (forall r: Ref :: { (r in self.__previous) } (r in self.__previous) == ((r in old(self.__previous)) || (self.__iter_index > 1 && (r == self.list_acc[self.__iter_index - 2] && _err == null) || self.__iter_index > 0 && (_err != null && r == self.list_acc[self.__iter_index - 1]))))
-{
-  var _cwl_149: Perm
-  inhale false
-}
 
 method Iterator___del__(_cthread_150: Ref, _caller_measures_150: Seq[Measure$], _residue_150: Perm, self: Ref) returns (_current_wait_level_150: Perm)
   requires _cthread_150 != null
@@ -942,30 +1145,22 @@ method Iterator___del__(_cthread_150: Ref, _caller_measures_150: Seq[Measure$], 
   requires acc(self.list_acc, 1 / 20)
   requires acc(self.__container, 1 / 20)
   requires [true, Measure$check(_caller_measures_150, _cthread_150, 1)]
-  ensures [(forperm _r_17: Ref [_r_17.MustReleaseBounded] :: Level(_r_17) <= _current_wait_level_150) && ((forperm _r_17: Ref [_r_17.MustReleaseUnbounded] :: Level(_r_17) <= _current_wait_level_150) && _residue_150 <= _current_wait_level_150), true]
+  ensures [(forperm _r_29: Ref [_r_29.MustReleaseBounded] :: Level(_r_29) <= _current_wait_level_150) && ((forperm _r_29: Ref [_r_29.MustReleaseUnbounded] :: Level(_r_29) <= _current_wait_level_150) && _residue_150 <= _current_wait_level_150), true]
   ensures acc(self.__container, 1 / 20)
   ensures issubtype(typeof(self.__container), list(list_arg(typeof(self.__container), 0))) ==> acc(self.__container.list_acc, 1 / 20)
   ensures issubtype(typeof(self.__container), dict(dict_arg(typeof(self.__container), 0), dict_arg(typeof(self.__container), 1))) ==> acc(self.__container.dict_acc, 1 / 20) && acc(self.__container.dict_acc2, 1 / 20)
   ensures issubtype(typeof(self.__container), set(set_arg(typeof(self.__container), 0))) ==> acc(self.__container.set_acc, 1 / 20)
-{
-  var _cwl_150: Perm
-  inhale false
-}
 
 method list___init__(_cthread_8: Ref, _caller_measures_8: Seq[Measure$], _residue_8: Perm) returns (_current_wait_level_8: Perm, res: Ref)
   requires _cthread_8 != null
   requires Measure$check(_caller_measures_8, _cthread_8, 1)
   requires issubtype(typeof(_cthread_8), Thread_0())
   requires [true, Measure$check(_caller_measures_8, _cthread_8, 1)]
-  ensures [(forperm _r_19: Ref [_r_19.MustReleaseBounded] :: Level(_r_19) <= _current_wait_level_8) && ((forperm _r_19: Ref [_r_19.MustReleaseUnbounded] :: Level(_r_19) <= _current_wait_level_8) && _residue_8 <= _current_wait_level_8), true]
+  ensures [(forperm _r_31: Ref [_r_31.MustReleaseBounded] :: Level(_r_31) <= _current_wait_level_8) && ((forperm _r_31: Ref [_r_31.MustReleaseUnbounded] :: Level(_r_31) <= _current_wait_level_8) && _residue_8 <= _current_wait_level_8), true]
   ensures acc(res.list_acc, write)
   ensures res.list_acc == Seq[Ref]()
   ensures typeof(res) == list(list_arg(typeof(res), 0))
   ensures Low(res)
-{
-  var _cwl_8: Perm
-  inhale false
-}
 
 method list_append(_cthread_9: Ref, _caller_measures_9: Seq[Measure$], _residue_9: Perm, self: Ref, item: Ref) returns (_current_wait_level_9: Perm)
   requires _cthread_9 != null
@@ -975,13 +1170,9 @@ method list_append(_cthread_9: Ref, _caller_measures_9: Seq[Measure$], _residue_
   requires acc(self.list_acc, write)
   requires issubtype(typeof(item), list_arg(typeof(self), 0))
   requires [true, Measure$check(_caller_measures_9, _cthread_9, 1)]
-  ensures [(forperm _r_21: Ref [_r_21.MustReleaseBounded] :: Level(_r_21) <= _current_wait_level_9) && ((forperm _r_21: Ref [_r_21.MustReleaseUnbounded] :: Level(_r_21) <= _current_wait_level_9) && _residue_9 <= _current_wait_level_9), true]
+  ensures [(forperm _r_33: Ref [_r_33.MustReleaseBounded] :: Level(_r_33) <= _current_wait_level_9) && ((forperm _r_33: Ref [_r_33.MustReleaseUnbounded] :: Level(_r_33) <= _current_wait_level_9) && _residue_9 <= _current_wait_level_9), true]
   ensures acc(self.list_acc, write)
   ensures self.list_acc == old(self.list_acc) ++ Seq(item)
-{
-  var _cwl_9: Perm
-  inhale false
-}
 
 method list___iter__(_cthread_13: Ref, _caller_measures_13: Seq[Measure$], _residue_13: Perm, self: Ref) returns (_current_wait_level_13: Perm, _res: Ref)
   requires _cthread_13 != null
@@ -990,7 +1181,7 @@ method list___iter__(_cthread_13: Ref, _caller_measures_13: Seq[Measure$], _resi
   requires issubtype(typeof(self), list(list_arg(typeof(self), 0)))
   requires acc(self.list_acc, 1 / 10)
   requires [true, Measure$check(_caller_measures_13, _cthread_13, 1)]
-  ensures [(forperm _r_23: Ref [_r_23.MustReleaseBounded] :: Level(_r_23) <= _current_wait_level_13) && ((forperm _r_23: Ref [_r_23.MustReleaseUnbounded] :: Level(_r_23) <= _current_wait_level_13) && _residue_13 <= _current_wait_level_13), true]
+  ensures [(forperm _r_35: Ref [_r_35.MustReleaseBounded] :: Level(_r_35) <= _current_wait_level_13) && ((forperm _r_35: Ref [_r_35.MustReleaseUnbounded] :: Level(_r_35) <= _current_wait_level_13) && _residue_13 <= _current_wait_level_13), true]
   ensures _res != self
   ensures acc(_res.list_acc, 1 / 20)
   ensures acc(self.list_acc, 1 / 20)
@@ -999,7 +1190,3 @@ method list___iter__(_cthread_13: Ref, _caller_measures_13: Seq[Measure$], _resi
   ensures acc(_res.__iter_index, write) && _res.__iter_index == 0
   ensures acc(_res.__previous, write) && _res.__previous == Seq[Ref]()
   ensures issubtype(typeof(_res), Iterator(list_arg(typeof(self), 0)))
-{
-  var _cwl_13: Perm
-  inhale false
-}

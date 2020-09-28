@@ -13,7 +13,7 @@
 // Q2(v) := Q0(v) && Q1(v)
 
 
-//soundness condition does not hold
+// soundness condition does not hold
 method main(a: Ref, b: Ref, l: Ref) returns (v1: Int, v2: Int)
   requires realRef(a) && realRef(b) && realRef(l) // type information
   requires Acq(l,0) && Acq(l,1) && Init(l) // precondition

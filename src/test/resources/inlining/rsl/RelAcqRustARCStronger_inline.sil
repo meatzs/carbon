@@ -92,6 +92,16 @@ method new_drop() {
   drop(data, count, ghost)
 }
 
+method new_exhale_drop() {
+    var data: Ref
+  var count: Ref
+  var ghost: Ref
+  data, count, ghost := new_method(0);
+  exhale acc(data.val, wildcard)
+  //we expect a fundamental error here
+  drop(data, count, ghost);
+}
+
 //soundness condition holds
 method new_drop_read() {
   var data: Ref
@@ -133,6 +143,29 @@ method new_clone_drop_loop() {
 
   var i: Int := 0
   var n: Int
+  assume n > 0
+
+  data, count, ghost := new_method(0)
+  while (i < n)
+  {
+    clone_simple(data, count, ghost)
+    i := i + 1
+  }
+  while (i >= 0)
+  {
+    drop(data, count, ghost)
+    i := i - 1
+  }
+}
+
+//soundness condition holds
+method new_clone_drop_loop_error() {
+  var data: Ref
+  var count: Ref
+  var ghost: Ref
+
+  var i: Int := 0
+  var n: Int
 
   data, count, ghost := new_method(0)
   while (i < n)
@@ -146,7 +179,6 @@ method new_clone_drop_loop() {
     i := i - 1
   }
 
-  assert n <= 2
   //we expect a fundamental error ehre
   drop(data, count, ghost)
 }
