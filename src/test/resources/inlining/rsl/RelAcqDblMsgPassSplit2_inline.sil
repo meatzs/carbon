@@ -78,14 +78,13 @@ method main_2(a: Ref, b: Ref, l: Ref)
   requires Acq(l,0) && Init(l)
 {
   simple_read_2(a,b,l)
+  
 }
 
 method simple_read_1(a:Ref, b:Ref, l: Ref)
   requires realRef(a) && realRef(b) && realRef(l) // type information
   requires Acq(l,0) && Init(l) // precondition
 {
-  var v : Int // for temporary values of expressions
-
 // while ([l]_acq == 0) { skip }
   waitOnAcquireRead(l, 0)
 }
@@ -94,9 +93,6 @@ method simple_read_2(a:Ref, b:Ref, l: Ref)
   requires realRef(a) && realRef(b) && realRef(l) // type information
   requires Acq(l,0) && Init(l) // precondition
 {
-  var v : Int // for temporary values of expressions
-
-// while ([l]_acq == 0) { skip }
   waitOnAcquireRead(l, 0)
   assert acc(a.init) && a.init
 }
