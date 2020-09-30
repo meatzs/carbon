@@ -6,7 +6,7 @@ import viper.carbon.boogie._
 import viper.carbon.verifier.Verifier
 import Implicits._
 import viper.carbon.modules.components.Component
-import viper.silver.ast.{CurrentPerm, ErrorTrafo, FieldAccess, FieldAssign, ForPerm, Info, LocalVarAssign, LocationAccess, Method, Position, PredicateAccessPredicate, WildcardPerm}
+import viper.silver.ast.{CurrentPerm, ErrorTrafo, FieldAccess, FieldAssign, ForPerm, Info, LocalVarAssign, LocationAccess, Method, Position, WildcardPerm}
 import viper.silver.verifier.{DummyReason, VerificationError}
 import viper.silver.ast.utility.Expressions
 import viper.silver.verifier.errors.SoundnessFailed
@@ -659,8 +659,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   var id_checkMono = 0
   var id_checkWfm = 0
 
-  var beginning: Boolean = true
-  var isAtTop: Boolean = true
+  var first_block: Boolean = true
+
+  // TO DISTINGUISH MONO AND FRAMING
+  var inside_initial_method = true
 
   val getBounded = getVarDecl("getBounded", Bool)
 
@@ -807,7 +809,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     if (modularSC) {
       println("Modular approximation")
       if (checkMono) {
-        if (isAtTop) {
+        if (inside_initial_method) {
           checkFramingAux(pre_orig_s, orig, true, checkWFM, modif_vars)
         }
         else {
@@ -829,6 +831,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
+  var n_syntactic = 0
+  var n_syntactic_not = 0
+
   def checkFramingAux(pre_orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt = {
 
     namesAlreadyUsed = Set()
@@ -839,11 +844,17 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     var ignore = false
 
 
-    if (beginning && checkMono) {
+    if (first_block && inside_initial_method && checkMono) {
       println("Ignoring first part of the code (trivial)")
       ignore = true
     }
+    else if (isCheckingFraming()) {
+      ignore = true
+    }
     else if (syntacticFraming(orig_s, checkMono)) {
+      if (!checkWFM) {
+        n_syntactic += 1
+      }
       if (verifier.printSC) {
         println("___________________________________________________________")
       }
@@ -860,17 +871,18 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       }
       ignore = true
     }
-    else if (isCheckingFraming()) {
-      ignore = true
-    }
 
-    beginning = false
+    first_block = false
 
     if (ignore) {
       println("IGNORING...")
       Statements.EmptyStmt
     }
     else {
+
+      if (!checkWFM) {
+        n_syntactic_not += 1
+      }
 
       if (verifier.printSC) {
         println("___________________________________________________________")
@@ -938,7 +950,12 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       s2 = s2.optimize.asInstanceOf[Stmt]
 
 
-      val nm: VerificationError = SoundnessFailed(orig, DummyReason, if (checkWFM) "WFM" else "monoOut", id_error, errorType)
+      val text = {if (checkWFM) "WFM" else "monoOut"}
+      val nm_exists: VerificationError = SoundnessFailed(orig, DummyReason, text + " (trace may disappear)", id_error, errorType)
+      val nm_smaller: VerificationError = SoundnessFailed(orig, DummyReason, text + " (order not preserved)", id_error, errorType)
+      val nm_variables: VerificationError = SoundnessFailed(orig, DummyReason, text + " (variables)", id_error, errorType)
+
+
       val nf: VerificationError = SoundnessFailed(orig, DummyReason, "framing", id_error, errorType)
       val error_ignore: VerificationError = SoundnessFailed(orig, DummyReason, "monoOut (structural)", id_error, errorType)
       val nsm: VerificationError = SoundnessFailed(orig, DummyReason, "safeMono", id_error, errorType)
@@ -991,8 +1008,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           MaybeComment("State is phi2", Assign(normalState._1, maskPhi2.l) ++ Assign(normalState._2, heapPhi2.l)) ++
           assignSeqToSeq(converted_vars, oldVars) ++
           MaybeComment("s2 and phi2", modif_s2) ++
-          Assert(exists && smallerState(maskPhi1.l, heapPhi1.l, normalState._1, normalState._2), nm) ++
-          Assert(equalSeq(converted_vars, tempVars), nm) ++ {
+          Assert(exists, nm_exists) ++
+          Assert(smallerState(maskPhi1.l, heapPhi1.l, normalState._1, normalState._2), nm_smaller) ++
+          Assert(equalSeq(converted_vars, tempVars), nm_variables) ++ {
         if (!checkMono) {
             Assert(equalOnInterFunc(heapPhi1.l, heapR.l, maskPhi1.l, maskR.l), nf) ++
             Assume(
@@ -1085,7 +1103,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   def inlineLoop(w: sil.Stmt, cond: ast.Exp, invs: Seq[ast.Exp], body: ast.Seqn): Stmt = {
-    val oldIsAtTop = isAtTop
+
+    val old_inside_initial_method = inside_initial_method
+    inside_initial_method = false
+
     println("inlineLoop", current_depth, cond, "length", length(w))
     val guard = translateExp(cond)
 
@@ -1094,7 +1115,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     if (current_depth == maxDepth) {
       val cond_neg: sil.Stmt = sil.Inhale(sil.Not(cond)(cond.pos, cond.info, cond.errT))(cond.pos, cond.info, cond.errT)
       val wfm: Stmt = checkFraming(cond_neg, w, true, true)
-      isAtTop = oldIsAtTop
+      inside_initial_method = old_inside_initial_method
       MaybeCommentBlock("0: Check SC and cut branch (loop)", wfm ++ Assume(guard ==> FalseLit()))
     }
     else {
@@ -1119,22 +1140,19 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       checkingFraming = oldCheckingFraming
       val remaining = inlineLoop(w, cond, invs, body)
       current_depth -= 1
-      isAtTop = oldIsAtTop
+      inside_initial_method = old_inside_initial_method
       MaybeCommentBlock(depth + ": Inlined loop", check_wfm ++ If(guard, r1 ++ getBoundedComplete() ++ r2 ++ remaining, Statements.EmptyStmt) ++ getBoundedComplete())
     }
   }
 
   def inlineMethod(m: Method, args: Seq[ast.Exp], targets: Seq[ast.LocalVar]): Stmt = {
 
-    val oldIsAtTop = isAtTop
-    isAtTop = false
-    if (beginning) {
-      isAtTop = true
-    }
+    val old_inside_initial_method = inside_initial_method
+    inside_initial_method = false
 
     println("inlineMethod", current_depth, m.name, "length", length(m.body.get))
     if (current_depth == maxDepth) {
-      isAtTop = oldIsAtTop
+      inside_initial_method = old_inside_initial_method
       MaybeComment("0: Cut branch (method call)", Assume(FalseLit()))
     }
     else {
@@ -1187,7 +1205,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         }
       }
 
-      isAtTop = oldIsAtTop
+      inside_initial_method = old_inside_initial_method
       Seqn(assignArgs) ++ r1  ++ getBoundedComplete() ++ r2 ++ Seqn(assignRets) ++ getBoundedComplete()
     }
   }

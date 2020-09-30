@@ -286,6 +286,7 @@ method do_step(t: Ref, state: Term, initial_p: Perm) returns (res: Ref, ghost: T
             }
           }
           else {
+            assume false
             if(t.left.left.left.type == S_TERM) {
               // Term reduced = do_step(t.left.left.right);
               // duplicate_wildcard(t.left.left.right, t.left.left.ghost_right_state, p/8)
@@ -295,6 +296,7 @@ method do_step(t: Ref, state: Term, initial_p: Perm) returns (res: Ref, ghost: T
                 // duplicate_wildcard(t.left.right, t.left.ghost_right_state, p/4)
                 reduced, reduced_state, p := do_step(t.left.right, t.left.ghost_right_state, p/8)             
                 if(reduced == null) {
+
                   // reduced = do_step(t.right);
                   reduced, reduced_state, p := do_step(t.right, t.ghost_right_state, p/4)
                   if(reduced == null) {
@@ -333,6 +335,8 @@ method do_step(t: Ref, state: Term, initial_p: Perm) returns (res: Ref, ghost: T
               }
             }
             else { // ((((_, _), _), _))
+                                  assume false
+
               // Term reduced = do_step(t.left);
               // duplicate_wildcard(t.left, t.ghost_left_state, p / 2)
               reduced, reduced_state, p := do_step(t.left, t.ghost_left_state, p / 8)
@@ -413,10 +417,12 @@ method main()
     fold term_pred(k, K())
     var res: Ref
     var ghost: Term
-    res, ghost := createApply(s, k, S(), K(), 1/2)
+    
+    // res, ghost := createApply(s, k, S(), K(), 1/2)
 
     var p: Perm
-    res, ghost, p := reduction(res, ghost, 1/4)
+    inhale acc(term_pred(res, ghost))
+    res, ghost, p := reduction(res, ghost, write)
     // res, ghost := do_step(res, ghost, 1/4)
 
     assert false
