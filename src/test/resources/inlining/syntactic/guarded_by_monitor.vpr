@@ -1,0 +1,51 @@
+field changed: Bool
+field l: Ref
+field held: Int
+
+method test(this: Ref, e1: Int, e2: Int)
+  ensures [true, forperm r: Ref [r.held] :: false]
+{
+  // acquire l
+  inhale acc(this.l) && acc(this.l.data) && acc(this.changed) && sorted(this.l.data)
+  inhale acc(this.held)
+  
+  label acq
+
+  var tmp: Int
+  tmp := insert(this.l, e1)
+  tmp := insert(this.l, e2)
+  assert this.l.data[0] <= this.l.data[1]
+  this.changed := true
+
+  // release l
+  exhale acc(this.l) && acc(this.l.data) && acc(this.changed) &&
+         sorted(this.l.data) &&
+         (old[acq](this.l.data) == this.l.data || this.changed)
+  exhale acc(this.held)
+}
+
+/***** Code from Figure 2 *****/
+
+field data: Seq[Int]
+
+define sorted(s)
+  forall i: Int, j: Int ::
+        0 <= i && i < j && j < |s|
+    ==> s[i] <= s[j]
+
+method insert(this: Ref, elem: Int) returns (idx: Int)
+  requires acc(this.data) && sorted(this.data)
+  ensures acc(this.data) && sorted(this.data)
+  ensures 0 <= idx && idx <= old(|this.data|)
+  ensures this.data == old(this.data)[0..idx] ++ Seq(elem) ++ old(this.data)[idx..]
+{
+  idx := 0
+ 
+  while(idx < |this.data| && this.data[idx] < elem)
+    invariant acc(this.data, 1/2)
+    invariant 0 <= idx && idx <= |this.data|
+    invariant forall i: Int :: 0 <= i && i < idx ==> this.data[i] < elem
+  { idx := idx + 1 }
+ 
+  this.data := this.data[0..idx] ++ Seq(elem) ++ this.data[idx..]
+}
