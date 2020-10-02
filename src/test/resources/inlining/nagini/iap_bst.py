@@ -173,17 +173,23 @@ def bst(t: BinarySearchTree) -> bool:
 def print(o: object) -> None:
     pass
 
-def client(i: int, s:str) -> None:
+def client_error(i: int, s:str) -> None:
     mytree = BinarySearchTree()
     mytree.__setitem__(i, s)
     mytree.get(i)
     assert (mytree[i] is None)
 
-mytree = BinarySearchTree()
-mytree[3]="red"
-mytree[4]="blue"
-mytree[6]="yellow"
-mytree[2]="at"
+def client_correct(i: int, s:str) -> None:
+    mytree = BinarySearchTree()
+    mytree.__setitem__(i, s)
+    mytree.get(i)
+    assert not(mytree[i] is None)
 
-print(mytree[6])
-print(mytree[2])
+#mytree = BinarySearchTree()
+#mytree[3]="red"
+#mytree[4]="blue"
+#mytree[6]="yellow"
+#mytree[2]="at"
+#
+#print(mytree[6])
+#print(mytree[2])

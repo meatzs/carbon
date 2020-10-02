@@ -393,7 +393,9 @@ domain ThreadingID {
   
   unique function print_threading_0(): ThreadingID
   
-  unique function client_threading(): ThreadingID
+  unique function client_error_threading(): ThreadingID
+  
+  unique function client_correct_threading(): ThreadingID
   
   unique function __init___threading_2(): ThreadingID
   
@@ -528,12 +530,6 @@ function _checkDefined(val: Ref, id: Int): Ref
   val
 }
 
-function _asserting(val: Ref, ass: Bool): Ref
-  requires ass
-{
-  val
-}
-
 function sorted(n: Ref, upper_0: Ref, lower_0: Ref): Ref
   requires issubtype(typeof(n), TreeNode())
   requires upper_0 == null || issubtype(typeof(upper_0), int())
@@ -610,10 +606,6 @@ function __file__(): Ref
 
 
 function __name__(): Ref
-
-
-function mytree_0(): Ref
-  ensures issubtype(typeof(result), BinarySearchTree())
 
 
 function object___bool__(self: Ref): Bool
@@ -723,10 +715,9 @@ method print_0(_cthread_172: Ref, _caller_measures_172: Seq[Measure$], _residue_
   _method_measures_172 := Seq[Measure$]()
   _err := null
   o_0 := o
-  
 }
 
-method client(_cthread_173: Ref, _caller_measures_173: Seq[Measure$], _residue_173: Perm, i: Ref, s: Ref) returns (_current_wait_level_173: Perm)
+method client_error(_cthread_173: Ref, _caller_measures_173: Seq[Measure$], _residue_173: Perm, i: Ref, s: Ref) returns (_current_wait_level_173: Perm)
   requires _cthread_173 != null
   requires issubtype(typeof(_cthread_173), Thread_0())
   requires issubtype(typeof(i), int())
@@ -737,8 +728,8 @@ method client(_cthread_173: Ref, _caller_measures_173: Seq[Measure$], _residue_1
 {
   var _err: Ref
   var mytree: Ref
-  var i_0: Ref
-  var s_0: Ref
+  var i_1: Ref
+  var s_1: Ref
   var BinarySearchTree_res: Ref
   var get_res: Ref
   var expr_res: Ref
@@ -747,8 +738,8 @@ method client(_cthread_173: Ref, _caller_measures_173: Seq[Measure$], _residue_1
   var _method_measures_173: Seq[Measure$]
   _method_measures_173 := Seq[Measure$]()
   _err := null
-  i_0 := i
-  s_0 := s
+  i_1 := i
+  s_1 := s
   BinarySearchTree_res := new()
   inhale typeof(BinarySearchTree_res) == BinarySearchTree()
   inhale acc(_MaySet(BinarySearchTree_res, 85645922913331987206730809139411974633301625502983886526), write)
@@ -756,12 +747,48 @@ method client(_cthread_173: Ref, _caller_measures_173: Seq[Measure$], _residue_1
   _cwl_173 := BinarySearchTree___init__(_cthread_173, _method_measures_173, _residue_173, BinarySearchTree_res)
   mytree := BinarySearchTree_res
   inhale _isDefined(4123786645886174867)
-  _cwl_173 := BinarySearchTree___setitem__(_cthread_173, _method_measures_173, _residue_173, _checkDefined(mytree, 4123786645886174867), i_0, s_0)
-  _cwl_173, get_res := BinarySearchTree_get(_cthread_173, _method_measures_173, _residue_173, _checkDefined(mytree, 4123786645886174867), i_0)
+  _cwl_173 := BinarySearchTree___setitem__(_cthread_173, _method_measures_173, _residue_173, _checkDefined(mytree, 4123786645886174867), i_1, s_1)
+  _cwl_173, get_res := BinarySearchTree_get(_cthread_173, _method_measures_173, _residue_173, _checkDefined(mytree, 4123786645886174867), i_1)
   expr_res := get_res
-  _cwl_173, target := BinarySearchTree___getitem__(_cthread_173, _method_measures_173, _residue_173, _checkDefined(mytree, 4123786645886174867), i_0)
-  assert target != null
-  
+  _cwl_173, target := BinarySearchTree___getitem__(_cthread_173, _method_measures_173, _residue_173, _checkDefined(mytree, 4123786645886174867), i_1)
+  assert target == null
+}
+
+method client_correct(_cthread_174: Ref, _caller_measures_174: Seq[Measure$], _residue_174: Perm, i_0: Ref, s_0: Ref) returns (_current_wait_level_174: Perm)
+  requires _cthread_174 != null
+  requires issubtype(typeof(_cthread_174), Thread_0())
+  requires issubtype(typeof(i_0), int())
+  requires issubtype(typeof(s_0), str())
+  requires [true, perm(MustTerminate(_cthread_174)) == none && ((forperm _r_7: Ref [MustInvokeBounded(_r_7)] :: false) && ((forperm _r_7: Ref [MustInvokeUnbounded(_r_7)] :: false) && ((forperm _r_7: Ref [_r_7.MustReleaseBounded] :: false) && (forperm _r_7: Ref [_r_7.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_5: Ref [_r_5.MustReleaseBounded] :: Level(_r_5) <= _current_wait_level_174) && ((forperm _r_5: Ref [_r_5.MustReleaseUnbounded] :: Level(_r_5) <= _current_wait_level_174) && _residue_174 <= _current_wait_level_174), true]
+  ensures [true, (forperm _r_6: Ref [MustInvokeBounded(_r_6)] :: false) && ((forperm _r_6: Ref [MustInvokeUnbounded(_r_6)] :: false) && ((forperm _r_6: Ref [_r_6.MustReleaseBounded] :: false) && (forperm _r_6: Ref [_r_6.MustReleaseUnbounded] :: false)))]
+{
+  var _err: Ref
+  var mytree_0: Ref
+  var i_2: Ref
+  var s_2: Ref
+  var BinarySearchTree_res_0: Ref
+  var get_res_0: Ref
+  var expr_res_0: Ref
+  var target_0: Ref
+  var _cwl_174: Perm
+  var _method_measures_174: Seq[Measure$]
+  _method_measures_174 := Seq[Measure$]()
+  _err := null
+  i_2 := i_0
+  s_2 := s_0
+  BinarySearchTree_res_0 := new()
+  inhale typeof(BinarySearchTree_res_0) == BinarySearchTree()
+  inhale acc(_MaySet(BinarySearchTree_res_0, 85645922913331987206730809139411974633301625502983886526), write)
+  inhale acc(_MaySet(BinarySearchTree_res_0, 24058923725835472833998273938645017447293936874137163454), write)
+  _cwl_174 := BinarySearchTree___init__(_cthread_174, _method_measures_174, _residue_174, BinarySearchTree_res_0)
+  mytree_0 := BinarySearchTree_res_0
+  inhale _isDefined(2997605268361807507)
+  _cwl_174 := BinarySearchTree___setitem__(_cthread_174, _method_measures_174, _residue_174, _checkDefined(mytree_0, 2997605268361807507), i_2, s_2)
+  _cwl_174, get_res_0 := BinarySearchTree_get(_cthread_174, _method_measures_174, _residue_174, _checkDefined(mytree_0, 2997605268361807507), i_2)
+  expr_res_0 := get_res_0
+  _cwl_174, target_0 := BinarySearchTree___getitem__(_cthread_174, _method_measures_174, _residue_174, _checkDefined(mytree_0, 2997605268361807507), i_2)
+  assert !(target_0 == null)
 }
 
 method TreeNode___init__(_cthread_162: Ref, _caller_measures_162: Seq[Measure$], _residue_162: Perm, self_5: Ref, key_0: Ref, val: Ref, left: Ref, right: Ref, parent: Ref) returns (_current_wait_level_162: Perm)
@@ -780,10 +807,10 @@ method TreeNode___init__(_cthread_162: Ref, _caller_measures_162: Seq[Measure$],
   requires right == null || issubtype(typeof(right), TreeNode())
   requires parent == null || issubtype(typeof(parent), TreeNode())
   requires self_5 != null
-  requires [true, perm(MustTerminate(_cthread_162)) == none && ((forperm _r_7: Ref [MustInvokeBounded(_r_7)] :: false) && ((forperm _r_7: Ref [MustInvokeUnbounded(_r_7)] :: false) && ((forperm _r_7: Ref [_r_7.MustReleaseBounded] :: false) && (forperm _r_7: Ref [_r_7.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_5: Ref [_r_5.MustReleaseBounded] :: Level(_r_5) <= _current_wait_level_162) && ((forperm _r_5: Ref [_r_5.MustReleaseUnbounded] :: Level(_r_5) <= _current_wait_level_162) && _residue_162 <= _current_wait_level_162), true]
+  requires [true, perm(MustTerminate(_cthread_162)) == none && ((forperm _r_10: Ref [MustInvokeBounded(_r_10)] :: false) && ((forperm _r_10: Ref [MustInvokeUnbounded(_r_10)] :: false) && ((forperm _r_10: Ref [_r_10.MustReleaseBounded] :: false) && (forperm _r_10: Ref [_r_10.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_8: Ref [_r_8.MustReleaseBounded] :: Level(_r_8) <= _current_wait_level_162) && ((forperm _r_8: Ref [_r_8.MustReleaseUnbounded] :: Level(_r_8) <= _current_wait_level_162) && _residue_162 <= _current_wait_level_162), true]
   ensures acc(self_5.TreeNode_key, write) && issubtype(typeof(self_5.TreeNode_key), int()) && (self_5.TreeNode_key == key_0 && (acc(self_5.TreeNode_payload, write) && issubtype(typeof(self_5.TreeNode_payload), str()) && (self_5.TreeNode_payload == val && (acc(self_5.TreeNode_leftChild, write) && (self_5.TreeNode_leftChild == null || issubtype(typeof(self_5.TreeNode_leftChild), TreeNode())) && (self_5.TreeNode_leftChild == left && (acc(self_5.TreeNode_rightChild, write) && (self_5.TreeNode_rightChild == null || issubtype(typeof(self_5.TreeNode_rightChild), TreeNode())) && (self_5.TreeNode_rightChild == right && (acc(self_5.TreeNode_parent, write) && (self_5.TreeNode_parent == null || issubtype(typeof(self_5.TreeNode_parent), TreeNode())) && self_5.TreeNode_parent == parent))))))))
-  ensures [true, (forperm _r_6: Ref [MustInvokeBounded(_r_6)] :: false) && ((forperm _r_6: Ref [MustInvokeUnbounded(_r_6)] :: false) && ((forperm _r_6: Ref [_r_6.MustReleaseBounded] :: false) && (forperm _r_6: Ref [_r_6.MustReleaseUnbounded] :: false)))]
+  ensures [true, (forperm _r_9: Ref [MustInvokeBounded(_r_9)] :: false) && ((forperm _r_9: Ref [MustInvokeUnbounded(_r_9)] :: false) && ((forperm _r_9: Ref [_r_9.MustReleaseBounded] :: false) && (forperm _r_9: Ref [_r_9.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var self_13: Ref
@@ -828,7 +855,6 @@ method TreeNode___init__(_cthread_162: Ref, _caller_measures_162: Seq[Measure$],
     inhale acc(self_13.TreeNode_parent, write)
   }
   self_13.TreeNode_parent := parent_0
-  
 }
 
 method BinarySearchTree___init__(_cthread_163: Ref, _caller_measures_163: Seq[Measure$], _residue_163: Perm, self_6: Ref) returns (_current_wait_level_163: Perm)
@@ -839,10 +865,10 @@ method BinarySearchTree___init__(_cthread_163: Ref, _caller_measures_163: Seq[Me
   requires acc(_MaySet(self_6, 24058923725835472833998273938645017447293936874137163454), write)
   requires issubtype(typeof(self_6), BinarySearchTree())
   requires self_6 != null
-  requires [true, perm(MustTerminate(_cthread_163)) == none && ((forperm _r_10: Ref [MustInvokeBounded(_r_10)] :: false) && ((forperm _r_10: Ref [MustInvokeUnbounded(_r_10)] :: false) && ((forperm _r_10: Ref [_r_10.MustReleaseBounded] :: false) && (forperm _r_10: Ref [_r_10.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_8: Ref [_r_8.MustReleaseBounded] :: Level(_r_8) <= _current_wait_level_163) && ((forperm _r_8: Ref [_r_8.MustReleaseUnbounded] :: Level(_r_8) <= _current_wait_level_163) && _residue_163 <= _current_wait_level_163), true]
+  requires [true, perm(MustTerminate(_cthread_163)) == none && ((forperm _r_13: Ref [MustInvokeBounded(_r_13)] :: false) && ((forperm _r_13: Ref [MustInvokeUnbounded(_r_13)] :: false) && ((forperm _r_13: Ref [_r_13.MustReleaseBounded] :: false) && (forperm _r_13: Ref [_r_13.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_11: Ref [_r_11.MustReleaseBounded] :: Level(_r_11) <= _current_wait_level_163) && ((forperm _r_11: Ref [_r_11.MustReleaseUnbounded] :: Level(_r_11) <= _current_wait_level_163) && _residue_163 <= _current_wait_level_163), true]
   ensures acc(bst(self_6), write)
-  ensures [true, (forperm _r_9: Ref [MustInvokeBounded(_r_9)] :: false) && ((forperm _r_9: Ref [MustInvokeUnbounded(_r_9)] :: false) && ((forperm _r_9: Ref [_r_9.MustReleaseBounded] :: false) && (forperm _r_9: Ref [_r_9.MustReleaseUnbounded] :: false)))]
+  ensures [true, (forperm _r_12: Ref [MustInvokeBounded(_r_12)] :: false) && ((forperm _r_12: Ref [MustInvokeUnbounded(_r_12)] :: false) && ((forperm _r_12: Ref [_r_12.MustReleaseBounded] :: false) && (forperm _r_12: Ref [_r_12.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var self_14: Ref
@@ -863,7 +889,6 @@ method BinarySearchTree___init__(_cthread_163: Ref, _caller_measures_163: Seq[Me
   }
   self_14.BinarySearchTree_size := __prim__int___box__(0)
   fold acc(bst(self_14), write)
-  
 }
 
 method BinarySearchTree_put(_cthread_164: Ref, _caller_measures_164: Seq[Measure$], _residue_164: Perm, self_7: Ref, key_1: Ref, val_0: Ref) returns (_current_wait_level_164: Perm)
@@ -874,10 +899,10 @@ method BinarySearchTree_put(_cthread_164: Ref, _caller_measures_164: Seq[Measure
   requires issubtype(typeof(val_0), str())
   requires self_7 != null
   requires acc(bst(self_7), write)
-  requires [true, perm(MustTerminate(_cthread_164)) == none && ((forperm _r_13: Ref [MustInvokeBounded(_r_13)] :: false) && ((forperm _r_13: Ref [MustInvokeUnbounded(_r_13)] :: false) && ((forperm _r_13: Ref [_r_13.MustReleaseBounded] :: false) && (forperm _r_13: Ref [_r_13.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_11: Ref [_r_11.MustReleaseBounded] :: Level(_r_11) <= _current_wait_level_164) && ((forperm _r_11: Ref [_r_11.MustReleaseUnbounded] :: Level(_r_11) <= _current_wait_level_164) && _residue_164 <= _current_wait_level_164), true]
+  requires [true, perm(MustTerminate(_cthread_164)) == none && ((forperm _r_16: Ref [MustInvokeBounded(_r_16)] :: false) && ((forperm _r_16: Ref [MustInvokeUnbounded(_r_16)] :: false) && ((forperm _r_16: Ref [_r_16.MustReleaseBounded] :: false) && (forperm _r_16: Ref [_r_16.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_14: Ref [_r_14.MustReleaseBounded] :: Level(_r_14) <= _current_wait_level_164) && ((forperm _r_14: Ref [_r_14.MustReleaseUnbounded] :: Level(_r_14) <= _current_wait_level_164) && _residue_164 <= _current_wait_level_164), true]
   ensures acc(bst(self_7), write)
-  ensures [true, (forperm _r_12: Ref [MustInvokeBounded(_r_12)] :: false) && ((forperm _r_12: Ref [MustInvokeUnbounded(_r_12)] :: false) && ((forperm _r_12: Ref [_r_12.MustReleaseBounded] :: false) && (forperm _r_12: Ref [_r_12.MustReleaseUnbounded] :: false)))]
+  ensures [true, (forperm _r_15: Ref [MustInvokeBounded(_r_15)] :: false) && ((forperm _r_15: Ref [MustInvokeUnbounded(_r_15)] :: false) && ((forperm _r_15: Ref [_r_15.MustReleaseBounded] :: false) && (forperm _r_15: Ref [_r_15.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var increased_size: Ref
@@ -925,7 +950,6 @@ method BinarySearchTree_put(_cthread_164: Ref, _caller_measures_164: Seq[Measure
     self_15.BinarySearchTree_size := __prim__int___box__(int___add__(int___unbox__(self_15.BinarySearchTree_size), 1))
   }
   fold acc(bst(self_15), write)
-  
 }
 
 method BinarySearchTree__put(_cthread_165: Ref, _caller_measures_165: Seq[Measure$], _residue_165: Perm, self_8: Ref, key_2: Ref, val_1: Ref, currentNode: Ref, upper: Ref, lower: Ref) returns (_current_wait_level_165: Perm, _res: Ref)
@@ -941,12 +965,12 @@ method BinarySearchTree__put(_cthread_165: Ref, _caller_measures_165: Seq[Measur
   requires acc(tree(currentNode), write) && bool___unbox__(sorted(currentNode, upper, lower))
   requires upper != null ==> int___lt__(int___unbox__(key_2), int___unbox__(upper))
   requires lower != null ==> int___gt__(int___unbox__(key_2), int___unbox__(lower))
-  requires [true, perm(MustTerminate(_cthread_165)) == none && ((forperm _r_16: Ref [MustInvokeBounded(_r_16)] :: false) && ((forperm _r_16: Ref [MustInvokeUnbounded(_r_16)] :: false) && ((forperm _r_16: Ref [_r_16.MustReleaseBounded] :: false) && (forperm _r_16: Ref [_r_16.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_14: Ref [_r_14.MustReleaseBounded] :: Level(_r_14) <= _current_wait_level_165) && ((forperm _r_14: Ref [_r_14.MustReleaseUnbounded] :: Level(_r_14) <= _current_wait_level_165) && _residue_165 <= _current_wait_level_165), true]
+  requires [true, perm(MustTerminate(_cthread_165)) == none && ((forperm _r_19: Ref [MustInvokeBounded(_r_19)] :: false) && ((forperm _r_19: Ref [MustInvokeUnbounded(_r_19)] :: false) && ((forperm _r_19: Ref [_r_19.MustReleaseBounded] :: false) && (forperm _r_19: Ref [_r_19.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_17: Ref [_r_17.MustReleaseBounded] :: Level(_r_17) <= _current_wait_level_165) && ((forperm _r_17: Ref [_r_17.MustReleaseUnbounded] :: Level(_r_17) <= _current_wait_level_165) && _residue_165 <= _current_wait_level_165), true]
   ensures issubtype(typeof(_res), bool())
   ensures acc(tree(currentNode), write) && bool___unbox__(sorted(currentNode, upper, lower))
   ensures getParent(currentNode) == old(getParent(currentNode))
-  ensures [true, (forperm _r_15: Ref [MustInvokeBounded(_r_15)] :: false) && ((forperm _r_15: Ref [MustInvokeUnbounded(_r_15)] :: false) && ((forperm _r_15: Ref [_r_15.MustReleaseBounded] :: false) && (forperm _r_15: Ref [_r_15.MustReleaseUnbounded] :: false)))]
+  ensures [true, (forperm _r_18: Ref [MustInvokeBounded(_r_18)] :: false) && ((forperm _r_18: Ref [MustInvokeUnbounded(_r_18)] :: false) && ((forperm _r_18: Ref [_r_18.MustReleaseBounded] :: false) && (forperm _r_18: Ref [_r_18.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var res: Ref
@@ -1028,7 +1052,6 @@ method BinarySearchTree__put(_cthread_165: Ref, _caller_measures_165: Seq[Measur
   }
   fold acc(tree(currentNode_1), write)
   _res := _checkDefined(res, 7562610)
-  
 }
 
 method BinarySearchTree___setitem__(_cthread_166: Ref, _caller_measures_166: Seq[Measure$], _residue_166: Perm, self_9: Ref, k: Ref, v: Ref) returns (_current_wait_level_166: Perm)
@@ -1039,10 +1062,10 @@ method BinarySearchTree___setitem__(_cthread_166: Ref, _caller_measures_166: Seq
   requires issubtype(typeof(v), str())
   requires self_9 != null
   requires acc(bst(self_9), write)
-  requires [true, perm(MustTerminate(_cthread_166)) == none && ((forperm _r_19: Ref [MustInvokeBounded(_r_19)] :: false) && ((forperm _r_19: Ref [MustInvokeUnbounded(_r_19)] :: false) && ((forperm _r_19: Ref [_r_19.MustReleaseBounded] :: false) && (forperm _r_19: Ref [_r_19.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_17: Ref [_r_17.MustReleaseBounded] :: Level(_r_17) <= _current_wait_level_166) && ((forperm _r_17: Ref [_r_17.MustReleaseUnbounded] :: Level(_r_17) <= _current_wait_level_166) && _residue_166 <= _current_wait_level_166), true]
+  requires [true, perm(MustTerminate(_cthread_166)) == none && ((forperm _r_22: Ref [MustInvokeBounded(_r_22)] :: false) && ((forperm _r_22: Ref [MustInvokeUnbounded(_r_22)] :: false) && ((forperm _r_22: Ref [_r_22.MustReleaseBounded] :: false) && (forperm _r_22: Ref [_r_22.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_20: Ref [_r_20.MustReleaseBounded] :: Level(_r_20) <= _current_wait_level_166) && ((forperm _r_20: Ref [_r_20.MustReleaseUnbounded] :: Level(_r_20) <= _current_wait_level_166) && _residue_166 <= _current_wait_level_166), true]
   ensures acc(bst(self_9), write)
-  ensures [true, (forperm _r_18: Ref [MustInvokeBounded(_r_18)] :: false) && ((forperm _r_18: Ref [MustInvokeUnbounded(_r_18)] :: false) && ((forperm _r_18: Ref [_r_18.MustReleaseBounded] :: false) && (forperm _r_18: Ref [_r_18.MustReleaseUnbounded] :: false)))]
+  ensures [true, (forperm _r_21: Ref [MustInvokeBounded(_r_21)] :: false) && ((forperm _r_21: Ref [MustInvokeUnbounded(_r_21)] :: false) && ((forperm _r_21: Ref [_r_21.MustReleaseBounded] :: false) && (forperm _r_21: Ref [_r_21.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var self_17: Ref
@@ -1057,7 +1080,6 @@ method BinarySearchTree___setitem__(_cthread_166: Ref, _caller_measures_166: Seq
   k_0 := k
   v_0 := v
   _cwl_166 := BinarySearchTree_put(_cthread_166, _method_measures_166, _residue_166, self_17, k_0, v_0)
-  
 }
 
 method BinarySearchTree_get(_cthread_167: Ref, _caller_measures_167: Seq[Measure$], _residue_167: Perm, self_10: Ref, key_3: Ref) returns (_current_wait_level_167: Perm, _res: Ref)
@@ -1067,11 +1089,11 @@ method BinarySearchTree_get(_cthread_167: Ref, _caller_measures_167: Seq[Measure
   requires issubtype(typeof(key_3), int())
   requires self_10 != null
   requires acc(bst(self_10), write)
-  requires [true, perm(MustTerminate(_cthread_167)) == none && ((forperm _r_22: Ref [MustInvokeBounded(_r_22)] :: false) && ((forperm _r_22: Ref [MustInvokeUnbounded(_r_22)] :: false) && ((forperm _r_22: Ref [_r_22.MustReleaseBounded] :: false) && (forperm _r_22: Ref [_r_22.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_20: Ref [_r_20.MustReleaseBounded] :: Level(_r_20) <= _current_wait_level_167) && ((forperm _r_20: Ref [_r_20.MustReleaseUnbounded] :: Level(_r_20) <= _current_wait_level_167) && _residue_167 <= _current_wait_level_167), true]
+  requires [true, perm(MustTerminate(_cthread_167)) == none && ((forperm _r_25: Ref [MustInvokeBounded(_r_25)] :: false) && ((forperm _r_25: Ref [MustInvokeUnbounded(_r_25)] :: false) && ((forperm _r_25: Ref [_r_25.MustReleaseBounded] :: false) && (forperm _r_25: Ref [_r_25.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_23: Ref [_r_23.MustReleaseBounded] :: Level(_r_23) <= _current_wait_level_167) && ((forperm _r_23: Ref [_r_23.MustReleaseUnbounded] :: Level(_r_23) <= _current_wait_level_167) && _residue_167 <= _current_wait_level_167), true]
   ensures _res == null || issubtype(typeof(_res), str())
   ensures acc(bst(self_10), write)
-  ensures [true, (forperm _r_21: Ref [MustInvokeBounded(_r_21)] :: false) && ((forperm _r_21: Ref [MustInvokeUnbounded(_r_21)] :: false) && ((forperm _r_21: Ref [_r_21.MustReleaseBounded] :: false) && (forperm _r_21: Ref [_r_21.MustReleaseUnbounded] :: false)))]
+  ensures [true, (forperm _r_24: Ref [MustInvokeBounded(_r_24)] :: false) && ((forperm _r_24: Ref [MustInvokeUnbounded(_r_24)] :: false) && ((forperm _r_24: Ref [_r_24.MustReleaseBounded] :: false) && (forperm _r_24: Ref [_r_24.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var res_0: Ref
@@ -1097,7 +1119,6 @@ method BinarySearchTree_get(_cthread_167: Ref, _caller_measures_167: Seq[Measure
     fold acc(bst(self_18), write)
     _res := null
   }
-  
 }
 
 method BinarySearchTree__get(_cthread_168: Ref, _caller_measures_168: Seq[Measure$], _residue_168: Perm, self_11: Ref, key_4: Ref, currentNode_0: Ref, perm_0: Ref) returns (_current_wait_level_168: Perm, _res: Ref)
@@ -1110,11 +1131,11 @@ method BinarySearchTree__get(_cthread_168: Ref, _caller_measures_168: Seq[Measur
   requires self_11 != null
   requires int___gt__(int___unbox__(perm_0), 0)
   requires currentNode_0 != null ==> acc(tree(currentNode_0), 1 / int___unbox__(perm_0))
-  requires [true, perm(MustTerminate(_cthread_168)) == none && ((forperm _r_25: Ref [MustInvokeBounded(_r_25)] :: false) && ((forperm _r_25: Ref [MustInvokeUnbounded(_r_25)] :: false) && ((forperm _r_25: Ref [_r_25.MustReleaseBounded] :: false) && (forperm _r_25: Ref [_r_25.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_23: Ref [_r_23.MustReleaseBounded] :: Level(_r_23) <= _current_wait_level_168) && ((forperm _r_23: Ref [_r_23.MustReleaseUnbounded] :: Level(_r_23) <= _current_wait_level_168) && _residue_168 <= _current_wait_level_168), true]
+  requires [true, perm(MustTerminate(_cthread_168)) == none && ((forperm _r_28: Ref [MustInvokeBounded(_r_28)] :: false) && ((forperm _r_28: Ref [MustInvokeUnbounded(_r_28)] :: false) && ((forperm _r_28: Ref [_r_28.MustReleaseBounded] :: false) && (forperm _r_28: Ref [_r_28.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_26: Ref [_r_26.MustReleaseBounded] :: Level(_r_26) <= _current_wait_level_168) && ((forperm _r_26: Ref [_r_26.MustReleaseUnbounded] :: Level(_r_26) <= _current_wait_level_168) && _residue_168 <= _current_wait_level_168), true]
   ensures _res == null || issubtype(typeof(_res), str())
   ensures currentNode_0 != null ==> acc(tree(currentNode_0), 1 / int___unbox__(perm_0))
-  ensures [true, (forperm _r_24: Ref [MustInvokeBounded(_r_24)] :: false) && ((forperm _r_24: Ref [MustInvokeUnbounded(_r_24)] :: false) && ((forperm _r_24: Ref [_r_24.MustReleaseBounded] :: false) && (forperm _r_24: Ref [_r_24.MustReleaseUnbounded] :: false)))]
+  ensures [true, (forperm _r_27: Ref [MustInvokeBounded(_r_27)] :: false) && ((forperm _r_27: Ref [MustInvokeUnbounded(_r_27)] :: false) && ((forperm _r_27: Ref [_r_27.MustReleaseBounded] :: false) && (forperm _r_27: Ref [_r_27.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var res_1: Ref
@@ -1137,23 +1158,22 @@ method BinarySearchTree__get(_cthread_168: Ref, _caller_measures_168: Seq[Measur
   if (!object___bool__(currentNode_2)) {
     _res := null
   } else {
-  unfold acc(tree(currentNode_2), 1 / int___unbox__(perm_1))
-  if (int___eq__(currentNode_2.TreeNode_key, key_10)) {
-    res_1 := currentNode_2.TreeNode_payload
-    inhale _isDefined(3438976506964777614)
-  } elseif (int___lt__(int___unbox__(key_10), int___unbox__(currentNode_2.TreeNode_key))) {
-    _cwl_168, _get_res_0 := BinarySearchTree__get(_cthread_168, _method_measures_168, _residue_168, self_19, key_10, currentNode_2.TreeNode_leftChild, __prim__int___box__(int___mul__(int___unbox__(perm_1), 2)))
-    res_1 := _get_res_0
-    inhale _isDefined(3438976506964777614)
-  } else {
-    _cwl_168, _get_res_1 := BinarySearchTree__get(_cthread_168, _method_measures_168, _residue_168, self_19, key_10, currentNode_2.TreeNode_rightChild, __prim__int___box__(int___mul__(int___unbox__(perm_1), 2)))
-    res_1 := _get_res_1
-    inhale _isDefined(3438976506964777614)
+    unfold acc(tree(currentNode_2), 1 / int___unbox__(perm_1))
+    if (int___eq__(currentNode_2.TreeNode_key, key_10)) {
+      res_1 := currentNode_2.TreeNode_payload
+      inhale _isDefined(3438976506964777614)
+    } elseif (int___lt__(int___unbox__(key_10), int___unbox__(currentNode_2.TreeNode_key))) {
+      _cwl_168, _get_res_0 := BinarySearchTree__get(_cthread_168, _method_measures_168, _residue_168, self_19, key_10, currentNode_2.TreeNode_leftChild, __prim__int___box__(int___mul__(int___unbox__(perm_1), 2)))
+      res_1 := _get_res_0
+      inhale _isDefined(3438976506964777614)
+    } else {
+      _cwl_168, _get_res_1 := BinarySearchTree__get(_cthread_168, _method_measures_168, _residue_168, self_19, key_10, currentNode_2.TreeNode_rightChild, __prim__int___box__(int___mul__(int___unbox__(perm_1), 2)))
+      res_1 := _get_res_1
+      inhale _isDefined(3438976506964777614)
+    }
+    fold acc(tree(currentNode_2), 1 / int___unbox__(perm_1))
+    _res := _checkDefined(res_1, 3438976506964777614)
   }
-  fold acc(tree(currentNode_2), 1 / int___unbox__(perm_1))
-  _res := _checkDefined(res_1, 3438976506964777614)
-  }
-  
 }
 
 method BinarySearchTree___getitem__(_cthread_169: Ref, _caller_measures_169: Seq[Measure$], _residue_169: Perm, self_12: Ref, key_5: Ref) returns (_current_wait_level_169: Perm, _res: Ref)
@@ -1163,16 +1183,16 @@ method BinarySearchTree___getitem__(_cthread_169: Ref, _caller_measures_169: Seq
   requires issubtype(typeof(key_5), int())
   requires self_12 != null
   requires acc(bst(self_12), write)
-  requires [true, perm(MustTerminate(_cthread_169)) == none && ((forperm _r_28: Ref [MustInvokeBounded(_r_28)] :: false) && ((forperm _r_28: Ref [MustInvokeUnbounded(_r_28)] :: false) && ((forperm _r_28: Ref [_r_28.MustReleaseBounded] :: false) && (forperm _r_28: Ref [_r_28.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_26: Ref [_r_26.MustReleaseBounded] :: Level(_r_26) <= _current_wait_level_169) && ((forperm _r_26: Ref [_r_26.MustReleaseUnbounded] :: Level(_r_26) <= _current_wait_level_169) && _residue_169 <= _current_wait_level_169), true]
+  requires [true, perm(MustTerminate(_cthread_169)) == none && ((forperm _r_31: Ref [MustInvokeBounded(_r_31)] :: false) && ((forperm _r_31: Ref [MustInvokeUnbounded(_r_31)] :: false) && ((forperm _r_31: Ref [_r_31.MustReleaseBounded] :: false) && (forperm _r_31: Ref [_r_31.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_29: Ref [_r_29.MustReleaseBounded] :: Level(_r_29) <= _current_wait_level_169) && ((forperm _r_29: Ref [_r_29.MustReleaseUnbounded] :: Level(_r_29) <= _current_wait_level_169) && _residue_169 <= _current_wait_level_169), true]
   ensures _res == null || issubtype(typeof(_res), str())
   ensures acc(bst(self_12), write)
-  ensures [true, (forperm _r_27: Ref [MustInvokeBounded(_r_27)] :: false) && ((forperm _r_27: Ref [MustInvokeUnbounded(_r_27)] :: false) && ((forperm _r_27: Ref [_r_27.MustReleaseBounded] :: false) && (forperm _r_27: Ref [_r_27.MustReleaseUnbounded] :: false)))]
+  ensures [true, (forperm _r_30: Ref [MustInvokeBounded(_r_30)] :: false) && ((forperm _r_30: Ref [MustInvokeUnbounded(_r_30)] :: false) && ((forperm _r_30: Ref [_r_30.MustReleaseBounded] :: false) && (forperm _r_30: Ref [_r_30.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var self_20: Ref
   var key_11: Ref
-  var get_res_0: Ref
+  var get_res_1: Ref
   var _cwl_169: Perm
   var _method_measures_169: Seq[Measure$]
   _method_measures_169 := Seq[Measure$]()
@@ -1181,29 +1201,22 @@ method BinarySearchTree___getitem__(_cthread_169: Ref, _caller_measures_169: Seq
   _err := null
   self_20 := self_12
   key_11 := key_5
-  _cwl_169, get_res_0 := BinarySearchTree_get(_cthread_169, _method_measures_169, _residue_169, self_20, key_11)
-  _res := get_res_0  
+  _cwl_169, get_res_1 := BinarySearchTree_get(_cthread_169, _method_measures_169, _residue_169, self_20, key_11)
+  _res := get_res_1
 }
 
-method main(_cthread_176: Ref, _caller_measures_176: Seq[Measure$], _residue_176: Perm) returns (_current_wait_level_176: Perm)
-  requires _cthread_176 != null
-  requires issubtype(typeof(_cthread_176), Thread_0())
-  requires [true, perm(MustTerminate(_cthread_176)) == none && ((forperm _r_31: Ref [MustInvokeBounded(_r_31)] :: false) && ((forperm _r_31: Ref [MustInvokeUnbounded(_r_31)] :: false) && ((forperm _r_31: Ref [_r_31.MustReleaseBounded] :: false) && (forperm _r_31: Ref [_r_31.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_29: Ref [_r_29.MustReleaseBounded] :: Level(_r_29) <= _current_wait_level_176) && ((forperm _r_29: Ref [_r_29.MustReleaseUnbounded] :: Level(_r_29) <= _current_wait_level_176) && _residue_176 <= _current_wait_level_176), true]
-  ensures [true, (forperm _r_30: Ref [MustInvokeBounded(_r_30)] :: false) && ((forperm _r_30: Ref [MustInvokeUnbounded(_r_30)] :: false) && ((forperm _r_30: Ref [_r_30.MustReleaseBounded] :: false) && (forperm _r_30: Ref [_r_30.MustReleaseUnbounded] :: false)))]
+method main(_cthread_177: Ref, _caller_measures_177: Seq[Measure$], _residue_177: Perm) returns (_current_wait_level_177: Perm)
+  requires _cthread_177 != null
+  requires issubtype(typeof(_cthread_177), Thread_0())
+  requires [true, perm(MustTerminate(_cthread_177)) == none && ((forperm _r_34: Ref [MustInvokeBounded(_r_34)] :: false) && ((forperm _r_34: Ref [MustInvokeUnbounded(_r_34)] :: false) && ((forperm _r_34: Ref [_r_34.MustReleaseBounded] :: false) && (forperm _r_34: Ref [_r_34.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_32: Ref [_r_32.MustReleaseBounded] :: Level(_r_32) <= _current_wait_level_177) && ((forperm _r_32: Ref [_r_32.MustReleaseUnbounded] :: Level(_r_32) <= _current_wait_level_177) && _residue_177 <= _current_wait_level_177), true]
+  ensures [true, (forperm _r_33: Ref [MustInvokeBounded(_r_33)] :: false) && ((forperm _r_33: Ref [MustInvokeUnbounded(_r_33)] :: false) && ((forperm _r_33: Ref [_r_33.MustReleaseBounded] :: false) && (forperm _r_33: Ref [_r_33.MustReleaseUnbounded] :: false)))]
 {
-  var BinarySearchTree_res_0: Ref
-  var target_0: Ref
-  var target_1: Ref
-  var target_2: Ref
-  var target_3: Ref
-  var target_4: Ref
-  var target_5: Ref
   var module_defined_0: Bool
   var module_names_0: Set[_Name]
-  var _cwl_176: Perm
-  var _method_measures_176: Seq[Measure$]
-  _method_measures_176 := Seq[Measure$]()
+  var _cwl_177: Perm
+  var _method_measures_177: Seq[Measure$]
+  _method_measures_177 := Seq[Measure$]()
   module_defined_0 := true
   module_names_0 := Set[_Name]()
   module_names_0 := (module_names_0 union Set(_single(3106082509126931487350218591)))
@@ -1240,27 +1253,7 @@ method main(_cthread_176: Ref, _caller_measures_176: Seq[Measure$], _residue_176
   assert true
   module_names_0 := (module_names_0 union Set(_single(3978008517408099728)))
   assert true
-  module_names_0 := (module_names_0 union Set(_single(3653873535515267997)))
-  assert true && (_single(43105556396895055200390776810011481296442648898) in module_names_0)
+  module_names_0 := (module_names_0 union Set(_single(20253930663105346603001268928974853021)))
   assert true
-  BinarySearchTree_res_0 := new()
-  inhale typeof(BinarySearchTree_res_0) == BinarySearchTree()
-  inhale acc(_MaySet(BinarySearchTree_res_0, 85645922913331987206730809139411974633301625502983886526), write)
-  inhale acc(_MaySet(BinarySearchTree_res_0, 24058923725835472833998273938645017447293936874137163454), write)
-  _cwl_176 := BinarySearchTree___init__(_cthread_176, _method_measures_176, _residue_176, BinarySearchTree_res_0)
-  inhale mytree_0() == BinarySearchTree_res_0
-  module_names_0 := (module_names_0 union Set(_single(4123786645886174867)))
-  _cwl_176 := BinarySearchTree___setitem__(_cthread_176, _method_measures_176, _residue_176, _asserting(_asserting(mytree_0(), true), true && (_single(4123786645886174867) in module_names_0)), __prim__int___box__(3), str___create__(3, 6579570))
-  _cwl_176 := BinarySearchTree___setitem__(_cthread_176, _method_measures_176, _residue_176, _asserting(_asserting(mytree_0(), true), true && (_single(4123786645886174867) in module_names_0)), __prim__int___box__(4), str___create__(4, 1702194274))
-  _cwl_176 := BinarySearchTree___setitem__(_cthread_176, _method_measures_176, _residue_176, _asserting(_asserting(mytree_0(), true), true && (_single(4123786645886174867) in module_names_0)), __prim__int___box__(6), str___create__(6, 3906496828779240071))
-  _cwl_176 := BinarySearchTree___setitem__(_cthread_176, _method_measures_176, _residue_176, _asserting(_asserting(mytree_0(), true), true && (_single(4123786645886174867) in module_names_0)), __prim__int___box__(2), str___create__(2, 29793))
-  _cwl_176, target_4 := BinarySearchTree___getitem__(_cthread_176, _method_measures_176, _residue_176, _asserting(_asserting(mytree_0(), true), true && (_single(4123786645886174867) in module_names_0)), __prim__int___box__(6))
-  assert true && (_single(3978008517408099728) in module_names_0)
-  assert true
-  _cwl_176 := print_0(_cthread_176, _method_measures_176, _residue_176, target_4)
-  _cwl_176, target_5 := BinarySearchTree___getitem__(_cthread_176, _method_measures_176, _residue_176, _asserting(_asserting(mytree_0(), true), true && (_single(4123786645886174867) in module_names_0)), __prim__int___box__(2))
-  assert true && (_single(3978008517408099728) in module_names_0)
-  assert true
-  _cwl_176 := print_0(_cthread_176, _method_measures_176, _residue_176, target_5)
-  
+  module_names_0 := (module_names_0 union Set(_single(10959483636700775194164941827796800413)))
 }

@@ -35,7 +35,7 @@
 { 
   "file":"RelAcqRustARCStronger_inline.sil",
   "bound":2,
-  "entry":"new_drop_drop",
+  "entry":"new_exhale_drop",
   "sc_holds":true,
   "errors":[
     {"tag": "exhale.failed:assertion.false"},

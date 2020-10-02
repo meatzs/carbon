@@ -2,7 +2,7 @@
 { 
   "file":"iap_bst.vpr",
   "bound":5,
-  "entry":"client",
+  "entry":"client_correct",
   "sc_holds":true,
   "modular_sc":true,
   "pure_function_sc":true,
@@ -11,7 +11,7 @@
 { 
   "file":"iap_bst.vpr",
   "bound":5,
-  "entry":"client",
+  "entry":"client_error",
   "sc_holds":true,
   "modular_sc":true,
   "pure_function_sc":true,
@@ -55,7 +55,7 @@
 },
 { 
   "file":"parkinson_recell.vpr",
-  "bound":3,
+  "bound":4,
   "entry":"loop_client",
   "sc_holds":true,
   "modular_sc":true,

@@ -1055,49 +1055,6 @@ method ReCell_undo(_cthread_163: Ref, _caller_measures_163: Seq[Measure$], _resi
   
 }
 
-method main(_cthread_170: Ref, _caller_measures_170: Seq[Measure$], _residue_171: Perm) returns (_current_wait_level_170: Perm)
-  requires _cthread_170 != null
-  requires issubtype(typeof(_cthread_170), Thread_0())
-  requires [true, perm(MustTerminate(_cthread_170)) == none && ((forperm _r_36: Ref [MustInvokeBounded(_r_36)] :: false) && ((forperm _r_36: Ref [MustInvokeUnbounded(_r_36)] :: false) && ((forperm _r_36: Ref [_r_36.MustReleaseBounded] :: false) && (forperm _r_36: Ref [_r_36.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_34: Ref [_r_34.MustReleaseBounded] :: Level(_r_34) <= _current_wait_level_170) && ((forperm _r_34: Ref [_r_34.MustReleaseUnbounded] :: Level(_r_34) <= _current_wait_level_170) && _residue_171 <= _current_wait_level_170), true]
-  ensures [true, (forperm _r_35: Ref [MustInvokeBounded(_r_35)] :: false) && ((forperm _r_35: Ref [MustInvokeUnbounded(_r_35)] :: false) && ((forperm _r_35: Ref [_r_35.MustReleaseBounded] :: false) && (forperm _r_35: Ref [_r_35.MustReleaseUnbounded] :: false)))]
-{
-  var module_defined_0: Bool
-  var module_names_0: Set[_Name]
-  var _cwl_170: Perm
-  var _method_measures_170: Seq[Measure$]
-  _method_measures_170 := Seq[Measure$]()
-  module_defined_0 := true
-  module_names_0 := Set[_Name]()
-  module_names_0 := (module_names_0 union Set(_single(3106082509126931487350218591)))
-  inhale acc(__file__()._val, 99 / 100) && issubtype(typeof(__file__()._val), str()) && issubtype(typeof(__file__()._val), str())
-  module_names_0 := (module_names_0 union Set(_single(2489530350921051593165922143)))
-  inhale acc(__name__()._val, 99 / 100) && issubtype(typeof(__name__()._val), str()) && issubtype(typeof(__name__()._val), str()) && str___eq__(str___create__(8, 2489249333222104298408468319), __name__()._val)
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(3493880855485680332086796127)))
-  module_names_0 := (module_names_0 union Set(_single(3678087647271588037239147382797212313)))
-  module_names_0 := (module_names_0 union Set(_single(7628147)))
-  module_names_0 := (module_names_0 union Set(_single(1819043139)))
-  assert true
-  assert true && (_single(1819043139) in module_names_0)
-  module_names_0 := (module_names_0 union Set(_single(3493880855485680332086796127)))
-  module_names_0 := (module_names_0 union Set(_single(5598280761170530326428280167)))
-  module_names_0 := (module_names_0 union Set(_single(7628147)))
-  module_names_0 := (module_names_0 union Set(_single(1868852853)))
-  module_names_0 := (module_names_0 union Set(_single(3648512821479381678)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(10150228584323403183575128868218182301)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(10150228663551565697839466461762132637)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(17157213822511840258148345313643764366)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(17162406119370375085776875809972984462)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(5346455250768546224627740524)))
-  
-}
-
 method Iterator___next__(_cthread_149: Ref, _caller_measures_149: Seq[Measure$], _residue_149: Perm, self: Ref) returns (_current_wait_level_149: Perm, _res: Ref, _err: Ref)
   requires _cthread_149 != null
   requires Measure$check(_caller_measures_149, _cthread_149, 1)
