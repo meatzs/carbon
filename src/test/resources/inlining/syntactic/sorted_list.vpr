@@ -1,0 +1,23 @@
+field data: Seq[Int]
+
+define sorted(s)
+  forall i: Int, j: Int ::
+        0 <= i && i < j && j < |s|
+    ==> s[i] <= s[j]
+
+method insert(this: Ref, elem: Int) returns (idx: Int)
+  requires acc(this.data) && sorted(this.data)
+  ensures acc(this.data) && sorted(this.data)
+  ensures 0 <= idx && idx <= old(|this.data|)
+  ensures this.data == old(this.data)[0..idx] ++ Seq(elem) ++ old(this.data)[idx..]
+{
+  idx := 0
+ 
+  while(idx < |this.data| && this.data[idx] < elem)
+    invariant acc(this.data, 1/2)
+    invariant 0 <= idx && idx <= |this.data|
+    invariant forall i: Int :: 0 <= i && i < idx ==> this.data[i] < elem
+  { idx := idx + 1 }
+ 
+  this.data := this.data[0..idx] ++ Seq(elem) ++ this.data[idx..]
+}
