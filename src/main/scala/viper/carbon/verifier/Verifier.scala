@@ -75,6 +75,7 @@ trait Verifier {
   def replaceProgram(prog : sil.Program)
 
   def staticInlining: Option[Int]
+  def maxInl: Option[Int]
   def noCheckSC: Boolean
   def printSC: Boolean
   def simpleWFM: Boolean

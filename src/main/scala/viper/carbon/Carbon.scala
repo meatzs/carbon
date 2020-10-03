@@ -101,6 +101,12 @@ class CarbonConfig(args: Seq[String]) extends SilFrontendConfig(args, "Carbon") 
     noshort = true
   )
 
+  val maxInl = opt[Int]("maxInl",
+    descr = "Maximum number of method calls or loop iterations inlined (default: unlimited)",
+    default = None,
+    noshort = true
+  )
+
   val entry = opt[String]("entry",
     descr = "Entry point for static inlining (default: first method)",
     default = None,
