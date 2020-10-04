@@ -6,15 +6,15 @@ define K_TERM (1)
 define S_TERM (2)
 define APPLY_TERM (3)
 
-define ERROR (0)
-// Modularly verifies in 1m:40s
+define ERROR (2)
+// Modularly verifies in 1m:40s 2m:14s
 // 0: ~1m:07s (--SI 4)
 // No error
-// 1: ~50s (--SI 4)
+// 1: ~50s (--SI 4) ~1m:25s
 // [0] Unfolding term_pred(t_2.left.left, t_2.left.ghost_left_state) might fail. There might be insufficient permission to access t_2.left.left. (vstte2012_problem2.vpr@229.7)
-// 2: ~1m:04s (--SI 5 --maxInl 50)
+// 2: ~1m:04s (--SI 5 --maxInl 50) ~1m:15s
 // [0] Unfolding term_pred(t_4, state_4) might fail. There might be insufficient permission to access term_pred(t_4, state_4). (vstte2012_problem2.vpr@210.3)
-// 3: ~1m:07s (--SI 4)
+// 3: ~1m:07s (--SI 4) ~1m:23s
 // [0] Assert might fail. Assertion res != null might not hold. (vstte2012_problem2.vpr@501.3)
 
 field type: Int
@@ -80,22 +80,17 @@ predicate term_pred(t: Ref, state: Term) {
   // t != null &*& [_]t.type |-> ?type &*& type == Term.K_TERM || type == Term.S_TERM || type == Term.APPLY_TERM &*&
   t != null && acc(t.type, 1/2) && (t.type == K_TERM || t.type == S_TERM || t.type == APPLY_TERM) &&
   // type == Term.K_TERM ? state == K : 
-  ((t.type == APPLY_TERM) ==>
-  // (t.type == K_TERM ?
-    // is_K(state)
-    /*
-    true
+  (t.type == K_TERM ?
+    is_K(state)
     :
     (t.type == S_TERM ?
-      // is_S(state)
-      true
+      is_S(state)
       :
       // (t.left |-> ?first &*& t.right |-> ?second &*& first != null &*& second != null &*& [_]term(first, ?state1) &*& [_]term(second, ?state2) &*& state == apply(state1, state2)))
-      */
-      (acc(t.left) && acc(t.right) && t.left != null && t.right != null && acc(t.ghost_left_state) && acc(t.ghost_right_state) &&
-      acc(term_pred(t.left, t.ghost_left_state), 1/2) && acc(term_pred(t.right, t.ghost_right_state), 1/2))
-      // && state == apply_term(t.ghost_left_state, t.ghost_right_state)
-    )
+      acc(t.left) && acc(t.right) && t.left != null && t.right != null && acc(t.ghost_left_state) && acc(t.ghost_right_state) &&
+      acc(term_pred(t.left, t.ghost_left_state), 1/2) && acc(term_pred(t.right, t.ghost_right_state), 1/2) &&
+      state == apply_term(t.ghost_left_state, t.ghost_right_state)
+    ))
 }
 
 method createTerm(type_arg: Int, left_arg: Ref, right_arg: Ref, left_ghost: Term, right_ghost: Term) returns (this: Ref)
@@ -163,10 +158,9 @@ method do_step(t: Ref, state: Term, initial_p: Perm) returns (res: Ref, ghost: T
     //@ requires [_]term(t, ?state);
     requires acc(term_pred(t, state), initial_p) && initial_p > none
     //@ ensures result == null ? step(state) == none : [_]term(result, ?state2) &*& step(state) == some(state2);
-    // ensures res == null ? step(state) == None() : acc(term_pred(res, ghost), p / 2)
+    // ensures res == null ? step(state) == None() : acc(term_pred(res, ghost), p / 2) && step(state) == ghost
     ensures p > none && p <= initial_p
     ensures res == null ? true : acc(term_pred(res, ghost), p)
-    // && step(state) == ghost
 {
   var reduced: Ref
   var reduced_state: Term
