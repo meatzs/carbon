@@ -6,16 +6,16 @@ define K_TERM (1)
 define S_TERM (2)
 define APPLY_TERM (3)
 
-define ERROR (2)
-// Modularly verifies in 1m:40s 2m:14s
-// 0: ~1m:07s (--SI 4)
+define ERROR (0)
+// Modularly verifies in 50s
+// 0) --entry client --SI 4 / 50s / 406, 46
 // No error
-// 1: ~50s (--SI 4) ~1m:25s
+// 1) --entry client --SI 4 / 50s / 406, 46
 // [0] Unfolding term_pred(t_2.left.left, t_2.left.ghost_left_state) might fail. There might be insufficient permission to access t_2.left.left. (vstte2012_problem2.vpr@229.7)
-// 2: ~1m:04s (--SI 5 --maxInl 50) ~1m:15s
+// 2) --entry client --SI 5 --maxInl 50 / 45 s / 532, 52
 // [0] Unfolding term_pred(t_4, state_4) might fail. There might be insufficient permission to access term_pred(t_4, state_4). (vstte2012_problem2.vpr@210.3)
-// 3: ~1m:07s (--SI 4) ~1m:23s
-// [0] Assert might fail. Assertion res != null might not hold. (vstte2012_problem2.vpr@501.3)
+// 3) --entry client --SI 4 / 50s / 406, 46
+// [0] Assert might fail. There might be insufficient permission to access term_pred(res, ghost). (vstte2012_problem2.vpr@421.3)
 
 field type: Int
 field left: Ref
@@ -47,8 +47,7 @@ domain Term {
 
     axiom destruct_over_construct_apply {
     forall a: Term, b: Term :: {apply_term(a, b)}
-         get_left(apply_term(a, b)) == a
-      && get_right(apply_term(a, b)) == b
+         get_left(apply_term(a, b)) == a && get_right(apply_term(a, b)) == b
     }
 
     axiom type_of_K {type_term(K()) == type_K()}
@@ -69,13 +68,6 @@ domain Term {
   */
 }
 
-/*
-predicate term_pred(t: Ref, state: Term) {
-  t != null && term_pred_aux(t, state)
-}
-
-predicate term_pred_aux(t: Ref, state: Term) {
-*/
 predicate term_pred(t: Ref, state: Term) {
   // t != null &*& [_]t.type |-> ?type &*& type == Term.K_TERM || type == Term.S_TERM || type == Term.APPLY_TERM &*&
   t != null && acc(t.type, 1/2) && (t.type == K_TERM || t.type == S_TERM || t.type == APPLY_TERM) &&
@@ -132,7 +124,7 @@ method createApply(left_arg: Ref, right_arg: Ref, left_ghost: Term, right_ghost:
     fold acc(term_pred(left_arg, left_ghost), f1)
     f1 := none
 
-    helper()
+    helper() // Speeds up the verification by a factor of 2-3 (soundness condition check)
 
     //@ open [?f2]term(right, state2);
     var f2: Perm := perm(term_pred(right_arg, right_ghost))
@@ -187,8 +179,6 @@ method do_step(t: Ref, state: Term, initial_p: Perm) returns (res: Ref, ghost: T
 
   // unfold acc(term_pred_aux(t, state), p)
   if (t.type == K_TERM || t.type == S_TERM) {
-    // var base_case: Bool
-    // assert base_case
     res := null
     ghost := None()
   }
