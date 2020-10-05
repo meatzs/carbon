@@ -2,11 +2,7 @@
 Partial Viper encoding of https://github.com/verifast/verifast/blob/master/examples/vstte2012/problem2/problem2.java
 */
 
-define K_TERM (1)
-define S_TERM (2)
-define APPLY_TERM (3)
-
-define ERROR (0)
+define ERROR (2)
 // Modularly verifies in 50s
 // 0) --entry client --SI 4 / 50s / 406, 46
 // No error
@@ -16,6 +12,10 @@ define ERROR (0)
 // [0] Unfolding term_pred(t_4, state_4) might fail. There might be insufficient permission to access term_pred(t_4, state_4). (vstte2012_problem2.vpr@210.3)
 // 3) --entry client --SI 4 / 50s / 406, 46
 // [0] Assert might fail. There might be insufficient permission to access term_pred(res, ghost). (vstte2012_problem2.vpr@421.3)
+
+define K_TERM (1)
+define S_TERM (2)
+define APPLY_TERM (3)
 
 field type: Int
 field left: Ref
