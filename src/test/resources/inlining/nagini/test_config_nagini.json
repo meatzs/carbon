@@ -88,5 +88,88 @@
   "modular_sc":true,
   "pure_function_sc":true,
   "errors":[]
+},
+{ 
+  "file":"test_dynamic_field_creation.vpr",
+  "bound":2,
+  "entry":"client_1_1",
+  "sc_holds":true,
+  "modular_sc":false,
+  "pure_function_sc":false,
+  "errors":[]
+},
+{ 
+  "file":"test_dynamic_field_creation.vpr",
+  "bound":2,
+  "entry":"client_1_2",
+  "sc_holds":true,
+  "modular_sc":false,
+  "pure_function_sc":false,
+  "errors":[]
+},
+{ 
+  "file":"test_dynamic_field_creation.vpr",
+  "bound":2,
+  "entry":"client_2",
+  "sc_holds":true,
+  "modular_sc":false,
+  "pure_function_sc":false,
+  "errors":["some error"]
+},
+{ 
+  "file":"test_dynamic_field_creation.vpr",
+  "bound":2,
+  "entry":"client_3_1",
+  "sc_holds":true,
+  "modular_sc":false,
+  "pure_function_sc":false,
+  "errors":["some error"]
+},
+{ 
+  "file":"test_dynamic_field_creation.vpr",
+  "bound":2,
+  "entry":"client_3_2",
+  "sc_holds":true,
+  "modular_sc":false,
+  "pure_function_sc":false,
+  "errors":["some error"]
+},
+{ 
+  "file":"test_dynamic_field_creation.vpr",
+  "bound":2,
+  "entry":"client_3_3",
+  "sc_holds":true,
+  "modular_sc":false,
+  "pure_function_sc":false,
+  "errors":[]
+},
+{ 
+  "file":"test_dynamic_field_creation.vpr",
+  "bound":2,
+  "entry":"client_4",
+  "sc_holds":true,
+  "modular_sc":false,
+  "pure_function_sc":true,
+  "errors":["some error"]
+},
+{ 
+  "file":"test_dynamic_field_creation.vpr",
+  "bound":2,
+  "entry":"client_5",
+  "sc_holds":true,
+  "modular_sc":false,
+  "pure_function_sc":false,
+  "errors":["some error"]
+},
+{ 
+  "file":"test_dynamic_field_creation.vpr",
+  "bound":2,
+  "entry":"client_6",
+  "sc_holds":true,
+  "modular_sc":false,
+  "pure_function_sc":false,
+  "errors":["some error"]
 }
+
+
 ]

@@ -21,7 +21,7 @@ method main(a: Ref, b: Ref, l: Ref) returns (v1: Int, v2: Int)
 {
   v1 := read(a, b, l, 0)
   v2 := read(a, b, l, 1)
-}
+} 
 
 method main_inl(a: Ref, b: Ref, l: Ref) returns (v1: Int, v2: Int)
   requires realRef(a) && realRef(b) && realRef(l) // type information
