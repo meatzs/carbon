@@ -1,16 +1,21 @@
 /*
-
 Partial Viper encoding of https://github.com/verifast/verifast/blob/master/examples/vstte2012/problem2/problem2.java
-
-run --modularSC --printSC --z3Exe /usr/bin/z3 --boogieExe /usr/bin/boogie --print /home/thibault/test.bpl --entry main --SI 4 src/test/resources/inlining/verifast/vstte2012_problem2.vpr
---> "23" non syntactically framing blocks to check (but most of them are not reachable)
---> 1 error in 35s (assert false)
-
 */
 
 define K_TERM (1)
 define S_TERM (2)
 define APPLY_TERM (3)
+
+define ERROR (0)
+// Modularly verifies in 50s
+// 0) --entry client --SI 4 / 50s / 406, 46
+// No error
+// 1) --entry client --SI 4 / 50s / 406, 46
+// [0] Unfolding term_pred(t_2.left.left, t_2.left.ghost_left_state) might fail. There might be insufficient permission to access t_2.left.left. (vstte2012_problem2.vpr@229.7)
+// 2) --entry client --SI 5 --maxInl 50 / 45 s / 532, 52
+// [0] Unfolding term_pred(t_4, state_4) might fail. There might be insufficient permission to access term_pred(t_4, state_4). (vstte2012_problem2.vpr@210.3)
+// 3) --entry client --SI 4 / 50s / 406, 46
+// [0] Assert might fail. There might be insufficient permission to access term_pred(res, ghost). (vstte2012_problem2.vpr@421.3)
 
 field type: Int
 field left: Ref
@@ -42,8 +47,7 @@ domain Term {
 
     axiom destruct_over_construct_apply {
     forall a: Term, b: Term :: {apply_term(a, b)}
-         get_left(apply_term(a, b)) == a
-      && get_right(apply_term(a, b)) == b
+         get_left(apply_term(a, b)) == a && get_right(apply_term(a, b)) == b
     }
 
     axiom type_of_K {type_term(K()) == type_K()}
@@ -51,7 +55,6 @@ domain Term {
 
     axiom K_is_K {is_K(K())}
     axiom S_is_S {is_S(S())}
-
 
     axiom type_of_apply {
     forall a: Term, b: Term :: {apply_term(a, b)}
@@ -99,24 +102,33 @@ method createTerm(type_arg: Int, left_arg: Ref, right_arg: Ref, left_ghost: Term
     this.ghost_right_state := right_ghost
 }
 
+method helper() {
+  assert true
+}
+
 // static Term createApply(Term left, Term right)
 method createApply(left_arg: Ref, right_arg: Ref, left_ghost: Term, right_ghost: Term, p: Perm) returns (res: Ref, ghost: Term)
     //@ requires [_]term(left, ?state1) &*& [_]term(right, ?state2);
     requires acc(term_pred(left_arg, left_ghost), p)
     requires acc(term_pred(right_arg, right_ghost), p)
-    requires p > none
+    requires p > none && p <= write
     //@ ensures result != null &*& [_]term(result, apply(state1, state2));
     ensures res != null && acc(term_pred(res, ghost), p / 2)
 {
+  
     //@ open [?f1]term(left, state1);
     var f1: Perm := perm(term_pred(left_arg, left_ghost))
+    assert f1 > none
     unfold acc(term_pred(left_arg, left_ghost), f1)
     //@ close [f1]term(left, state1);
     fold acc(term_pred(left_arg, left_ghost), f1)
     f1 := none
 
+    helper() // Speeds up the verification by a factor of 2-3 (soundness condition check)
+
     //@ open [?f2]term(right, state2);
     var f2: Perm := perm(term_pred(right_arg, right_ghost))
+    assert f2 > none
     unfold acc(term_pred(right_arg, right_ghost), f2)
     //@ close [f2]term(right, state2);
     fold acc(term_pred(right_arg, right_ghost), f2)
@@ -127,34 +139,21 @@ method createApply(left_arg: Ref, right_arg: Ref, left_ghost: Term, right_ghost:
 
     //@ close [1]term(res, apply(state1, state2));
     ghost := apply_term(left_ghost, right_ghost)
+    // fold acc(term_pred_aux(res, ghost), p / 2)
     fold acc(term_pred(res, ghost), p / 2)
     // return res;
+
 }
-
-/*
-method // increase_wildcard(t: Ref, state: Term)
-  requires acc(term_pred(t, state), 1/20)
-  ensures acc(term_pred(t, state), 1/2)
-*/
-
-method duplicate_wildcard(t: Ref, state: Term, p: Perm)
-  requires acc(term_pred(t, state), p)
-  ensures acc(term_pred(t, state), p) && acc(term_pred(t, state), p)
-
-// fixpoint option<term> step(term t) {
-function step(t: Term): Term
 
 // static Term do_step(Term t)
 method do_step(t: Ref, state: Term, initial_p: Perm) returns (res: Ref, ghost: Term, p: Perm)
     //@ requires [_]term(t, ?state);
     requires acc(term_pred(t, state), initial_p) && initial_p > none
     //@ ensures result == null ? step(state) == none : [_]term(result, ?state2) &*& step(state) == some(state2);
-    // ensures res == null ? step(state) == None() : acc(term_pred(res, ghost), p / 2)
+    // ensures res == null ? step(state) == None() : acc(term_pred(res, ghost), p / 2) && step(state) == ghost
     ensures p > none && p <= initial_p
     ensures res == null ? true : acc(term_pred(res, ghost), p)
-    // && step(state) == ghost
 {
-  // assume false
   var reduced: Ref
   var reduced_state: Term
   var temp: Ref
@@ -173,17 +172,25 @@ method do_step(t: Ref, state: Term, initial_p: Perm) returns (res: Ref, ghost: T
   */
 
   unfold acc(term_pred(t, state), p)
+
+  if (ERROR == 2) {
+    reduced, reduced_state, p := do_step(t.right, t.ghost_right_state, p / 2)
+  }
+
+  // unfold acc(term_pred_aux(t, state), p)
   if (t.type == K_TERM || t.type == S_TERM) {
     res := null
     ghost := None()
   }
   else {
-    // increase_wildcard(t.left, t.ghost_left_state)
-    // duplicate_wildcard(t.left, t.ghost_left_state, p / 2)
     unfold acc(term_pred(t.left, t.ghost_left_state), p / 4)
+
+    if (ERROR == 1) {
+      unfold acc(term_pred(t.left.left, t.left.ghost_left_state), p / 16)
+    }
+
     if (t.left.type == K_TERM || t.left.type == S_TERM) {
       // Term reduced = do_step(t.right);
-      // increase_wildcard(t.right, t.ghost_right_state)
       reduced, reduced_state, p := do_step(t.right, t.ghost_right_state, p / 2)
       if (reduced == null) {
         // return null;
@@ -192,31 +199,23 @@ method do_step(t: Ref, state: Term, initial_p: Perm) returns (res: Ref, ghost: T
       }
       else {
         // return createApply(t.left, reduced);
-        // fold acc(term_pred(t.left, t.ghost_left_state), 1/2)
         res, ghost := createApply(t.left, reduced, t.ghost_left_state, reduced_state, p / 2)
         p := p / 4
       }
     }
     else {
-      // increase_wildcard(t.left.left, t.left.ghost_left_state)
-      // duplicate_wildcard(t.left.left, t.left.ghost_left_state, p / 4)
       unfold acc(term_pred(t.left.left, t.left.ghost_left_state), p / 16)
       if (t.left.left.type == K_TERM) {
-        assume false
         // Term reduced = do_step(t.left.right);
-        // increase_wildcard(t.left.right, t.left.ghost_right_state)
         reduced, reduced_state, p := do_step(t.left.right, t.left.ghost_right_state, p/16)
         if (reduced == null) {
-
           // reduced = do_step(t.right);
-          // increase_wildcard(t.right, t.ghost_right_state)
           reduced, reduced_state, p := do_step(t.right, t.ghost_right_state, p/4)
           if(reduced == null) {
             // return t.left.right;
             res := t.left.right
             ghost := t.left.ghost_right_state
             p := initial_p / 16
-            assert acc(term_pred(t.left.right, t.left.ghost_right_state), wildcard)
           }
           else {
             // return createApply(t.left, reduced);
@@ -257,15 +256,13 @@ method do_step(t: Ref, state: Term, initial_p: Perm) returns (res: Ref, ghost: T
           }
         }
         else {
-          // increase_wildcard(t.left.left.left, t.left.left.ghost_left_state)
-          // duplicate_wildcard(t.left.left.left, t.left.left.ghost_left_state, p/8)
           unfold acc(term_pred(t.left.left.left, t.left.left.ghost_left_state), p/64)
+          // unfold acc(term_pred_aux(t.left.left.left, t.left.left.ghost_left_state), p/64)
           if(t.left.left.left.type == K_TERM) {
             // Term reduced = do_step(t.left);
             reduced, reduced_state, p := do_step(t.left, t.ghost_left_state, p / 8)
             if(reduced == null) {
               // reduced = do_step(t.right);
-              // increase_wildcard(t.right, t.ghost_right_state)
               reduced, reduced_state, p := do_step(t.right, t.ghost_right_state, p / 8)
               if(reduced == null) {
                 // return null;
@@ -280,20 +277,16 @@ method do_step(t: Ref, state: Term, initial_p: Perm) returns (res: Ref, ghost: T
             }
             else {
               // return createApply(reduced, t.right);
-              // inhale acc(term_pred(t.right, t.ghost_right_state), 1/2) // TODO: It is inside reduced
               res, ghost := createApply(reduced, t.right, reduced_state, t.ghost_right_state, p / 16)
               p := p / 32
             }
           }
           else {
-            assume false
             if(t.left.left.left.type == S_TERM) {
               // Term reduced = do_step(t.left.left.right);
-              // duplicate_wildcard(t.left.left.right, t.left.left.ghost_right_state, p/8)
               reduced, reduced_state, p := do_step(t.left.left.right, t.left.left.ghost_right_state, p/64)
               if(reduced == null) {
                 // reduced = do_step(t.left.right);
-                // duplicate_wildcard(t.left.right, t.left.ghost_right_state, p/4)
                 reduced, reduced_state, p := do_step(t.left.right, t.left.ghost_right_state, p/8)             
                 if(reduced == null) {
 
@@ -335,14 +328,11 @@ method do_step(t: Ref, state: Term, initial_p: Perm) returns (res: Ref, ghost: T
               }
             }
             else { // ((((_, _), _), _))
-                                  assume false
 
               // Term reduced = do_step(t.left);
-              // duplicate_wildcard(t.left, t.ghost_left_state, p / 2)
               reduced, reduced_state, p := do_step(t.left, t.ghost_left_state, p / 8)
               if(reduced == null) {
                 // reduced = do_step(t.right);
-                // duplicate_wildcard(t.right, t.ghost_right_state, p / 2)
                 reduced, reduced_state, p := do_step(t.right, t.ghost_right_state, p / 2)
                 if(reduced == null) {
                   // return null;
@@ -371,9 +361,9 @@ method do_step(t: Ref, state: Term, initial_p: Perm) returns (res: Ref, ghost: T
 // static Term reduction(Term t)
 method reduction(t: Ref, state: Term, initial_p: Perm) returns (curr: Ref, state2: Term, p: Perm)
   //@ requires [_]term(t, ?state);
-  requires acc(term_pred(t, state), initial_p) && initial_p > none
+  requires acc(term_pred(t, state), initial_p) && initial_p > none && initial_p <= write
   //@ ensures [_]term(result, ?state2) &*& exists(?n) &*& nsteps(n, state) == state2 &*& step(state2) == none;
-  ensures acc(term_pred(curr, state2), p) && p > none
+  ensures acc(term_pred(curr, state2), p) && p > none && p <= write
 {
   //@ nat count = zero;
   // Ignored
@@ -388,7 +378,7 @@ method reduction(t: Ref, state: Term, initial_p: Perm) returns (curr: Ref, state
 
   while(newCur != null)
     //@ invariant [_]term(curr, ?state2) &*& nsteps(count, state) == state2;
-    invariant acc(term_pred(curr, state2), p) && p > none
+    invariant acc(term_pred(curr, state2), p) && p > none && p <= write
   {
     // Term newCur = do_step(curr);
     newCur, newState, p := do_step(curr, state2, p / 2)
@@ -400,30 +390,23 @@ method reduction(t: Ref, state: Term, initial_p: Perm) returns (curr: Ref, state
     //@ count = succ(count); 
     //curr = newCur;
 
-    if(newCur != null) {
+    if(newCur != null || ERROR == 3) {
       curr := newCur
       state2 := newState
     }
   }
 }
 
-method main()
+method client(r1: Ref, g1: Term, r2: Ref, g2: Term)
+  requires acc(term_pred(r1, g1)) && unfolding acc(term_pred(r1, g1)) in r1.type == K_TERM || r1.type == S_TERM
+  requires acc(term_pred(r2, g2))
 {
-    var s: Ref 
-    s := createTerm(S_TERM, null, null, empty(), empty())
-    fold term_pred(s, S())
-    var k: Ref
-    k := createTerm(K_TERM, null, null, empty(), empty())
-    fold term_pred(k, K())
-    var res: Ref
-    var ghost: Term
-    
-    // res, ghost := createApply(s, k, S(), K(), 1/2)
+  var res: Ref
+  var ghost: Term
+  res, ghost := createApply(r1, r2, g1, g2, write)
 
-    var p: Perm
-    inhale acc(term_pred(res, ghost))
-    res, ghost, p := reduction(res, ghost, write)
-    // res, ghost := do_step(res, ghost, 1/4)
+  var p: Perm
+  res, ghost, p := reduction(res, ghost, 1/2)
 
-    assert false
+  assert unfolding acc(term_pred(res, ghost), p) in res != null
 }

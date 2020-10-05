@@ -72,6 +72,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   private val axiomNamespace = verifier.freshNamespace("inlining.axiom")
 
   var current_depth = 0
+  var n_inl = 0
 
   def maxDepth: Int = verifier.staticInlining match {
     case None => 0
@@ -1107,12 +1108,12 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     val old_inside_initial_method = inside_initial_method
     inside_initial_method = false
 
-    println("inlineLoop", current_depth, cond, "length", length(w))
+    println("inlineLoop", current_depth, cond, "length", length(w), n_inl)
     val guard = translateExp(cond)
 
     val depth = maxDepth - current_depth
 
-    if (current_depth == maxDepth) {
+    if (stopInlining) {
       val cond_neg: sil.Stmt = sil.Inhale(sil.Not(cond)(cond.pos, cond.info, cond.errT))(cond.pos, cond.info, cond.errT)
       val wfm: Stmt = checkFraming(cond_neg, w, true, true)
       inside_initial_method = old_inside_initial_method
@@ -1120,6 +1121,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
     else {
       current_depth += 1
+
+      // Real inlining
+      n_inl += 1
 
       val r1 = checkFraming(body, w)
 
@@ -1145,17 +1149,24 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
+  def stopInlining(): Boolean = {
+    current_depth == maxDepth || (verifier.maxInl.isDefined && (n_inl >= verifier.maxInl.get))
+  }
+
   def inlineMethod(m: Method, args: Seq[ast.Exp], targets: Seq[ast.LocalVar]): Stmt = {
 
     val old_inside_initial_method = inside_initial_method
     inside_initial_method = false
 
-    println("inlineMethod", current_depth, m.name, "length", length(m.body.get))
-    if (current_depth == maxDepth) {
+    println("inlineMethod", current_depth, m.name, "length", length(m.body.get), n_inl)
+    if (stopInlining) {
       inside_initial_method = old_inside_initial_method
       MaybeComment("0: Cut branch (method call)", Assume(FalseLit()))
     }
     else {
+
+      // Real inlining
+      n_inl += 1
       current_depth += 1
       val other_vars: Seq[ast.LocalVar] = (m.formalArgs map (_.localVar)) ++ (m.formalReturns map (_.localVar))
 
