@@ -19,6 +19,11 @@ define ERROR (0)
 // 1) 45s
 // [0] Folding tree(id_1, Seq(n_1) ++ nodes_1) might fail. There might be insufficient permission to access ghost_list(id_1, Seq(n_1) ++ nodes_1). (composite5.vpr@302.5)
 
+// Overall
+// LOC: 5 + 2 + 13 + 10 + 2 + 18 + 10 + 24 + 17
+// Annot: 6 + 2 + 2
+
+// LOC (fields): 5
 field childrenGhostListId: Int // Ghost
 field firstChild: Ref
 field nextSibling: Ref
@@ -27,12 +32,15 @@ field parent: Ref
 // Ghost field
 field fchildren: Seq[Ref]
 
+// LOC: 2
 function dummy(): Perm
     ensures result > none && result < write
 
 // ----------------------------------------------------
 // Handling foreach
 // ----------------------------------------------------
+
+// LOC: 13
 
 function remove(l: Seq[Ref], x: Ref): Seq[Ref]
 
@@ -57,6 +65,8 @@ method foreach_fold(id: Int, nodes: Seq[Ref], node: Ref, p: Perm)
 // Ghost lists
 // ----------------------------------------------------
 
+// LOC: 10
+
 predicate ghost_list(id: Int, xs: Seq[Ref])
 
 predicate ghost_list_member_handle(id: Int, n: Ref)
@@ -77,6 +87,7 @@ method ghost_list_add(id: Int, d: Ref, ds: Seq[Ref])
 // Predicates for tree
 // ----------------------------------------------------
 
+// LOC: 2
 predicate Children(c: Ref, children: Seq[Ref]) {
     c == null ? children == Seq() : c == children[0] && acc(c.nextSibling) && Children(c.nextSibling, children[1..])
 }
@@ -88,6 +99,7 @@ predicate child(id: Int, parent_arg: Ref, c: Ref, p: Perm) {
 }
 */
 
+// LOC: 13 + 2 + 2 + 1 = 18
 // p represents a wildcard
 predicate Node(id: Int, n: Ref, p: Perm) {
     n != null &&
@@ -108,7 +120,6 @@ predicate Node(id: Int, n: Ref, p: Perm) {
     acc(ghost_list_member_handle(n.parent.childrenGhostListId, n), p)))
 }
 
-
 predicate tree(id: Int, nodes: Seq[Ref]) {
     ghost_list(id, nodes) && foreach_node(id, nodes)
 }
@@ -120,9 +131,11 @@ predicate tree_membership_fact(id: Int, n: Ref) {
 predicate tree_id(id: Int) {true}
 
 // ----------------------------------------------------
-// Helper methods for trees
+// Methods
 // ----------------------------------------------------
 
+// LOC: 10
+// Annot: 6
 method create_node(p: Ref, next: Ref) returns (n: Ref)
     ensures n != null && acc(n.childrenGhostListId, dummy())
     && ghost_list(n.childrenGhostListId, Seq()) &&
@@ -159,45 +172,12 @@ method create_node(p: Ref, next: Ref) returns (n: Ref)
     n.fchildren := Seq() // ghost
 }
 
-// struct node *create_tree()
-method create_tree() returns (n: Ref, id: Int)
-    //@ ensures tree(?id) &*& [_]tree_membership_fact(id, result);
-    ensures tree(id, Seq(n)) && acc(tree_membership_fact(id, n), dummy())
-{
-    // struct node *n = create_node(0, 0);
-    n := create_node(null, null)
-    //@ int id = create_ghost_list();
-    id := create_ghost_list()
-    //@ ghost_list_add(id, n);
-    ghost_list_add(id, n, Seq())
-    //@ close children(0, nil);
-    // fold Children(null, Seq())
-    //@ close foreach2(nil, nil, child(id, n));
-    // Ignored
-    //@ close node(id)(n);
-    fold Node(id, n, dummy())
-    //@ close foreach(nil, node(id));
-    foreach_empty(id)
-    //@ close foreach(cons(n, nil), node(id));
-    foreach_fold(id, Seq(), n, dummy())
-    //@ close tree(id);
-    fold tree(id, Seq(n))
-    //@ close tree_membership_fact(id, n);
-    fold acc(tree_membership_fact(id, n), dummy())
-    //@ leak tree_membership_fact(id, n);
-    // Ignored
-    // return n;
-    // Ignored
-}
-
-// ----------------------------------------------------
-// Important methods for trees
-// ----------------------------------------------------
-
 method helper() {assert true}
 
 // struct node *tree_add(struct node *node)
 // Ghost: id, nodes
+// LOC: 24
+// Annot: 2
 method tree_add(node: Ref, id: Int, nodes: Seq[Ref], p: Perm) returns (n: Ref)
     //@ requires tree(?id) &*& [_]tree_membership_fact(id, node);
     requires tree(id, nodes) && acc(tree_membership_fact(id, node), p) && p > none && p <= dummy()
@@ -293,6 +273,8 @@ method tree_add(node: Ref, id: Int, nodes: Seq[Ref], p: Perm) returns (n: Ref)
 
 // struct node *tree_get_parent(struct node *node)
 // Ghost: id, nodes
+// LOC: 17
+// Annot: 2
 method tree_get_parent(node: Ref, id: Int, nodes: Seq[Ref], w: Perm) returns (p: Ref)
     //@ requires tree(?id) &*& [_]tree_membership_fact(id, node);
     requires tree(id, nodes) && acc(tree_membership_fact(id, node), w) && w > none && w <= dummy()

@@ -2,7 +2,7 @@
 Partial Viper encoding of https://github.com/verifast/verifast/blob/master/examples/vstte2012/problem2/problem2.java
 */
 
-define ERROR (2)
+define ERROR (0)
 // Modularly verifies in 50s
 // 0) --entry client --SI 4 / 50s / 406, 46
 // No error
@@ -13,6 +13,10 @@ define ERROR (2)
 // 3) --entry client --SI 4 / 50s / 406, 46
 // [0] Assert might fail. There might be insufficient permission to access term_pred(res, ghost). (vstte2012_problem2.vpr@421.3)
 
+// Total LOC: 8 + 25 + 7 + 6 + 13 + 112 + 12
+// Total annot: 5 + 4 + 3 + 2 + 1
+
+// LOC: 8
 define K_TERM (1)
 define S_TERM (2)
 define APPLY_TERM (3)
@@ -24,6 +28,7 @@ field right: Ref
 field ghost_left_state: Term
 field ghost_right_state: Term
 
+// LOC: 25
 domain Term {
 
     function None(): Term
@@ -68,16 +73,13 @@ domain Term {
   */
 }
 
+// LOC: 7
 predicate term_pred(t: Ref, state: Term) {
   // t != null &*& [_]t.type |-> ?type &*& type == Term.K_TERM || type == Term.S_TERM || type == Term.APPLY_TERM &*&
   t != null && acc(t.type, 1/2) && (t.type == K_TERM || t.type == S_TERM || t.type == APPLY_TERM) &&
   // type == Term.K_TERM ? state == K : 
-  (t.type == K_TERM ?
-    is_K(state)
-    :
-    (t.type == S_TERM ?
-      is_S(state)
-      :
+  (t.type == K_TERM ? is_K(state) :
+    (t.type == S_TERM ? is_S(state) :
       // (t.left |-> ?first &*& t.right |-> ?second &*& first != null &*& second != null &*& [_]term(first, ?state1) &*& [_]term(second, ?state2) &*& state == apply(state1, state2)))
       acc(t.left) && acc(t.right) && t.left != null && t.right != null && acc(t.ghost_left_state) && acc(t.ghost_right_state) &&
       acc(term_pred(t.left, t.ghost_left_state), 1/2) && acc(term_pred(t.right, t.ghost_right_state), 1/2) &&
@@ -85,12 +87,14 @@ predicate term_pred(t: Ref, state: Term) {
     ))
 }
 
+// LOC: 6
+// Annot: 5
 method createTerm(type_arg: Int, left_arg: Ref, right_arg: Ref, left_ghost: Term, right_ghost: Term) returns (this: Ref)
-    ensures acc(this.type) && this.type == type_arg
-    ensures acc(this.left) && this.left == left_arg
-    ensures acc(this.right) && this.right == right_arg
-    ensures acc(this.ghost_left_state) && this.ghost_left_state == left_ghost
-    ensures acc(this.ghost_right_state) && this.ghost_right_state == right_ghost
+    //ensures acc(this.type) && this.type == type_arg
+    //ensures acc(this.left) && this.left == left_arg
+    //ensures acc(this.right) && this.right == right_arg
+    //ensures acc(this.ghost_left_state) && this.ghost_left_state == left_ghost
+    //ensures acc(this.ghost_right_state) && this.ghost_right_state == right_ghost
 {
     this := new(*)
     this.type := type_arg
@@ -106,14 +110,17 @@ method helper() {
   assert true
 }
 
+// LOC: 13
+// Annot: 4
 // static Term createApply(Term left, Term right)
 method createApply(left_arg: Ref, right_arg: Ref, left_ghost: Term, right_ghost: Term, p: Perm) returns (res: Ref, ghost: Term)
     //@ requires [_]term(left, ?state1) &*& [_]term(right, ?state2);
-    requires acc(term_pred(left_arg, left_ghost), p)
+    /*requires acc(term_pred(left_arg, left_ghost), p)
     requires acc(term_pred(right_arg, right_ghost), p)
     requires p > none && p <= write
     //@ ensures result != null &*& [_]term(result, apply(state1, state2));
     ensures res != null && acc(term_pred(res, ghost), p / 2)
+    */
 {
   
     //@ open [?f1]term(left, state1);
@@ -145,14 +152,16 @@ method createApply(left_arg: Ref, right_arg: Ref, left_ghost: Term, right_ghost:
 
 }
 
+// LOC: 112
+// Annot: 3
 // static Term do_step(Term t)
 method do_step(t: Ref, state: Term, initial_p: Perm) returns (res: Ref, ghost: Term, p: Perm)
     //@ requires [_]term(t, ?state);
-    requires acc(term_pred(t, state), initial_p) && initial_p > none
+   /* requires acc(term_pred(t, state), initial_p) && initial_p > none
     //@ ensures result == null ? step(state) == none : [_]term(result, ?state2) &*& step(state) == some(state2);
     // ensures res == null ? step(state) == None() : acc(term_pred(res, ghost), p / 2) && step(state) == ghost
     ensures p > none && p <= initial_p
-    ensures res == null ? true : acc(term_pred(res, ghost), p)
+    ensures res == null ? true : acc(term_pred(res, ghost), p)*/
 {
   var reduced: Ref
   var reduced_state: Term
@@ -358,12 +367,14 @@ method do_step(t: Ref, state: Term, initial_p: Perm) returns (res: Ref, ghost: T
   }
 }
 
+// LOC: 12
+// Annot: 2 + 1
 // static Term reduction(Term t)
 method reduction(t: Ref, state: Term, initial_p: Perm) returns (curr: Ref, state2: Term, p: Perm)
   //@ requires [_]term(t, ?state);
-  requires acc(term_pred(t, state), initial_p) && initial_p > none && initial_p <= write
+ /* requires acc(term_pred(t, state), initial_p) && initial_p > none && initial_p <= write
   //@ ensures [_]term(result, ?state2) &*& exists(?n) &*& nsteps(n, state) == state2 &*& step(state2) == none;
-  ensures acc(term_pred(curr, state2), p) && p > none && p <= write
+  ensures acc(term_pred(curr, state2), p) && p > none && p <= write*/
 {
   //@ nat count = zero;
   // Ignored
@@ -378,7 +389,7 @@ method reduction(t: Ref, state: Term, initial_p: Perm) returns (curr: Ref, state
 
   while(newCur != null)
     //@ invariant [_]term(curr, ?state2) &*& nsteps(count, state) == state2;
-    invariant acc(term_pred(curr, state2), p) && p > none && p <= write
+    //invariant acc(term_pred(curr, state2), p) && p > none && p <= write
   {
     // Term newCur = do_step(curr);
     newCur, newState, p := do_step(curr, state2, p / 2)
