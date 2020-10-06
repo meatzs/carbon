@@ -98,7 +98,7 @@ method pop(s1: Set[Int]) returns (s2: Set[Int], i: Int)
 // Annot: 21 + 13
 method graph_copy_rec(this: Ref, node_map: INodeMap, setOfRef: Set[Ref], node_map_image: Set[Ref], rd: Perm)
     returns (nodeCopy: Ref, res_node_map: INodeMap, res_copy_nodes: Set[Ref])
-
+/*
   requires none < rd
   requires this != null
   // Precondition about setOfRef
@@ -123,6 +123,7 @@ method graph_copy_rec(this: Ref, node_map: INodeMap, setOfRef: Set[Ref], node_ma
   ensures forall x: Ref :: x in map_domain(res_node_map) ==> lookup(res_node_map,x) in res_copy_nodes
   ensures forall x: Ref :: x in res_copy_nodes ==> acc(x.val)
   ensures forall x: Ref :: x in res_copy_nodes ==> acc(x.edges)
+  */
 {
   var i: Int // an edge index
   var S: Set[Int]
@@ -151,6 +152,7 @@ method graph_copy_rec(this: Ref, node_map: INodeMap, setOfRef: Set[Ref], node_ma
     S := edges_domain(this.edges)
 
     while (ERROR == 1 ? |S| >= 0 : |S| > 0)
+    /*
       invariant nodeCopy in res_copy_nodes
       invariant this in setOfRef
       invariant forall x: Ref :: x in setOfRef ==> acc(x.val, rd)
@@ -164,6 +166,7 @@ method graph_copy_rec(this: Ref, node_map: INodeMap, setOfRef: Set[Ref], node_ma
       invariant forall r: Ref :: r in map_domain(res_node_map) ==> lookup(res_node_map,r) in res_copy_nodes
       invariant forall r: Ref :: r in res_copy_nodes ==> acc(r.val)
       invariant forall r: Ref :: r in res_copy_nodes ==> acc(r.edges)
+      */
     {
       S, i := pop(S)
 
