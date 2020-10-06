@@ -695,8 +695,8 @@ method create_lock_unknown_order_2_client(_cthread_159: Ref, _caller_measures_15
   requires _cthread_159 != null
   requires issubtype(typeof(_cthread_159), Thread_0())
   requires [true, perm(MustTerminate(_cthread_159)) == none && ((forperm _r_7: Ref [MustInvokeBounded(_r_7)] :: false) && ((forperm _r_7: Ref [MustInvokeUnbounded(_r_7)] :: false) && ((forperm _r_7: Ref [_r_7.MustReleaseBounded] :: false) && (forperm _r_7: Ref [_r_7.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_5: Ref [_r_5.MustReleaseBounded] :: Level(_r_5) <= _current_wait_level_159) && ((forperm _r_5: Ref [_r_5.MustReleaseUnbounded] :: Level(_r_5) <= _current_wait_level_159) && _residue_159 <= _current_wait_level_159), true]
-  ensures [true, (forperm _r_6: Ref [MustInvokeBounded(_r_6)] :: false) && ((forperm _r_6: Ref [MustInvokeUnbounded(_r_6)] :: false) && ((forperm _r_6: Ref [_r_6.MustReleaseBounded] :: false) && (forperm _r_6: Ref [_r_6.MustReleaseUnbounded] :: false)))]
+//  ensures [(forperm _r_5: Ref [_r_5.MustReleaseBounded] :: Level(_r_5) <= _current_wait_level_159) && ((forperm _r_5: Ref [_r_5.MustReleaseUnbounded] :: //Level(_r_5) <= _current_wait_level_159) && _residue_159 <= _current_wait_level_159), true]
+//  ensures [true, (forperm _r_6: Ref [MustInvokeBounded(_r_6)] :: false) && ((forperm _r_6: Ref [MustInvokeUnbounded(_r_6)] :: false) && ((forperm _r_6: Ref [_r_6.MustReleaseBounded] :: false) && (forperm _r_6: Ref [_r_6.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var _cwl_159: Perm
@@ -704,7 +704,9 @@ method create_lock_unknown_order_2_client(_cthread_159: Ref, _caller_measures_15
   _method_measures_159 := Seq[Measure$]()
   _err := null
   _cwl_159 := create_lock_unknown_order_2(_cthread_159, _method_measures_159, _residue_159)
-  
+  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  exhale [(forperm _r_5: Ref [_r_5.MustReleaseBounded] :: Level(_r_5) <= _current_wait_level_159) && ((forperm _r_5: Ref [_r_5.MustReleaseUnbounded] :: Level(_r_5) <= _current_wait_level_159) && _residue_159 <= _current_wait_level_159), true]
+  exhale [true, (forperm _r_6: Ref [MustInvokeBounded(_r_6)] :: false) && ((forperm _r_6: Ref [MustInvokeUnbounded(_r_6)] :: false) && ((forperm _r_6: Ref [_r_6.MustReleaseBounded] :: false) && (forperm _r_6: Ref [_r_6.MustReleaseUnbounded] :: false)))]
 }
 
 method create_lock_below_2(_cthread_160: Ref, _caller_measures_160: Seq[Measure$], _residue_160: Perm, n: Ref) returns (_current_wait_level_160: Perm)
@@ -712,8 +714,8 @@ method create_lock_below_2(_cthread_160: Ref, _caller_measures_160: Seq[Measure$
   requires issubtype(typeof(_cthread_160), Thread_0())
   requires issubtype(typeof(n), int())
   requires [true, perm(MustTerminate(_cthread_160)) == none && ((forperm _r_14: Ref [MustInvokeBounded(_r_14)] :: false) && ((forperm _r_14: Ref [MustInvokeUnbounded(_r_14)] :: false) && ((forperm _r_14: Ref [_r_14.MustReleaseBounded] :: false) && (forperm _r_14: Ref [_r_14.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_12: Ref [_r_12.MustReleaseBounded] :: Level(_r_12) <= _current_wait_level_160) && ((forperm _r_12: Ref [_r_12.MustReleaseUnbounded] :: Level(_r_12) <= _current_wait_level_160) && _residue_160 <= _current_wait_level_160), true]
-  ensures [true, (forperm _r_13: Ref [MustInvokeBounded(_r_13)] :: false) && ((forperm _r_13: Ref [MustInvokeUnbounded(_r_13)] :: false) && ((forperm _r_13: Ref [_r_13.MustReleaseBounded] :: false) && (forperm _r_13: Ref [_r_13.MustReleaseUnbounded] :: false)))]
+//  ensures [(forperm _r_12: Ref [_r_12.MustReleaseBounded] :: Level(_r_12) <= _current_wait_level_160) && ((forperm _r_12: Ref [_r_12.MustReleaseUnbounded] //:: Level(_r_12) <= _current_wait_level_160) && _residue_160 <= _current_wait_level_160), true]
+//  ensures [true, (forperm _r_13: Ref [MustInvokeBounded(_r_13)] :: false) && ((forperm _r_13: Ref [MustInvokeUnbounded(_r_13)] :: false) && ((forperm _r_13: Ref [_r_13.MustReleaseBounded] :: false) && (forperm _r_13: Ref [_r_13.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var l1_0: Ref
@@ -817,7 +819,9 @@ method create_lock_below_2(_cthread_160: Ref, _caller_measures_160: Seq[Measure$
   // Reset MustTerminate amount to original level.
   exhale perm(MustTerminate(_cthread_160)) > none ==> acc(MustTerminate(_cthread_160), perm(MustTerminate(_cthread_160)) - _loop_original_must_terminate)
   
-  
+  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  exhale [(forperm _r_12: Ref [_r_12.MustReleaseBounded] :: Level(_r_12) <= _current_wait_level_160) && ((forperm _r_12: Ref [_r_12.MustReleaseUnbounded] :: Level(_r_12) <= _current_wait_level_160) && _residue_160 <= _current_wait_level_160), true]
+  exhale [true, (forperm _r_13: Ref [MustInvokeBounded(_r_13)] :: false) && ((forperm _r_13: Ref [MustInvokeUnbounded(_r_13)] :: false) && ((forperm _r_13: Ref [_r_13.MustReleaseBounded] :: false) && (forperm _r_13: Ref [_r_13.MustReleaseUnbounded] :: false)))]
 }
 
 method locks_creating_loop(_cthread_161: Ref, _caller_measures_161: Seq[Measure$], _residue_161: Perm, n_0: Ref) returns (_current_wait_level_161: Perm, _res: Ref)
@@ -825,11 +829,11 @@ method locks_creating_loop(_cthread_161: Ref, _caller_measures_161: Seq[Measure$
   requires issubtype(typeof(_cthread_161), Thread_0())
   requires issubtype(typeof(n_0), int())
   requires [true, perm(MustTerminate(_cthread_161)) == none && ((forperm _r_22: Ref [MustInvokeBounded(_r_22)] :: false) && ((forperm _r_22: Ref [MustInvokeUnbounded(_r_22)] :: false) && ((forperm _r_22: Ref [_r_22.MustReleaseBounded] :: false) && (forperm _r_22: Ref [_r_22.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_20: Ref [_r_20.MustReleaseBounded] :: Level(_r_20) <= _current_wait_level_161) && ((forperm _r_20: Ref [_r_20.MustReleaseUnbounded] :: Level(_r_20) <= _current_wait_level_161) && _residue_161 <= _current_wait_level_161), true]
-  ensures issubtype(typeof(_res), ObjectLock())
-  ensures [_current_wait_level_161 < Level(_res), true]
-  ensures [true, (forperm _r_21: Ref [MustInvokeBounded(_r_21)] :: false) && ((forperm _r_21: Ref [MustInvokeUnbounded(_r_21)] :: false) && ((forperm _r_21: Ref [_r_21.MustReleaseBounded] :: false) && (forperm _r_21: Ref [_r_21.MustReleaseUnbounded] :: false)))]
-  ensures [true, (forperm _r_15: Ref [_r_15.MustReleaseBounded] :: Level(_r_15) < Level(_res)) && ((forperm _r_15: Ref [_r_15.MustReleaseUnbounded] :: Level(_r_15) < Level(_res)) && _residue_161 < Level(_res))]
+//  ensures [(forperm _r_20: Ref [_r_20.MustReleaseBounded] :: Level(_r_20) <= _current_wait_level_161) && ((forperm _r_20: Ref [_r_20.MustReleaseUnbounded] //:: Level(_r_20) <= _current_wait_level_161) && _residue_161 <= _current_wait_level_161), true]
+//  ensures issubtype(typeof(_res), ObjectLock())
+//  ensures [_current_wait_level_161 < Level(_res), true]
+//  ensures [true, (forperm _r_21: Ref [MustInvokeBounded(_r_21)] :: false) && ((forperm _r_21: Ref [MustInvokeUnbounded(_r_21)] :: false) && ((forperm //_r_21: Ref [_r_21.MustReleaseBounded] :: false) && (forperm _r_21: Ref [_r_21.MustReleaseUnbounded] :: false)))]
+//  ensures [true, (forperm _r_15: Ref [_r_15.MustReleaseBounded] :: Level(_r_15) < Level(_res)) && ((forperm _r_15: Ref [_r_15.MustReleaseUnbounded] :: //Level(_r_15) < Level(_res)) && _residue_161 < Level(_res))]
 {
   var _err: Ref
   var l_0: Ref
@@ -909,7 +913,12 @@ method locks_creating_loop(_cthread_161: Ref, _caller_measures_161: Seq[Measure$
   _res := null
   _res := _checkDefined(l_0, 3170156)
   
-  
+  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  exhale [(forperm _r_20: Ref [_r_20.MustReleaseBounded] :: Level(_r_20) <= _current_wait_level_161) && ((forperm _r_20: Ref [_r_20.MustReleaseUnbounded] :: Level(_r_20) <= _current_wait_level_161) && _residue_161 <= _current_wait_level_161), true]
+  exhale issubtype(typeof(_res), ObjectLock())
+  exhale [_current_wait_level_161 < Level(_res), true]
+  exhale [true, (forperm _r_21: Ref [MustInvokeBounded(_r_21)] :: false) && ((forperm _r_21: Ref [MustInvokeUnbounded(_r_21)] :: false) && ((forperm _r_21: Ref [_r_21.MustReleaseBounded] :: false) && (forperm _r_21: Ref [_r_21.MustReleaseUnbounded] :: false)))]
+  exhale [true, (forperm _r_15: Ref [_r_15.MustReleaseBounded] :: Level(_r_15) < Level(_res)) && ((forperm _r_15: Ref [_r_15.MustReleaseUnbounded] :: Level(_r_15) < Level(_res)) && _residue_161 < Level(_res))]
 }
 
 method locks_creating_loop_error(_cthread_162: Ref, _caller_measures_162: Seq[Measure$], _residue_162: Perm, n_1: Ref) returns (_current_wait_level_162: Perm, _res: Ref)
@@ -917,9 +926,9 @@ method locks_creating_loop_error(_cthread_162: Ref, _caller_measures_162: Seq[Me
   requires issubtype(typeof(_cthread_162), Thread_0())
   requires issubtype(typeof(n_1), int())
   requires [true, perm(MustTerminate(_cthread_162)) == none && ((forperm _r_29: Ref [MustInvokeBounded(_r_29)] :: false) && ((forperm _r_29: Ref [MustInvokeUnbounded(_r_29)] :: false) && ((forperm _r_29: Ref [_r_29.MustReleaseBounded] :: false) && (forperm _r_29: Ref [_r_29.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_27: Ref [_r_27.MustReleaseBounded] :: Level(_r_27) <= _current_wait_level_162) && ((forperm _r_27: Ref [_r_27.MustReleaseUnbounded] :: Level(_r_27) <= _current_wait_level_162) && _residue_162 <= _current_wait_level_162), true]
-  ensures issubtype(typeof(_res), ObjectLock())
-  ensures [true, (forperm _r_28: Ref [MustInvokeBounded(_r_28)] :: false) && ((forperm _r_28: Ref [MustInvokeUnbounded(_r_28)] :: false) && ((forperm _r_28: Ref [_r_28.MustReleaseBounded] :: false) && (forperm _r_28: Ref [_r_28.MustReleaseUnbounded] :: false)))]
+//  ensures [(forperm _r_27: Ref [_r_27.MustReleaseBounded] :: Level(_r_27) <= _current_wait_level_162) && ((forperm _r_27: Ref [_r_27.MustReleaseUnbounded] :: Level(_r_27) <= _current_wait_level_162) && _residue_162 <= _current_wait_level_162), true]
+//  ensures issubtype(typeof(_res), ObjectLock())
+// ensures [true, (forperm _r_28: Ref [MustInvokeBounded(_r_28)] :: false) && ((forperm _r_28: Ref [MustInvokeUnbounded(_r_28)] :: false) && ((forperm _r_28: Ref [_r_28.MustReleaseBounded] :: false) && (forperm _r_28: Ref [_r_28.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var l_1: Ref
@@ -1007,7 +1016,10 @@ method locks_creating_loop_error(_cthread_162: Ref, _caller_measures_162: Seq[Me
   _res := null
   _res := _checkDefined(l_1, 3235692)
   
-  
+  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  exhale [(forperm _r_27: Ref [_r_27.MustReleaseBounded] :: Level(_r_27) <= _current_wait_level_162) && ((forperm _r_27: Ref [_r_27.MustReleaseUnbounded] :: Level(_r_27) <= _current_wait_level_162) && _residue_162 <= _current_wait_level_162), true]
+  exhale issubtype(typeof(_res), ObjectLock())
+  exhale [true, (forperm _r_28: Ref [MustInvokeBounded(_r_28)] :: false) && ((forperm _r_28: Ref [MustInvokeUnbounded(_r_28)] :: false) && ((forperm _r_28: Ref [_r_28.MustReleaseBounded] :: false) && (forperm _r_28: Ref [_r_28.MustReleaseUnbounded] :: false)))]
 }
 
 method Lock___init__(_cthread_164: Ref, _caller_measures_164: Seq[Measure$], _residue_164: Perm, self_1: Ref, locked_object: Ref, above: Ref, below: Ref) returns (_current_wait_level_164: Perm)
@@ -1060,83 +1072,3 @@ method Lock_release(_cthread_166: Ref, _caller_measures_166: Seq[Measure$], _res
   requires true
   requires [true, Measure$check(_caller_measures_166, _cthread_166, 1) || perm(MustTerminate(_cthread_166)) == none && ((forperm _r_38: Ref [MustInvokeBounded(_r_38)] :: false) && ((forperm _r_38: Ref [MustInvokeUnbounded(_r_38)] :: false) && ((forperm _r_38: Ref [_r_38.MustReleaseBounded] :: false) && (forperm _r_38: Ref [_r_38.MustReleaseUnbounded] :: false))))]
   ensures [(forperm _r_37: Ref [_r_37.MustReleaseBounded] :: Level(_r_37) <= _current_wait_level_166) && ((forperm _r_37: Ref [_r_37.MustReleaseUnbounded] :: Level(_r_37) <= _current_wait_level_166) && _residue_166 <= _current_wait_level_166), true]
-
-method main(_cthread_168: Ref, _caller_measures_168: Seq[Measure$], _residue_171: Perm) returns (_current_wait_level_168: Perm)
-  requires _cthread_168 != null
-  requires issubtype(typeof(_cthread_168), Thread_0())
-  requires [true, perm(MustTerminate(_cthread_168)) == none && ((forperm _r_41: Ref [MustInvokeBounded(_r_41)] :: false) && ((forperm _r_41: Ref [MustInvokeUnbounded(_r_41)] :: false) && ((forperm _r_41: Ref [_r_41.MustReleaseBounded] :: false) && (forperm _r_41: Ref [_r_41.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_39: Ref [_r_39.MustReleaseBounded] :: Level(_r_39) <= _current_wait_level_168) && ((forperm _r_39: Ref [_r_39.MustReleaseUnbounded] :: Level(_r_39) <= _current_wait_level_168) && _residue_171 <= _current_wait_level_168), true]
-  ensures [true, (forperm _r_40: Ref [MustInvokeBounded(_r_40)] :: false) && ((forperm _r_40: Ref [MustInvokeUnbounded(_r_40)] :: false) && ((forperm _r_40: Ref [_r_40.MustReleaseBounded] :: false) && (forperm _r_40: Ref [_r_40.MustReleaseUnbounded] :: false)))]
-{
-  var module_defined_0: Bool
-  var module_names_0: Set[_Name]
-  var module_defined_1: Bool
-  var module_names_1: Set[_Name]
-  var _cwl_168: Perm
-  var _method_measures_168: Seq[Measure$]
-  _method_measures_168 := Seq[Measure$]()
-  module_defined_0 := true
-  module_names_0 := Set[_Name]()
-  module_names_0 := (module_names_0 union Set(_single(3106082509126931487350218591)))
-  inhale acc(__file__()._val, 99 / 100) && issubtype(typeof(__file__()._val), str()) && issubtype(typeof(__file__()._val), str())
-  module_names_0 := (module_names_0 union Set(_single(2489530350921051593165922143)))
-  inhale acc(__name__()._val, 99 / 100) && issubtype(typeof(__name__()._val), str()) && issubtype(typeof(__name__()._val), str()) && str___eq__(str___create__(8, 2489249333222104298408468319), __name__()._val)
-  module_defined_1 := false
-  module_names_1 := Set[_Name]()
-  module_names_1 := (module_names_1 union Set(_single(3106082509126931487350218591)))
-  inhale acc(__file___0()._val, 99 / 100) && issubtype(typeof(__file___0()._val), str()) && issubtype(typeof(__file___0()._val), str())
-  module_names_1 := (module_names_1 union Set(_single(2489530350921051593165922143)))
-  inhale acc(__name___0()._val, 99 / 100) && issubtype(typeof(__name___0()._val), str()) && issubtype(typeof(__name___0()._val), str()) && !str___eq__(str___create__(8, 2489249333222104298408468319), __name___0()._val)
-  module_names_0 := (module_names_0 union Set(_single(6513473)))
-  module_names_0 := (module_names_0 union Set(_single(3655284702854286527)))
-  module_names_0 := (module_names_0 union Set(_single(4814323939045640847723228745)))
-  module_names_0 := (module_names_0 union Set(_single(3939413879042314935)))
-  module_names_0 := (module_names_0 union Set(_single(5969745018335918569738826320)))
-  module_names_0 := (module_names_0 union Set(_single(7136376649266381199951095122)))
-  module_names_0 := (module_names_0 union Set(_single(4264095844347449787)))
-  module_names_0 := (module_names_0 union Set(_single(4231737769045301934)))
-  module_names_0 := (module_names_0 union Set(_single(4659879962334230944322642242)))
-  if (!module_defined_1) {
-    module_defined_1 := true
-    module_names_1 := (module_names_1 union Set(_single(3682427259782798009)))
-    module_names_1 := (module_names_1 union Set(_single(5123216512802524336881954895)))
-    module_names_1 := (module_names_1 union Set(_single(3686932966091490988)))
-    module_names_1 := (module_names_1 union Set(_single(11116006324067352974226974112924930237)))
-    module_names_1 := (module_names_1 union Set(_single(4264095844347449787)))
-    module_names_1 := (module_names_1 union Set(_single(3939413879042314935)))
-    module_names_1 := (module_names_1 union Set(_single(7827276)))
-    module_names_1 := (module_names_1 union Set(_single(3584533797388877637428408140)))
-    module_names_1 := (module_names_1 union Set(_single(5969745018335918569738826320)))
-    module_names_1 := (module_names_1 union Set(_single(1701999952)))
-    module_names_1 := (module_names_1 union Set(_single(7136376649266381199951095122)))
-    module_names_1 := (module_names_1 union Set(_single(4659879962334230944322642242)))
-    module_names_1 := (module_names_1 union Set(_single(3655571673241459380)))
-    module_names_1 := (module_names_1 union Set(_single(5020080360567004017642927437)))
-    module_names_1 := (module_names_1 union Set(_single(5460990052674857173734662115181759155)))
-    module_names_1 := (module_names_1 union Set(_single(4900434677047853433511043415)))
-    assert true && (_single(4659879962334230944322642242) in module_names_1) && (_single(4659879962334230944322642242) in module_names_1)
-    assert true && (_single(4659879962334230944322642242) in module_names_1)
-    module_names_1 := (module_names_1 union Set(_single(3493880855485680332086796127)))
-    module_names_1 := (module_names_1 union Set(_single(4196433967405385533277627751)))
-    module_names_1 := (module_names_1 union Set(_single(4259881987508968607)))
-    module_names_1 := (module_names_1 union Set(_single(3682719749203270286)))
-    module_names_1 := (module_names_1 union Set(_single(1801678668)))
-  }
-  assert (_single(1801678668) in module_names_1)
-  module_names_0 := (module_names_0 union Set(_single(1801678668)))
-  assert true
-  assert true && (_single(1801678668) in module_names_0)
-  module_names_0 := (module_names_0 union Set(_single(5262747629716623330057544271)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(150119352953993494939161337485001701648748136398770455478427546211)))
-  assert true && (_single(5262747629716623330057544271) in module_names_0)
-  module_names_0 := (module_names_0 union Set(_single(13586318875718772912897076684666411662)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(610092799548089239471195152242170490503296183115950131440596125892579270906872164963)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(19394578997993487114314110098430474921728897635)))
-  assert true && (_single(5262747629716623330057544271) in module_names_0)
-  module_names_0 := (module_names_0 union Set(_single(34251017173995639779597610489782174614861082476)))
-  assert true && (_single(5262747629716623330057544271) in module_names_0)
-  module_names_0 := (module_names_0 union Set(_single(102511790172638891652785942203889897979427645073012477295595843436)))
-}
