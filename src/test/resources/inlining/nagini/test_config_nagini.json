@@ -169,7 +169,41 @@
   "modular_sc":false,
   "pure_function_sc":false,
   "errors":["some error"]
+},
+{ 
+  "file":"test_waitlevels_custom.vpr",
+  "bound":2,
+  "entry":"create_lock_unknown_order_2_client",
+  "sc_holds":true,
+  "modular_sc":false,
+  "pure_function_sc":true,
+  "errors":["some error"]
+},
+{ 
+  "file":"test_waitlevels_custom.vpr",
+  "bound":4,
+  "entry":"create_lock_below_2",
+  "sc_holds":true,
+  "modular_sc":false,
+  "pure_function_sc":true,
+  "errors":[]
+},
+{ 
+  "file":"test_waitlevels_custom.vpr",
+  "bound":4,
+  "entry":"locks_creating_loop",
+  "sc_holds":true,
+  "modular_sc":false,
+  "pure_function_sc":true,
+  "errors":[]
+},
+{ 
+  "file":"test_waitlevels_custom.vpr",
+  "bound":4,
+  "entry":"locks_creating_loop_error",
+  "sc_holds":true,
+  "modular_sc":false,
+  "pure_function_sc":true,
+  "errors":["some error"]
 }
-
-
 ]
