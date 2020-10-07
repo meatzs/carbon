@@ -1,3 +1,6 @@
+// Partial encoding of https://github.com/wies/grasshopper/blob/master/tests/spl/recursive_defs/bstree.spl
+// --SI 1 --entry remove --> unsound and doesn't satisfy SC
+
 field left: Ref
 field right: Ref
 field data: Int
