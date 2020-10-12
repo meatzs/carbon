@@ -93,6 +93,29 @@ void new_lock_A(int *l)
     new_lock(l);
 }
 
+void client_1(int *l)
+    //@ requires *l |-> _ &*& A();
+    //@ ensures Lock(l, A);
+{
+    new_lock_A(l);
+}
+
+void client_1_inlined(int *l)
+    //@ requires *l |-> _ &*& A();
+    //@ ensures Lock(l, A);
+{
+    int *lock = l;
+    // Since the precondition of new_lock initializes the ghost variable J_1,
+    // we have to add this assertion as part of inlining
+    //@ assert exists<predicate()>(?J);
+    
+    //@ open exists(_);
+    *lock = 0;
+    //@ close lock_internal_inv(J)(0);
+    //@ convert_to_atomic_rmw(lock, lock_internal_inv(J));
+    //@ close Lock(lock, J);
+}
+
 void new_lock_B(int *l)
     //@ requires B() &*& exists<predicate()>(B) &*& *l |-> _;
     //@ ensures Lock(l, B);
@@ -100,7 +123,7 @@ void new_lock_B(int *l)
     new_lock(l);
 }
 
-void client(int *l1, int *l2)
+void client_2(int *l1, int *l2)
     //@ requires *l1 |-> _ &*& *l2 |-> _ &*& A() &*& B();
     //@ ensures Lock(l1, A) &*& Lock(l2, B);
 {
@@ -110,7 +133,7 @@ void client(int *l1, int *l2)
     new_lock_B(l2);
 }
 
-void client_inlined(int *l1, int *l2)
+void client_2_inlined(int *l1, int *l2)
     //@ requires *l1 |-> _ &*& *l2 |-> _ &*& A() &*& B();
     //@ ensures Lock(l1, A) &*& Lock(l2, B);
 {
