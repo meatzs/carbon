@@ -211,7 +211,7 @@ method new_clone() {
 }
 
 //soundness condition holds
-method new_clone_drop_loop() {
+method new_clone_simple_drop_loop() {
   var data: Ref
   var count: Ref
   var ghost: Ref
@@ -234,7 +234,7 @@ method new_clone_drop_loop() {
 }
 
 //soundness condition holds
-method new_clone_drop_loop_error() {
+method new_clone_simple_drop_loop_error() {
   var data: Ref
   var count: Ref
   var ghost: Ref
@@ -254,7 +254,7 @@ method new_clone_drop_loop_error() {
     i := i - 1
   }
 
-  //we expect a fundamental error ehre
+  //we expect a fundamental error here
   drop(data, count, ghost)
 }
 

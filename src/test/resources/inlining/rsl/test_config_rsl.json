@@ -2,7 +2,7 @@
 { 
   "file":"RelAcqRustARCStronger_inline.sil",
   "bound":2,
-  "entry":"new_clone_drop_loop",
+  "entry":"new_clone_simple_drop_loop",
   "sc_holds":true,
   "errors":[]
 },
@@ -52,7 +52,7 @@
 { 
   "file":"RelAcqRustARCStronger_inline.sil",
   "bound":2,
-  "entry":"new_clone_drop_loop_error",
+  "entry":"new_clone_simple_drop_loop_error",
   "sc_holds":true,
   "errors":[
     {"tag": "exhale.failed:assertion.false"},

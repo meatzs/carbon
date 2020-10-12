@@ -1,3 +1,9 @@
+// Total
+// LOC: 2 + 18 + 18 + 24 + 4
+// Annot: 21 + 13
+
+define ERROR (2)
+
 field val: Int
 field edges: IEdges
 
@@ -82,9 +88,17 @@ domain INodeMap {
   }
 }
 
+/* Non-deterministically remove an int from s1, yielding an updated s2 and the removed int i */
+method pop(s1: Set[Int]) returns (s2: Set[Int], i: Int)
+  requires 0 < |s1|
+  ensures i in s1
+  ensures  s2 == s1 setminus Set(i)
+
+// LOC: 24
+// Annot: 21 + 13
 method graph_copy_rec(this: Ref, node_map: INodeMap, setOfRef: Set[Ref], node_map_image: Set[Ref], rd: Perm)
     returns (nodeCopy: Ref, res_node_map: INodeMap, res_copy_nodes: Set[Ref])
-
+/*
   requires none < rd
   requires this != null
   // Precondition about setOfRef
@@ -109,6 +123,7 @@ method graph_copy_rec(this: Ref, node_map: INodeMap, setOfRef: Set[Ref], node_ma
   ensures forall x: Ref :: x in map_domain(res_node_map) ==> lookup(res_node_map,x) in res_copy_nodes
   ensures forall x: Ref :: x in res_copy_nodes ==> acc(x.val)
   ensures forall x: Ref :: x in res_copy_nodes ==> acc(x.edges)
+  */
 {
   var i: Int // an edge index
   var S: Set[Int]
@@ -136,7 +151,8 @@ method graph_copy_rec(this: Ref, node_map: INodeMap, setOfRef: Set[Ref], node_ma
 
     S := edges_domain(this.edges)
 
-    while (|S| > 0)
+    while (ERROR == 1 ? |S| >= 0 : |S| > 0)
+    /*
       invariant nodeCopy in res_copy_nodes
       invariant this in setOfRef
       invariant forall x: Ref :: x in setOfRef ==> acc(x.val, rd)
@@ -150,6 +166,7 @@ method graph_copy_rec(this: Ref, node_map: INodeMap, setOfRef: Set[Ref], node_ma
       invariant forall r: Ref :: r in map_domain(res_node_map) ==> lookup(res_node_map,r) in res_copy_nodes
       invariant forall r: Ref :: r in res_copy_nodes ==> acc(r.val)
       invariant forall r: Ref :: r in res_copy_nodes ==> acc(r.edges)
+      */
     {
       S, i := pop(S)
 
@@ -157,7 +174,9 @@ method graph_copy_rec(this: Ref, node_map: INodeMap, setOfRef: Set[Ref], node_ma
       var newResultMap: INodeMap
       var nodeForId: Ref
 
-      nodeForId := edge_lookup(this.edges, i)
+      if (ERROR != 2) {
+        nodeForId := edge_lookup(this.edges, i)
+      }
 
       newNode, res_node_map, res_copy_nodes := graph_copy_rec(nodeForId, res_node_map, setOfRef, res_copy_nodes, rd/2)
 
@@ -166,9 +185,18 @@ method graph_copy_rec(this: Ref, node_map: INodeMap, setOfRef: Set[Ref], node_ma
   }
 }
 
-/* Non-deterministically remove an int from s1, yielding an updated s2 and the removed int i */
-method pop(s1: Set[Int]) returns (s2: Set[Int], i: Int)
-  requires 0 < |s1|
-  ensures i in s1
-  ensures  s2 == s1 setminus Set(i)
-{ assume false /* Effectively an unimplemented helper method */ }
+method client(this: Ref, setOfRef: Set[Ref])
+  requires this in setOfRef
+  requires forall x: Ref :: x in setOfRef ==> acc(x.val, 1/2)
+  requires forall x: Ref :: x in setOfRef ==> acc(x.edges, 1/2)
+  requires forall x: Ref, i: Int :: x in setOfRef && i in edges_domain(x.edges) ==> edge_lookup(x.edges, i) in setOfRef
+{
+  var nodeCopy: Ref
+  var res_node_map: INodeMap
+  var res_copy_nodes: Set[Ref]
+  
+  nodeCopy, res_node_map, res_copy_nodes := graph_copy_rec(this, empty_map(), setOfRef, Set(), 1/2)
+
+  assert |setOfRef intersection res_copy_nodes| == 0
+  assert forall x: Ref :: x in map_domain(res_node_map) ==> lookup(res_node_map,x) in res_copy_nodes
+}

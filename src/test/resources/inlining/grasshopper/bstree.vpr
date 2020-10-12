@@ -1,0 +1,105 @@
+// Partial encoding of https://github.com/wies/grasshopper/blob/master/tests/spl/recursive_defs/bstree.spl
+// --SI 1 --entry remove --> unsound and doesn't satisfy SC
+
+field left: Ref
+field right: Ref
+field data: Int
+
+define emp_field(f) (forperm x: Ref [x.f] :: false)
+define emp_tree (forperm x: Ref [tree(x)] :: false)
+define emp (emp_tree && emp_field(left) && emp_field(right) && emp_field(data))
+
+define accf(r) (acc(r.left) && acc(r.right) && acc(r.data))
+
+predicate tree(x: Ref)
+{
+    x != null ==> acc(x.left) && acc(x.right) && acc(x.data) && tree(x.left) && tree(x.right)
+}
+
+method extract_max(root: Ref) returns (others: Ref, max: Ref)
+  requires tree(root) && root != null;
+  ensures tree(others) && acc(max.left) && acc(max.right) && acc(max.data);
+  ensures max.right == null
+{
+    unfold tree(root)
+    if (root.right != null) {
+        var c: Ref
+        var m: Ref
+        c, m := extract_max(root.right); 
+        root.right := c;
+        // return root, m;
+        others := root
+        max := m
+        fold tree(root)
+    }
+    else {
+        var c: Ref;
+        c := root.left;
+        // unfold(root);
+        // return c, root;
+        others := c
+        max := root
+    }
+}
+
+method remove(root: Ref, value: Int) returns (res: Ref)
+    requires tree(root)
+    ensures tree(res)
+{
+    unfold tree(root)
+    if (root == null) {
+        res := null
+        fold tree(res)
+    }
+    elseif (root.data == value) {
+        if (root.left == null && root.right == null) {
+            exhale accf(root)
+            res := null
+            fold tree(res)
+        }
+        elseif (root.left != null && root.right == null) {
+            res := root.left
+            var rl: Ref := root.left
+            var rr: Ref := root.right
+            exhale accf(root)
+            // assert tree(root.left) &*& tree(root.right);
+            assert tree(rl) && tree(rr) && emp
+        }
+        elseif (root.left == null && root.right != null) {
+            res := root.right
+            var rl: Ref := root.left
+            var rr: Ref := root.right
+            exhale accf(root)
+            // assert tree(root.left) &*& tree(root.right);
+            assert tree(rl) && tree(rr) && emp
+        }
+        else {
+            var l: Ref
+            var m: Ref
+            l, m := extract_max(root.left);
+            m.left := l
+            m.right := root.right
+            var rr: Ref := root.right
+            exhale accf(root)
+            assert accf(m) && tree(l) && tree(rr) && emp
+            res := m
+            fold tree(res)
+        }
+    }
+    elseif (root.data > value) {
+        var r: Ref
+        r := remove(root.left, value)
+        root.left := r
+        // assert acc(root) &*& tree(root.left) &*& tree(root.right);
+        assert accf(root) && tree(root.left) && tree(root.right) && emp
+        res := root
+        fold tree(res)
+    }
+    else {
+        var r: Ref
+        r := remove(root.right, value)
+        root.right := r
+        res := root
+        fold tree(res)
+    }
+}

@@ -1,3 +1,5 @@
+define ERROR (0)
+
 field changed: Bool
 field l: Ref
 field held: Int
@@ -22,6 +24,8 @@ method test(this: Ref, e1: Int, e2: Int)
          sorted(this.l.data) &&
          (old[acq](this.l.data) == this.l.data || this.changed)
   exhale acc(this.held)
+
+  assert (forperm r: Ref [r.held] :: false)
 }
 
 /***** Code from Figure 2 *****/
@@ -47,5 +51,18 @@ method insert(this: Ref, elem: Int) returns (idx: Int)
     invariant forall i: Int :: 0 <= i && i < idx ==> this.data[i] < elem
   { idx := idx + 1 }
  
-  this.data := this.data[0..idx] ++ Seq(elem) ++ this.data[idx..]
+  if(ERROR == 0) {
+    this.data := this.data[0..idx] ++ Seq(elem) ++ this.data[idx..]
+  } else {
+    //off-by-one error (idx+1 instead of idx)
+    this.data := this.data[0..idx] ++ Seq(elem) ++ this.data[idx+1..]
+  }
+}
+
+method client(this: Ref, elem: Int) 
+  requires acc(this.data) && sorted(this.data)
+{
+  var idx: Int
+  idx := insert(this, elem)
+  assert this.data == old(this.data)[0..idx] ++ Seq(elem) ++ old(this.data)[idx..]
 }

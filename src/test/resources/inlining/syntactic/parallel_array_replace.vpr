@@ -1,3 +1,5 @@
+define ERROR (1)
+
 define pre1(a, l, r) 0 <= l && l < r && r <= len(a)
 define pre2(a, l, r) forall i: Int :: l <= i && i < r ==> acc(loc(a, i).val)
 define post1(a, l, r) pre2(a, l, r)
@@ -11,8 +13,8 @@ method Replace(a: Array, left: Int, right: Int, from: Int, to: Int)
   requires pre2(a, left, right)
   ensures  post1(a, left, right)
   ensures  post2(a, left, right)
-{
-  if (right - left <= 1) {
+{   
+  if ( (ERROR != 1 && (right - left <= 1)) || (ERROR == 1 && (right - left == 0)) ) {
     if(loc(a, left).val == from) {
       loc(a, left).val := to
     }

@@ -1,6 +1,7 @@
 /*****************************************************************
  * List Nodes
  *****************************************************************/
+define ERROR (0)
 
 field data: Int
 field next: Ref
@@ -108,12 +109,12 @@ method insert(this: Ref, elem: Int) returns (index: Int)
   index := 0
 
   unfold acc(List(this))
-
+  
   if(this.head != null) {
     unfold acc(lseg(this.head, null))
   }
 
-  if(this.head == null || elem <= this.head.data) {
+  if((this.head == null) || (ERROR != 1 && elem <= this.head.data)) {
     tmp := new(*)
     tmp.data := elem
     tmp.next := this.head
@@ -154,6 +155,7 @@ method insert(this: Ref, elem: Int) returns (index: Int)
     fold acc(lseg(ptr.next, null))
 
     // now we need to concat the remaining segments
+    /** fundamental error when ERROR=1 */
     fold acc(lseg(ptr, null))
     concat(this.head, ptr, null)
   }
@@ -207,5 +209,18 @@ label acq
 
   /* Release lock */
   exhale    acc(List(lock)) && acc(lock.held) && acc(lock.changed)
-         && (old[acq](content(lock)) == content(lock) || lock.changed)
+  //&& Incompleteness of tool: (old[acq](content(lock)) == content(lock) || lock.changed)
+
+  exhale [true, forperm r: Ref [r.held] :: false] 
+}
+
+
+method concat_client(l1: Ref, l2:Ref, l3:Ref ) returns (res: Int)
+  requires acc(lseg(l1,l2)) && acc(lseg(l2,l3))
+  //requires l3 != null ==> acc(l3.next, 1/2)
+  //requires 0 < |contentNodes(l1, l2)| && 0 < |contentNodes(l2, l3)| ==>
+  //           contentNodes(l1, l2)[|contentNodes(l1, l2)|-1] <= contentNodes(l2, l3)[0]
+  // half permission to l3.end missing
+{
+  concat(l1,l2,l3)
 }
