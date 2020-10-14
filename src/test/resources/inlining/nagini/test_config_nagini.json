@@ -11,6 +11,15 @@
 { 
   "file":"cav_example.vpr",
   "bound":3,
+  "entry":"order_tickets_client_1",
+  "sc_holds":true,
+  "modular_sc":true,
+  "pure_function_sc":true,
+  "errors":[{"tag": "if.failed:insufficient.permission"}]
+},
+{ 
+  "file":"cav_example.vpr",
+  "bound":3,
   "entry":"order_tickets_client_2",
   "sc_holds":true,
   "modular_sc":true,
@@ -88,5 +97,32 @@
   "modular_sc":true,
   "pure_function_sc":true,
   "errors":[{"tag": "assert.failed:assertion.false"}]
+},
+{ 
+  "file":"watchdog.vpr",
+  "bound":2,
+  "entry":"main",
+  "sc_holds":true,
+  "modular_sc":true,
+  "pure_function_sc":true,
+  "errors":[]
+},
+{ 
+  "file":"watchdog_error.vpr",
+  "bound":2,
+  "entry":"main",
+  "sc_holds":true,
+  "modular_sc":true,
+  "pure_function_sc":true,
+  "errors":[{"tag": "fold.failed:assertion.false"}]
+},
+{ 
+  "file":"loopsAndRelease.vpr",
+  "bound":10,
+  "entry":"f_leak",
+  "sc_holds":false,
+  "modular_sc":true,
+  "pure_function_sc":true,
+  "errors":[]
 }
 ]

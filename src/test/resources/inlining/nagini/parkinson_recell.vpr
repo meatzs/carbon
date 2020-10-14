@@ -670,15 +670,18 @@ method cell_client_1(_cthread_165: Ref, _caller_measures_165: Seq[Measure$], _re
   assert object___eq__(Cell_get_contents(_checkDefined(c, 99)), __prim__int___box__(4))
   _cwl_165 := Cell_set(_cthread_165, _method_measures_165, _residue_165, _checkDefined(c, 99), __prim__bool___box__(true))
   assert object___bool__(Cell_get_contents(_checkDefined(c, 99)))
-  
+
+  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  exhale [(forperm _r: Ref [_r.MustReleaseBounded] :: Level(_r) <= _current_wait_level_165) && ((forperm _r: Ref [_r.MustReleaseUnbounded] :: Level(_r) <= _current_wait_level_165) && _residue_165 <= _current_wait_level_165), true]
+  exhale [true, (forperm _r_0: Ref [MustInvokeBounded(_r_0)] :: false) && ((forperm _r_0: Ref [MustInvokeUnbounded(_r_0)] :: false) && ((forperm _r_0: Ref [_r_0.MustReleaseBounded] :: false) && (forperm _r_0: Ref [_r_0.MustReleaseUnbounded] :: false)))]
 }
 
 method cell_client_2(_cthread_166: Ref, _caller_measures_166: Seq[Measure$], _residue_166: Perm) returns (_current_wait_level_166: Perm)
   requires _cthread_166 != null
   requires issubtype(typeof(_cthread_166), Thread_0())
   requires [true, perm(MustTerminate(_cthread_166)) == none && ((forperm _r_4: Ref [MustInvokeBounded(_r_4)] :: false) && ((forperm _r_4: Ref [MustInvokeUnbounded(_r_4)] :: false) && ((forperm _r_4: Ref [_r_4.MustReleaseBounded] :: false) && (forperm _r_4: Ref [_r_4.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_2: Ref [_r_2.MustReleaseBounded] :: Level(_r_2) <= _current_wait_level_166) && ((forperm _r_2: Ref [_r_2.MustReleaseUnbounded] :: Level(_r_2) <= _current_wait_level_166) && _residue_166 <= _current_wait_level_166), true]
-  ensures [true, (forperm _r_3: Ref [MustInvokeBounded(_r_3)] :: false) && ((forperm _r_3: Ref [MustInvokeUnbounded(_r_3)] :: false) && ((forperm _r_3: Ref [_r_3.MustReleaseBounded] :: false) && (forperm _r_3: Ref [_r_3.MustReleaseUnbounded] :: false)))]
+  //ensures [(forperm _r_2: Ref [_r_2.MustReleaseBounded] :: Level(_r_2) <= _current_wait_level_166) && ((forperm _r_2: Ref [_r_2.MustReleaseUnbounded] :: Level(_r_2) <= _current_wait_level_166) && _residue_166 <= _current_wait_level_166), true]
+  //ensures [true, (forperm _r_3: Ref [MustInvokeBounded(_r_3)] :: false) && ((forperm _r_3: Ref [MustInvokeUnbounded(_r_3)] :: false) && ((forperm _r_3: Ref [_r_3.MustReleaseBounded] :: false) && (forperm _r_3: Ref [_r_3.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var c_0: Ref
@@ -696,14 +699,17 @@ method cell_client_2(_cthread_166: Ref, _caller_measures_166: Seq[Measure$], _re
   _cwl_166 := Cell_set(_cthread_166, _method_measures_166, _residue_166, _checkDefined(c_0, 3170147), __prim__int___box__(4))
   assert object___eq__(Cell_get_contents(_checkDefined(c_0, 3170147)), __prim__int___box__(5))
   
+  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  exhale [(forperm _r_2: Ref [_r_2.MustReleaseBounded] :: Level(_r_2) <= _current_wait_level_166) && ((forperm _r_2: Ref [_r_2.MustReleaseUnbounded] :: Level(_r_2) <= _current_wait_level_166) && _residue_166 <= _current_wait_level_166), true]
+  exhale [true, (forperm _r_3: Ref [MustInvokeBounded(_r_3)] :: false) && ((forperm _r_3: Ref [MustInvokeUnbounded(_r_3)] :: false) && ((forperm _r_3: Ref [_r_3.MustReleaseBounded] :: false) && (forperm _r_3: Ref [_r_3.MustReleaseUnbounded] :: false)))]
 }
 
 method recell_client_1(_cthread_167: Ref, _caller_measures_167: Seq[Measure$], _residue_167: Perm) returns (_current_wait_level_167: Perm)
   requires _cthread_167 != null
   requires issubtype(typeof(_cthread_167), Thread_0())
   requires [true, perm(MustTerminate(_cthread_167)) == none && ((forperm _r_7: Ref [MustInvokeBounded(_r_7)] :: false) && ((forperm _r_7: Ref [MustInvokeUnbounded(_r_7)] :: false) && ((forperm _r_7: Ref [_r_7.MustReleaseBounded] :: false) && (forperm _r_7: Ref [_r_7.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_5: Ref [_r_5.MustReleaseBounded] :: Level(_r_5) <= _current_wait_level_167) && ((forperm _r_5: Ref [_r_5.MustReleaseUnbounded] :: Level(_r_5) <= _current_wait_level_167) && _residue_167 <= _current_wait_level_167), true]
-  ensures [true, (forperm _r_6: Ref [MustInvokeBounded(_r_6)] :: false) && ((forperm _r_6: Ref [MustInvokeUnbounded(_r_6)] :: false) && ((forperm _r_6: Ref [_r_6.MustReleaseBounded] :: false) && (forperm _r_6: Ref [_r_6.MustReleaseUnbounded] :: false)))]
+//  ensures [(forperm _r_5: Ref [_r_5.MustReleaseBounded] :: Level(_r_5) <= _current_wait_level_167) && ((forperm _r_5: Ref [_r_5.MustReleaseUnbounded] :: Level(_r_5) <= _current_wait_level_167) && _residue_167 <= _current_wait_level_167), true]
+//  ensures [true, (forperm _r_6: Ref [MustInvokeBounded(_r_6)] :: false) && ((forperm _r_6: Ref [MustInvokeUnbounded(_r_6)] :: false) && ((forperm _r_6: Ref [_r_6.MustReleaseBounded] :: false) && (forperm _r_6: Ref [_r_6.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var c_1: Ref
@@ -728,14 +734,17 @@ method recell_client_1(_cthread_167: Ref, _caller_measures_167: Seq[Measure$], _
   _cwl_167 := ReCell_undo(_cthread_167, _method_measures_167, _residue_167, _checkDefined(c_1, 3235683))
   assert object___eq__(Cell_get_contents(_checkDefined(c_1, 3235683)), __prim__int___box__(25))
   
+  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  exhale [(forperm _r_5: Ref [_r_5.MustReleaseBounded] :: Level(_r_5) <= _current_wait_level_167) && ((forperm _r_5: Ref [_r_5.MustReleaseUnbounded] :: Level(_r_5) <= _current_wait_level_167) && _residue_167 <= _current_wait_level_167), true]
+  exhale [true, (forperm _r_6: Ref [MustInvokeBounded(_r_6)] :: false) && ((forperm _r_6: Ref [MustInvokeUnbounded(_r_6)] :: false) && ((forperm _r_6: Ref [_r_6.MustReleaseBounded] :: false) && (forperm _r_6: Ref [_r_6.MustReleaseUnbounded] :: false)))]
 }
 
 method recell_client_2(_cthread_168: Ref, _caller_measures_168: Seq[Measure$], _residue_168: Perm) returns (_current_wait_level_168: Perm)
   requires _cthread_168 != null
   requires issubtype(typeof(_cthread_168), Thread_0())
   requires [true, perm(MustTerminate(_cthread_168)) == none && ((forperm _r_10: Ref [MustInvokeBounded(_r_10)] :: false) && ((forperm _r_10: Ref [MustInvokeUnbounded(_r_10)] :: false) && ((forperm _r_10: Ref [_r_10.MustReleaseBounded] :: false) && (forperm _r_10: Ref [_r_10.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_8: Ref [_r_8.MustReleaseBounded] :: Level(_r_8) <= _current_wait_level_168) && ((forperm _r_8: Ref [_r_8.MustReleaseUnbounded] :: Level(_r_8) <= _current_wait_level_168) && _residue_168 <= _current_wait_level_168), true]
-  ensures [true, (forperm _r_9: Ref [MustInvokeBounded(_r_9)] :: false) && ((forperm _r_9: Ref [MustInvokeUnbounded(_r_9)] :: false) && ((forperm _r_9: Ref [_r_9.MustReleaseBounded] :: false) && (forperm _r_9: Ref [_r_9.MustReleaseUnbounded] :: false)))]
+//  ensures [(forperm _r_8: Ref [_r_8.MustReleaseBounded] :: Level(_r_8) <= _current_wait_level_168) && ((forperm _r_8: Ref [_r_8.MustReleaseUnbounded] :: Level(_r_8) <= _current_wait_level_168) && _residue_168 <= _current_wait_level_168), true]
+//  ensures [true, (forperm _r_9: Ref [MustInvokeBounded(_r_9)] :: false) && ((forperm _r_9: Ref [MustInvokeUnbounded(_r_9)] :: false) && ((forperm _r_9: Ref [_r_9.MustReleaseBounded] :: false) && (forperm _r_9: Ref [_r_9.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var c_2: Ref
@@ -760,6 +769,9 @@ method recell_client_2(_cthread_168: Ref, _caller_measures_168: Seq[Measure$], _
   _cwl_168 := ReCell_undo(_cthread_168, _method_measures_168, _residue_168, _checkDefined(c_2, 3301219))
   assert object___eq__(Cell_get_contents(_checkDefined(c_2, 3301219)), __prim__int___box__(35))
   
+  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  exhale [(forperm _r_8: Ref [_r_8.MustReleaseBounded] :: Level(_r_8) <= _current_wait_level_168) && ((forperm _r_8: Ref [_r_8.MustReleaseUnbounded] :: Level(_r_8) <= _current_wait_level_168) && _residue_168 <= _current_wait_level_168), true]
+  exhale [true, (forperm _r_9: Ref [MustInvokeBounded(_r_9)] :: false) && ((forperm _r_9: Ref [MustInvokeUnbounded(_r_9)] :: false) && ((forperm _r_9: Ref [_r_9.MustReleaseBounded] :: false) && (forperm _r_9: Ref [_r_9.MustReleaseUnbounded] :: false)))]
 }
 
 method loop_client(_cthread_169: Ref, _caller_measures_169: Seq[Measure$], _residue_169: Perm, n_3: Ref) returns (_current_wait_level_169: Perm)
@@ -768,8 +780,8 @@ method loop_client(_cthread_169: Ref, _caller_measures_169: Seq[Measure$], _resi
   requires issubtype(typeof(n_3), int())
   requires int___gt__(int___unbox__(n_3), 0)
   requires [true, perm(MustTerminate(_cthread_169)) == none && ((forperm _r_15: Ref [MustInvokeBounded(_r_15)] :: false) && ((forperm _r_15: Ref [MustInvokeUnbounded(_r_15)] :: false) && ((forperm _r_15: Ref [_r_15.MustReleaseBounded] :: false) && (forperm _r_15: Ref [_r_15.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_13: Ref [_r_13.MustReleaseBounded] :: Level(_r_13) <= _current_wait_level_169) && ((forperm _r_13: Ref [_r_13.MustReleaseUnbounded] :: Level(_r_13) <= _current_wait_level_169) && _residue_169 <= _current_wait_level_169), true]
-  ensures [true, (forperm _r_14: Ref [MustInvokeBounded(_r_14)] :: false) && ((forperm _r_14: Ref [MustInvokeUnbounded(_r_14)] :: false) && ((forperm _r_14: Ref [_r_14.MustReleaseBounded] :: false) && (forperm _r_14: Ref [_r_14.MustReleaseUnbounded] :: false)))]
+//  ensures [(forperm _r_13: Ref [_r_13.MustReleaseBounded] :: Level(_r_13) <= _current_wait_level_169) && ((forperm _r_13: Ref [_r_13.MustReleaseUnbounded] :: Level(_r_13) <= _current_wait_level_169) && _residue_169 <= _current_wait_level_169), true]
+//  ensures [true, (forperm _r_14: Ref [MustInvokeBounded(_r_14)] :: false) && ((forperm _r_14: Ref [MustInvokeUnbounded(_r_14)] :: false) && ((forperm _r_14: Ref [_r_14.MustReleaseBounded] :: false) && (forperm _r_14: Ref [_r_14.MustReleaseUnbounded] :: false)))]
 {
   var _err: Ref
   var c_3: Ref
@@ -856,7 +868,9 @@ method loop_client(_cthread_169: Ref, _caller_measures_169: Seq[Measure$], _resi
   exhale perm(MustTerminate(_cthread_169)) > none ==> acc(MustTerminate(_cthread_169), perm(MustTerminate(_cthread_169)) - _loop_original_must_terminate)
   _cwl_169 := Iterator___del__(_cthread_169, _method_measures_169, _residue_170, iter)
   
-  
+  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  exhale [(forperm _r_13: Ref [_r_13.MustReleaseBounded] :: Level(_r_13) <= _current_wait_level_169) && ((forperm _r_13: Ref [_r_13.MustReleaseUnbounded] :: Level(_r_13) <= _current_wait_level_169) && _residue_169 <= _current_wait_level_169), true]
+  exhale [true, (forperm _r_14: Ref [MustInvokeBounded(_r_14)] :: false) && ((forperm _r_14: Ref [MustInvokeUnbounded(_r_14)] :: false) && ((forperm _r_14: Ref [_r_14.MustReleaseBounded] :: false) && (forperm _r_14: Ref [_r_14.MustReleaseUnbounded] :: false)))]
 }
 
 method Cell___init__(_cthread_157: Ref, _caller_measures_157: Seq[Measure$], _residue_157: Perm, self_0: Ref, n: Ref) returns (_current_wait_level_157: Perm)
