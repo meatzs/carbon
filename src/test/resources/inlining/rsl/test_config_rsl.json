@@ -1,5 +1,26 @@
 [
 { 
+  "file":"RelAcqDblMsgPassSplit.sil",
+  "bound":2,
+  "entry":"client_sound",
+  "sc_holds":true,
+  "errors":[{"tag": "assert.failed:assertion.false"}]
+},
+{ 
+  "file":"RelAcqDblMsgPassSplit.sil",
+  "bound":2,
+  "entry":"client_unsound",
+  "sc_holds":false,
+  "errors":[{"tag": "postcondition.violated:assertion.false"}]
+},
+{ 
+  "file":"RSLLockNoSpin-not-in-appendix.sil",
+  "bound":2,
+  "entry":"client",
+  "sc_holds":false,
+  "errors":[]
+},
+{ 
   "file":"RelAcqRustARCStronger_inline.sil",
   "bound":2,
   "entry":"new_clone_simple_drop_loop",
@@ -38,7 +59,7 @@
   "entry":"new_exhale_drop",
   "sc_holds":true,
   "errors":[
-    {"tag": "exhale.failed:assertion.false"},
+    {"tag": "exhale.failed:insufficient.permission"},
     {"tag": "exhale.failed:insufficient.permission"}
   ]
 },
@@ -58,26 +79,5 @@
     {"tag": "exhale.failed:assertion.false"},
     {"tag": "exhale.failed:insufficient.permission"}
   ]
-},
-{
-  "file":"RelAcqDblMsgPassSplit_inline.sil",
-  "bound":2,
-  "entry":"main",
-  "sc_holds":false,
-  "errors":[]
-},
-{
-  "file":"RelAcqDblMsgPassSplit2_inline.sil",
-  "bound":2,
-  "entry":"main_1",
-  "sc_holds":false,
-  "errors":[]
-},
-{
-  "file":"RelAcqDblMsgPassSplit2_inline.sil",
-  "bound":2,
-  "entry":"main_2",
-  "sc_holds":true,
-  "errors":[]
 }
 ]

@@ -793,10 +793,10 @@ method order_tickets_client_1(_cthread_161: Ref, _caller_measures_161: Seq[Measu
   requires issubtype(typeof(show_id_0), int())
   requires int___gt__(int___unbox__(num_2), 0)
   requires [true, perm(MustTerminate(_cthread_161)) == none && ((forperm _r_10: Ref [MustInvokeBounded(_r_10)] :: false) && ((forperm _r_10: Ref [MustInvokeUnbounded(_r_10)] :: false) && ((forperm _r_10: Ref [_r_10.MustReleaseBounded] :: false) && (forperm _r_10: Ref [_r_10.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_8: Ref [_r_8.MustReleaseBounded] :: Level(_r_8) <= _current_wait_level_161) && ((forperm _r_8: Ref [_r_8.MustReleaseUnbounded] :: Level(_r_8) <= _current_wait_level_161) && _residue_161 <= _current_wait_level_161), true]
-  ensures _err != null && issubtype(typeof(_err), SoldoutException()) ==> true
-  ensures _err != null ==> issubtype(typeof(_err), SoldoutException())
-  ensures [true, (forperm _r_9: Ref [MustInvokeBounded(_r_9)] :: false) && ((forperm _r_9: Ref [MustInvokeUnbounded(_r_9)] :: false) && ((forperm _r_9: Ref [_r_9.MustReleaseBounded] :: false) && (forperm _r_9: Ref [_r_9.MustReleaseUnbounded] :: false)))]
+  //ensures [(forperm _r_8: Ref [_r_8.MustReleaseBounded] :: Level(_r_8) <= _current_wait_level_161) && ((forperm _r_8: Ref [_r_8.MustReleaseUnbounded] :: //Level(_r_8) <= _current_wait_level_161) && _residue_161 <= _current_wait_level_161), true]
+  //ensures _err != null && issubtype(typeof(_err), SoldoutException()) ==> true
+  //ensures _err != null ==> issubtype(typeof(_err), SoldoutException())
+  //ensures [true, (forperm _r_9: Ref [MustInvokeBounded(_r_9)] :: false) && ((forperm _r_9: Ref [MustInvokeUnbounded(_r_9)] :: false) && ((forperm _r_9: Ref [_r_9.MustReleaseBounded] :: false) && (forperm _r_9: Ref [_r_9.MustReleaseUnbounded] :: false)))]
 {
   var tickets: Ref
   var ticket_0: Ref
@@ -885,6 +885,11 @@ method order_tickets_client_1(_cthread_161: Ref, _caller_measures_161: Seq[Measu
   
   _err := null
   }
+  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  exhale [(forperm _r_8: Ref [_r_8.MustReleaseBounded] :: Level(_r_8) <= _current_wait_level_161) && ((forperm _r_8: Ref [_r_8.MustReleaseUnbounded] :: Level(_r_8) <= _current_wait_level_161) && _residue_161 <= _current_wait_level_161), true]
+  exhale _err != null && issubtype(typeof(_err), SoldoutException()) ==> true
+  exhale _err != null ==> issubtype(typeof(_err), SoldoutException())
+  exhale [true, (forperm _r_9: Ref [MustInvokeBounded(_r_9)] :: false) && ((forperm _r_9: Ref [MustInvokeUnbounded(_r_9)] :: false) && ((forperm _r_9: Ref [_r_9.MustReleaseBounded] :: false) && (forperm _r_9: Ref [_r_9.MustReleaseUnbounded] :: false)))]
 }
 
 method order_tickets_client_2(_cthread_162: Ref, _caller_measures_162: Seq[Measure$], _residue_162: Perm, num_3: Ref, show_id_1: Ref) returns (_current_wait_level_162: Perm, _err: Ref)
@@ -894,10 +899,10 @@ method order_tickets_client_2(_cthread_162: Ref, _caller_measures_162: Seq[Measu
   requires issubtype(typeof(show_id_1), int())
   requires int___gt__(int___unbox__(num_3), 0)
   requires [true, perm(MustTerminate(_cthread_162)) == none && ((forperm _r_15: Ref [MustInvokeBounded(_r_15)] :: false) && ((forperm _r_15: Ref [MustInvokeUnbounded(_r_15)] :: false) && ((forperm _r_15: Ref [_r_15.MustReleaseBounded] :: false) && (forperm _r_15: Ref [_r_15.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_13: Ref [_r_13.MustReleaseBounded] :: Level(_r_13) <= _current_wait_level_162) && ((forperm _r_13: Ref [_r_13.MustReleaseUnbounded] :: Level(_r_13) <= _current_wait_level_162) && _residue_162 <= _current_wait_level_162), true]
-  ensures _err != null && issubtype(typeof(_err), SoldoutException()) ==> true
-  ensures _err != null ==> issubtype(typeof(_err), SoldoutException())
-  ensures [true, (forperm _r_14: Ref [MustInvokeBounded(_r_14)] :: false) && ((forperm _r_14: Ref [MustInvokeUnbounded(_r_14)] :: false) && ((forperm _r_14: Ref [_r_14.MustReleaseBounded] :: false) && (forperm _r_14: Ref [_r_14.MustReleaseUnbounded] :: false)))]
+//  ensures [(forperm _r_13: Ref [_r_13.MustReleaseBounded] :: Level(_r_13) <= _current_wait_level_162) && ((forperm _r_13: Ref [_r_13.MustReleaseUnbounded] //:: Level(_r_13) <= _current_wait_level_162) && _residue_162 <= _current_wait_level_162), true]
+//  ensures _err != null && issubtype(typeof(_err), SoldoutException()) ==> true
+//  ensures _err != null ==> issubtype(typeof(_err), SoldoutException())
+//  ensures [true, (forperm _r_14: Ref [MustInvokeBounded(_r_14)] :: false) && ((forperm _r_14: Ref [MustInvokeUnbounded(_r_14)] :: false) && ((forperm _r_14: Ref [_r_14.MustReleaseBounded] :: false) && (forperm _r_14: Ref [_r_14.MustReleaseUnbounded] :: false)))]
 {
   var tickets_0: Ref
   var ticket_1: Ref
@@ -985,7 +990,13 @@ method order_tickets_client_2(_cthread_162: Ref, _caller_measures_162: Seq[Measu
   _err := null
   
   _err := null
-  }  
+  }
+
+  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  exhale [(forperm _r_13: Ref [_r_13.MustReleaseBounded] :: Level(_r_13) <= _current_wait_level_162) && ((forperm _r_13: Ref [_r_13.MustReleaseUnbounded] :: Level(_r_13) <= _current_wait_level_162) && _residue_162 <= _current_wait_level_162), true]
+  exhale _err != null && issubtype(typeof(_err), SoldoutException()) ==> true
+  exhale _err != null ==> issubtype(typeof(_err), SoldoutException())
+  exhale [true, (forperm _r_14: Ref [MustInvokeBounded(_r_14)] :: false) && ((forperm _r_14: Ref [MustInvokeUnbounded(_r_14)] :: false) && ((forperm _r_14: Ref [_r_14.MustReleaseBounded] :: false) && (forperm _r_14: Ref [_r_14.MustReleaseUnbounded] :: false)))]
 }
 
 method Ticket___init__(_cthread_156: Ref, _caller_measures_156: Seq[Measure$], _residue_156: Perm, self: Ref, show: Ref, row: Ref, seat: Ref) returns (_current_wait_level_156: Perm)
@@ -1065,44 +1076,6 @@ method Ticket_set_discount(_cthread_157: Ref, _caller_measures_157: Seq[Measure$
     inhale acc(self_3.Ticket_discount_code, write)
   }
   self_3.Ticket_discount_code := code_2
-  
-}
-
-method main(_cthread_163: Ref, _caller_measures_163: Seq[Measure$], _residue_166: Perm) returns (_current_wait_level_163: Perm)
-  requires _cthread_163 != null
-  requires issubtype(typeof(_cthread_163), Thread_0())
-  requires [true, perm(MustTerminate(_cthread_163)) == none && ((forperm _r_24: Ref [MustInvokeBounded(_r_24)] :: false) && ((forperm _r_24: Ref [MustInvokeUnbounded(_r_24)] :: false) && ((forperm _r_24: Ref [_r_24.MustReleaseBounded] :: false) && (forperm _r_24: Ref [_r_24.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_22: Ref [_r_22.MustReleaseBounded] :: Level(_r_22) <= _current_wait_level_163) && ((forperm _r_22: Ref [_r_22.MustReleaseUnbounded] :: Level(_r_22) <= _current_wait_level_163) && _residue_166 <= _current_wait_level_163), true]
-  ensures [true, (forperm _r_23: Ref [MustInvokeBounded(_r_23)] :: false) && ((forperm _r_23: Ref [MustInvokeUnbounded(_r_23)] :: false) && ((forperm _r_23: Ref [_r_23.MustReleaseBounded] :: false) && (forperm _r_23: Ref [_r_23.MustReleaseUnbounded] :: false)))]
-{
-  var module_defined_0: Bool
-  var module_names_0: Set[_Name]
-  var _cwl_163: Perm
-  var _method_measures_163: Seq[Measure$]
-  _method_measures_163 := Seq[Measure$]()
-  module_defined_0 := true
-  module_names_0 := Set[_Name]()
-  module_names_0 := (module_names_0 union Set(_single(3106082509126931487350218591)))
-  inhale acc(__file__()._val, 99 / 100) && issubtype(typeof(__file__()._val), str()) && issubtype(typeof(__file__()._val), str())
-  module_names_0 := (module_names_0 union Set(_single(2489530350921051593165922143)))
-  inhale acc(__name__()._val, 99 / 100) && issubtype(typeof(__name__()._val), str()) && issubtype(typeof(__name__()._val), str()) && str___eq__(str___create__(8, 2489249333222104298408468319), __name__()._val)
-  module_names_0 := (module_names_0 union Set(_single(5460990052674857173734662115181759155)))
-  module_names_0 := (module_names_0 union Set(_single(1953720652)))
-  module_names_0 := (module_names_0 union Set(_single(3906937610535144108)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(12987678168166580883449681523233435065722367827)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(5587412059471199259197728103)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(3493880855485680332086796127)))
-  module_names_0 := (module_names_0 union Set(_single(19952085150986078863396420738563676813)))
-  module_names_0 := (module_names_0 union Set(_single(3869200172464248492)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(1642638104364138653452329868584521105)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(39780122021775928874837051279546742048279140878782270865)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(39780496166195085585984111422863917416732172797513272721)))
   
 }
 
