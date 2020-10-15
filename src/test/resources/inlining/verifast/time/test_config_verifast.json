@@ -1,0 +1,72 @@
+[
+{ 
+  "file":"composite5_error0.vpr",
+  "bound":2,
+  "entry":"client_get_parent",
+  "sc_holds":true,
+  "errors":[]
+},
+{ 
+  "file":"composite5_error1.vpr",
+  "bound":2,
+  "entry":"client_get_parent",
+  "sc_holds":true,
+  "errors":[    
+    {"tag": "fold.failed:insufficient.permission"},
+    {"tag": "assert.failed:insufficient.permission"}
+  ]
+},
+{ 
+  "file":"composite5_error2.vpr",
+  "bound":2,
+  "entry":"client_get_parent",
+  "sc_holds":true,
+  "errors":[    
+    {"tag": "call.precondition:insufficient.permission"},
+    {"tag": "call.precondition:insufficient.permission"}
+  ]
+},
+{ 
+  "file":"composite5_error0.vpr",
+  "bound":2,
+  "entry":"client_tree_add",
+  "sc_holds":true,
+  "errors":[]
+},
+{ 
+  "file":"composite5_error1.vpr",
+  "bound":2,
+  "entry":"client_tree_add",
+  "sc_holds":true,
+  "errors":[{"tag": "fold.failed:insufficient.permission"}]
+},
+{ 
+  "file":"vstte2012_problem2_error0.vpr",
+  "bound":4,
+  "entry":"client",
+  "sc_holds":true,
+  "errors":[]
+},
+{ 
+  "file":"vstte2012_problem2_error1.vpr",
+  "bound":4,
+  "entry":"client",
+  "sc_holds":true,
+  "errors":[{"tag": "unfold.failed:insufficient.permission"}]
+},
+{ 
+  "file":"vstte2012_problem2_error2.vpr",
+  "bound":5,
+  "max_inl":50,
+  "entry":"client",
+  "sc_holds":true,
+  "errors":[{"tag": "unfold.failed:insufficient.permission"}]
+},
+{ 
+  "file":"vstte2012_problem2_error3.vpr",
+  "bound":4,
+  "entry":"client",
+  "sc_holds":true,
+  "errors":[{"tag": "assert.failed:insufficient.permission"}]
+}
+]
