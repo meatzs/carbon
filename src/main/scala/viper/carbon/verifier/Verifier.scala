@@ -78,7 +78,7 @@ trait Verifier {
   def maxInl: Option[Int]
   def noCheckSC: Boolean
   def printSC: Boolean
-  def simpleWFM: Boolean
+  // def simpleWFM: Boolean
   def closureSC: Boolean
   def modularSC: Boolean
   def pureFunctionsSC: Boolean

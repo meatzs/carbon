@@ -124,20 +124,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         sil.Seqn(assign ++ ss map (recordVarsSil(_, exists)), scopedDecls)(a, b, c)
       // case sil.Inhale(exp) if (exp.isPure) => sil.LocalVarAssign(exists, sil.And(exists, exp)(exp.pos, exp.info, exp.errT))(a, b, c)
       // Assume
-      case sil.MethodCall(methodName, args, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).body.isEmpty
-        // && program.findMethod(methodName).pres.isEmpty
-         =>
+      case sil.MethodCall(methodName, args, targets: Seq[ast.LocalVar]) if program.findMethod(methodName).body.isEmpty =>
         // Abstract method
-        /*
-        val formalArgs: Seq[ast.LocalVarDecl] = program.findMethod(methodName).formalArgs
-        val tempArgs: Seq[ast.LocalVar] = (args zip formalArgs) map ((x: (sil.Exp, sil.LocalVarDecl)) => {
-          val name = silNameNotUsed("arg_temp")
-          val tempLocalVar = sil.LocalVar(name, x._2.typ)(x._1.pos, x._1.info, x._1.errT)
-          mainModule.env.define(tempLocalVar)
-          // println(tempLocalVar)
-          tempLocalVar
-        })
-         */
         val tempRets: Seq[ast.LocalVar] = targets map ((x: ast.LocalVar) => {
           val name = silNameNotUsed(x.name + "_temp")
           val tempLocalVar = sil.LocalVar(name, x.typ)(x.pos, x.info, x.errT)
@@ -237,8 +225,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       case If(cond, thn, els) => assert(els.toString() == "")
         assert(cond.toString.contains("vexists"))
         If(cond, remove_assume_false(thn), els)
-      case _ => println("Unknown", s)
-        s
+      case _ => s // Unknown, shouldn't happen
     }
   }
 
@@ -280,7 +267,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         val w = getVarDecl("wildcard", permType)
         (Assign(w.l, v) ++ s, Seq(w))
       case NondetIf(thn, els) =>
-        if (verifier.pureFunctionsSC) {
+        if (!verifier.pureFunctionsSC) {
           assert(els.toString() == "")
           (handleFunctionPrecondition(thn), Seq())
         }
@@ -345,12 +332,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         val s2 = Assume(right - w >= p.l - old_w.l)
 
         (If(b.l, s1 ++ s2, s), l.tail.tail.tail)
-      /*case If(cond, thn, els) if conditionToAvoid(cond, id_check) =>
-      // (used_checks.contains(cond.name.name) && cond.name.name != check.name.name) =>
-        // println("AVOID IF", cond, check)
-        val (nels, l2) = determinize(els, l, check, id_check, e)
-        (If(cond, thn, nels), l2)
-       */
       case If(cond, thn, els) =>
         val (nthn, l1) = determinize(thn, l, check, id_check, e)
         val (nels, l2) = determinize(els, l1, check, id_check, e)
@@ -462,16 +443,15 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         case ast.Apply(_) => true
         case ast.Seqn(ss, _) => ss forall (syntacticFraming(_, checkMono))
         case ast.If(cond, thn, els) => !containsPermOrForperm(cond) && syntacticFraming(thn, checkMono) && syntacticFraming(els, checkMono)
-        case ast.While(cond, invs, body) => println("While loop in syntactic condition: Should not happen!"); assert(false); false
+        case ast.While(cond, invs, body) => assert(false); false // This should not happen
         case ast.Label(_, _) => true
         case ast.Goto(_) =>
-          println("GOTO in SYNTACTIC CHECK, maybe not supported")
+          println("Warning: goto statements are only partially supported")
           false
         case ast.NewStmt(lhs, fields) => true
         case ast.LocalVarDeclStmt(decl) => true
-        case _: ast.ExtensionStmt => println("EXTENSION STMT???")
-          assert(false)
-          false
+        case _: ast.ExtensionStmt =>
+          assert(false); false // This should not happen
       }
     }
   }
@@ -685,12 +665,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   def inlineSilAux(s: sil.Stmt, n: Int): sil.Stmt = {
 
-    // println("inlineSil", n, s, inRenaming, currentRenaming)
-
     val (a, b, c) = (s.pos, s.info, s.errT)
     s match {
       case sil.MethodCall(methodName, args, targets) if program.findMethod(methodName).body.isDefined =>
-        // println("inlineSil", n, s)
         if (n > 0) {
           val m = program.findMethod(methodName)
           val pre_body = m.body.get
@@ -698,16 +675,12 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           val oldInRenaming = inRenaming
           inRenaming = Set()
           val body = alphaRename(pre_body)
-          // println("New read variables", read(body))
 
           namesAlreadyUsed ++= read(body)
 
           val renamedFormalArgsVars: Seq[sil.LocalVar] = (m.formalArgs map (_.localVar)) map renameVar
 
           namesAlreadyUsed ++= renamedFormalArgsVars
-
-          // println("Before renaming", m.formalArgs, pre_body)
-          // println("After renaming", renamedFormalArgsVars, body)
 
           val renamedFormalReturnsVars: Seq[ast.LocalVar] = (m.formalReturns map (_.localVar)) map renameVar
           namesAlreadyUsed ++= renamedFormalReturnsVars
@@ -792,23 +765,15 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   def inlineSil(s: sil.Stmt, n: Int): sil.Stmt = {
-    // println("inlineSilBase", s)
-    // println("READ VARIABLES", read(s))
     namesAlreadyUsed ++= read(s).toSet
-    // println(mainModule.env.allDefinedVariables())
     currentRenaming = Map()
     inRenaming = Set()
-    val r = inlineSilAux(s, n)
-    // println("RESULT", r)
-    // println()
-    r
+    inlineSilAux(s, n)
   }
 
   // Wrapper for modular approximation
   def checkFraming(pre_orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt = {
-    println("Wrapper for checkFraming")
     if (modularSC) {
-      println("Modular approximation")
       if (checkMono) {
         if (inside_initial_method) {
           checkFramingAux(pre_orig_s, orig, true, checkWFM, modif_vars)
@@ -822,7 +787,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           checkFramingAux(pre_orig_s, orig, checkMono, checkWFM, modif_vars)
         }
         else {
-          println("Avoiding to check framing thanks to compositional property")
+          // Avoiding to check framing thanks to compositional property
           Statements.EmptyStmt
         }
       }
@@ -840,13 +805,15 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     namesAlreadyUsed = Set()
     val orig_s: ast.Stmt = inlineSil(pre_orig_s, maxDepth - current_depth)
     // val orig_s: ast.Stmt = pre_orig_s
-    println("checkFraming", current_depth, "framing", !checkMono, "length", length(orig_s))
+    if (verifier.printSC)
+      println("checkFraming", current_depth, "framing", !checkMono, "length", length(orig_s))
 
     var ignore = false
 
 
     if (first_block && inside_initial_method && checkMono) {
-      println("Ignoring first part of the code (trivial)")
+      if (verifier.printSC)
+        println("Ignoring first part of the code (trivial)")
       ignore = true
     }
     else if (isCheckingFraming()) {
@@ -858,14 +825,12 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       }
       if (verifier.printSC) {
         println("___________________________________________________________")
-      }
-      if (checkMono) {
-        println("Syntactically mono")
-      }
-      else {
-        println("Syntactically framing")
-      }
-      if (verifier.printSC) {
+        if (checkMono) {
+          println("Syntactically mono")
+        }
+        else {
+          println("Syntactically framing")
+        }
         println("-----------------------------------------------------------")
         println(orig_s)
         println("¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯")
@@ -876,7 +841,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     first_block = false
 
     if (ignore) {
-      println("IGNORING...")
+      if (verifier.printSC)
+        println("IGNORING...")
       Statements.EmptyStmt
     }
     else {
@@ -892,9 +858,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       if (checkMono) {if (checkWFM) {id_checkWfm += 1} else {id_checkMono += 1}} else {id_checkFraming += 1}
       val id_error = {if (checkMono) {if (checkWFM) id_checkWfm else id_checkMono} else id_checkFraming}
       val errorType = {if (checkMono) {if (checkWFM) "WFM" else "MONO"} else "FRAMING"}
-      println(errorType + " " + id_error)
 
       if (verifier.printSC) {
+        println(errorType + " " + id_error)
         println("-----------------------------------------------------------")
         println(orig_s)
         println("¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯")
@@ -984,12 +950,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           }
           else {
            */ {
-          if (checkWFM && !simpleWFM) {
-            Havoc(modif_vars)
+          if (checkWFM) {
+            Havoc(modif_vars) // WFM should be theoretically unbounded
           }
-          else {
-            Assume(smallerState(maskPhi2.l, heapPhi2.l, normalState._1, normalState._2))
-          }
+          Assume(smallerState(maskPhi2.l, heapPhi2.l, normalState._1, normalState._2))
         } ++
               Assume(wfMask(Seq(maskPhi2.l))) ++
               // Assume(sumStateNormal(maskPhi1.l, heapPhi1.l, maskR.l, heapR.l, maskPhi2.l, heapPhi2.l)) ++
@@ -1108,7 +1072,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     val old_inside_initial_method = inside_initial_method
     inside_initial_method = false
 
-    println("inlineLoop", current_depth, cond, "length", length(w), n_inl)
+    if (verifier.printSC)
+      println("inlineLoop", current_depth, cond, "length", length(w), n_inl)
     val guard = translateExp(cond)
 
     val depth = maxDepth - current_depth
@@ -1158,7 +1123,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     val old_inside_initial_method = inside_initial_method
     inside_initial_method = false
 
-    println("inlineMethod", current_depth, m.name, "length", length(m.body.get), n_inl)
+    if (verifier.printSC)
+      println("inlineMethod", current_depth, m.name, "length", length(m.body.get), n_inl)
     if (stopInlining) {
       inside_initial_method = old_inside_initial_method
       MaybeComment("0: Cut branch (method call)", Assume(FalseLit()))
@@ -1301,17 +1267,12 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   def renameVar(x: ast.LocalVar): ast.LocalVar = {
-
-    // println("Renaming var...", x)
-    // if (!currentRenaming.contains(x)) {
     if (!inRenaming.contains(x)) {
-      // println("Not contained...", inRenaming, currentRenaming)
       val new_name = newString(x.name)
       val xx = ast.LocalVar(new_name, x.typ)(x.pos, x.info, x.errT)
       currentRenaming += (x -> xx)
       inRenaming += x
     }
-    // println("Renamed!", currentRenaming(x), currentRenaming)
     currentRenaming(x)
   }
 
@@ -1338,8 +1299,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       case decl: ast.LocalVarDecl =>
         val new_x = renameVar(decl.localVar)
         ast.LocalVarDecl(new_x.name, new_x.typ)(decl.pos, decl.info, decl.errT)
-      case _ => println("OTHER TYPE OF RENAME DECL", d)
-        d
+      case _ => d // Unknown case
     }
   }
 
@@ -1350,7 +1310,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   def alphaRename(s: ast.Stmt): ast.Stmt = {
-    // println("RENAMING STMT...", s)
     val a = s.pos
     val b = s.info
     val c = s.errT
@@ -1361,7 +1320,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       case ast.MethodCall(methodName, args, targets) => ast.MethodCall(methodName, args map renameExp, targets map renameVar)(a, b, c)
       case ast.Exhale(exp) => ast.Exhale(renameExp(exp))(a, b, c)
       case ast.Inhale(exp) =>
-        // println("Rename exp", exp, renameExp(exp))
         ast.Inhale(renameExp(exp))(a, b, c)
       case ast.Assert(exp) => ast.Assert(renameExp(exp))(a, b, c)
       case ast.Assume(exp) => ast.Assume(renameExp(exp))(a, b, c)
