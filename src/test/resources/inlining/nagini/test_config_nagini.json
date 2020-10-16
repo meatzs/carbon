@@ -4,8 +4,6 @@
   "bound":3,
   "entry":"order_tickets_client_1",
   "sc_holds":true,
-  "modular_sc":true,
-  "pure_function_sc":true,
   "errors":[{"tag": "if.failed:insufficient.permission"}]
 },
 { 
@@ -13,8 +11,6 @@
   "bound":3,
   "entry":"order_tickets_client_1",
   "sc_holds":true,
-  "modular_sc":true,
-  "pure_function_sc":true,
   "errors":[{"tag": "if.failed:insufficient.permission"}]
 },
 { 
@@ -22,8 +18,6 @@
   "bound":3,
   "entry":"order_tickets_client_2",
   "sc_holds":true,
-  "modular_sc":true,
-  "pure_function_sc":true,
   "errors":[]
 },
 { 
@@ -31,8 +25,6 @@
   "bound":3,
   "entry":"client_correct",
   "sc_holds":true,
-  "modular_sc":true,
-  "pure_function_sc":true,
   "errors":[]
 },
 { 
@@ -40,8 +32,6 @@
   "bound":3,
   "entry":"client_error",
   "sc_holds":true,
-  "modular_sc":true,
-  "pure_function_sc":true,
   "errors":[{"tag": "assert.failed:assertion.false"}]
 },
 {
@@ -49,8 +39,6 @@
   "bound":3,
   "entry":"client_error_2",
   "sc_holds":true,
-  "modular_sc":true,
-  "pure_function_sc":true,
   "errors":[{"tag": "assert.failed:assertion.false"}]
 },
 { 
@@ -58,8 +46,6 @@
   "bound":3,
   "entry":"cell_client_1",
   "sc_holds":true,
-  "modular_sc":true,
-  "pure_function_sc":true,
   "errors":[]
 },
 { 
@@ -67,8 +53,6 @@
   "bound":3,
   "entry":"cell_client_2",
   "sc_holds":true,
-  "modular_sc":true,
-  "pure_function_sc":true,
   "errors":[{"tag": "assert.failed:assertion.false"}]
 },
 { 
@@ -76,8 +60,6 @@
   "bound":3,
   "entry":"recell_client_1",
   "sc_holds":true,
-  "modular_sc":true,
-  "pure_function_sc":true,
   "errors":[]
 },
 { 
@@ -85,8 +67,6 @@
   "bound":3,
   "entry":"recell_client_2",
   "sc_holds":true,
-  "modular_sc":true,
-  "pure_function_sc":true,
   "errors":[{"tag": "assert.failed:assertion.false"}]
 },
 { 
@@ -94,8 +74,6 @@
   "bound":4,
   "entry":"loop_client",
   "sc_holds":true,
-  "modular_sc":true,
-  "pure_function_sc":true,
   "errors":[{"tag": "assert.failed:assertion.false"}]
 },
 { 
@@ -103,8 +81,6 @@
   "bound":2,
   "entry":"main",
   "sc_holds":true,
-  "modular_sc":true,
-  "pure_function_sc":true,
   "errors":[]
 },
 { 
@@ -112,8 +88,6 @@
   "bound":2,
   "entry":"main",
   "sc_holds":true,
-  "modular_sc":true,
-  "pure_function_sc":true,
   "errors":[{"tag": "fold.failed:assertion.false"}]
 },
 { 
@@ -121,8 +95,6 @@
   "bound":10,
   "entry":"f_leak",
   "sc_holds":false,
-  "modular_sc":true,
-  "pure_function_sc":true,
   "errors":[]
 }
 ]
