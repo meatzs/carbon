@@ -109,8 +109,8 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
         Program(header, preambles ++ members)
     }
 
-    if (staticInlining.isDefined) {
-      println("NUMBER OF BLOCKS (syntactic, not): " + inliningModule.n_syntactic.toString + ", " + inliningModule.n_syntactic_not.toString)
+    if (staticInlining.isDefined && printSC) {
+      println("Number of blocks (syntactic, not): " + inliningModule.n_syntactic.toString + ", " + inliningModule.n_syntactic_not.toString)
     }
 
     (output.optimize.asInstanceOf[Program], nameMaps.map(e => e._1 -> e._2.toMap))

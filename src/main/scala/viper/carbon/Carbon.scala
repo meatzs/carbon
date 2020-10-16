@@ -126,30 +126,32 @@ class CarbonConfig(args: Seq[String]) extends SilFrontendConfig(args, "Carbon") 
   )
 
   val closureSC = opt[Boolean]("closureSC",
-    descr = "Computes the soundness condition with closure (default: disabled)",
+    descr = "Computes the soundness condition with closure for sequences of statements (default: disabled)",
     default = None,
     noshort = true
   )
 
-  val pureFunctionsSC = opt[Boolean]("pureFunctionsSC",
-    descr = "Assumes the preconditions of the functions present in soundness checks are pure (default: disabled)",
+  val pureFunctionsSC = opt[Boolean]("noFunPreSC",
+    descr = "Deactivates a feature that helps checking the consistency of function preconditions in the structural soundness check (default: feature activated)",
     default = None,
     noshort = true
   )
 
   val modularSC = opt[Boolean]("modularSC",
-    descr = "Uses a modular approximation for the soundness condition (default: disabled)",
+    descr = "Uses a modular conservative approximation for the soundness condition (default: disabled)",
     default = None,
     noshort = true
   )
 
+  /*
   val simpleWFM = opt[Boolean]("simpleWFM",
     descr = "Computes a simpler (bounded) WFM, but potentially unsound (default: disabled)",
     default = None,
     noshort = true
   )
+   */
 
-  val noSyntacticCheck = opt[Boolean]("noSyntacticCheck",
+  val noSyntacticCheck = opt[Boolean]("disableSyntacticSC",
     descr = "Disable syntactic check to speed up checking soundness condition for inlining (default: enabled)",
     default = None,
     noshort = true

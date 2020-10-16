@@ -223,7 +223,7 @@ case class CarbonVerifier(private var _debugInfo: Seq[(String, Any)] = Nil) exte
   def closureSC: Boolean = if (config != null) {config.closureSC.toOption.getOrElse(false)} else {false}
   def modularSC: Boolean = if (config != null) {config.modularSC.toOption.getOrElse(false)} else {false}
   def pureFunctionsSC: Boolean = if (config != null) {config.pureFunctionsSC.toOption.getOrElse(false)} else {false}
-  def simpleWFM: Boolean = if (config != null) {config.simpleWFM.toOption.getOrElse(false)} else {false}
+  // def simpleWFM: Boolean = if (config != null) {config.simpleWFM.toOption.getOrElse(false)} else {false}
   def entry = if (config != null) {config.entry.toOption} else None
 
 }

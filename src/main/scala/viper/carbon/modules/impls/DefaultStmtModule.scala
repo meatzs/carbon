@@ -222,13 +222,13 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
         stateModule.stateRepositoryPut(name, stateModule.state)
         stateModule.replaceState(currentState)
         if (verifier.staticInlining.isDefined) {
-          println("LABEL (no renaming, may lead to an error)")
+          println("Warning: Labels are only partially supported")
         }
         stmt ++ Label(Lbl(Identifier(name)(lblNamespace)))
       }
       case sil.Goto(target) =>
         if (verifier.staticInlining.isDefined) {
-          println("GOTO (no renaming, may lead to an error)")
+          println("Warning: Goto statements are only partially supported")
         }
         Goto(Lbl(Identifier(target)(lblNamespace)))
       case pa@sil.Package(wand, proof) => {
@@ -254,17 +254,6 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
 
     if (verifier.staticInlining.isDefined && !isCheckingFraming() && !inlinable(stmt)) {
         // CHECK MONO HERE
-        /*
-        val r1 =
-          if (syntacticFraming(stmt)) {
-            inliningModule.n_syntactic += 1
-            println("Syntactic", stmt)
-            Statements.EmptyStmt
-          }
-          else {
-            inliningModule.checkFraming(stmt, stmt, true)
-          }
-         */
         val r1 = inliningModule.checkFraming(stmt, stmt, true)
         inliningModule.checkingFraming = true
         val r2 = translateStmt(stmt, statesStack, allStateAssms, duringPackage)
