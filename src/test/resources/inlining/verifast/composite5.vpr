@@ -5,18 +5,18 @@ Partial Viper encoding of https://github.com/verifast/verifast/blob/master/examp
 define ERROR (0)
 // Modularly verifies in 20s
 // A. --entry client_get_parent --SI 2 / 3, 1
-// 0) 50s
+// 0) 
 // No error
-// 1) 1m:10s
+// 1) 
 // [0] Folding tree_membership_fact(id_1, node_1) might fail. There might be insufficient permission to access ghost_list_member_handle(id_1, node_1). (composite5.vpr@365.5)
 // [1] Assert might fail. There might be insufficient permission to access tree_membership_fact(id, p). (composite5.vpr@378.9)
-// 2) 15s
+// 2) 
 // [0] The precondition of method foreach_unremove might not hold. There might be insufficient permission to access foreach_node(id_1, remove(nodes_1, p_1)). (composite5.vpr@342.9)
 // [1] The precondition of method foreach_unremove might not hold. There might be insufficient permission to access Node(id_1, p_1, dummy() / 2). (composite5.vpr@342.9)
 // B. --entry client_tree_add --SI 2 / 5, 1
-// 0) 33s
+// 0) 
 // No error
-// 1) 45s
+// 1) 
 // [0] Folding tree(id_1, Seq(n_1) ++ nodes_1) might fail. There might be insufficient permission to access ghost_list(id_1, Seq(n_1) ++ nodes_1). (composite5.vpr@302.5)
 
 // Overall
