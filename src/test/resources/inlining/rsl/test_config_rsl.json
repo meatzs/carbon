@@ -15,21 +15,21 @@
 },
 { 
   "file":"RSLLockNoSpin-not-in-appendix.sil",
-  "bound":1,
+  "bound":2,
   "entry":"client",
   "sc_holds":false,
   "errors":[]
 },
 { 
   "file":"RelAcqRustARCStronger_inline.sil",
-  "bound":1,
+  "bound":2,
   "entry":"new_clone_simple_drop_loop",
   "sc_holds":true,
   "errors":[]
 },
 { 
   "file":"RelAcqRustARCStronger_inline.sil",
-  "bound":1,
+  "bound":2,
   "entry":"new_drop",
   "sc_holds":true,
   "errors":[]
@@ -65,7 +65,7 @@
 },
 { 
   "file":"RelAcqRustARCStronger_inline.sil",
-  "bound":1,
+  "bound":2,
   "entry":"new_clone_simple_drop_loop_error",
   "sc_holds":true,
   "errors":[
