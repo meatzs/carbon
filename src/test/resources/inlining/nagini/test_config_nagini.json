@@ -9,13 +9,6 @@
 { 
   "file":"cav_example.vpr",
   "bound":3,
-  "entry":"order_tickets_client_1",
-  "sc_holds":true,
-  "errors":[{"tag": "if.failed:insufficient.permission"}]
-},
-{ 
-  "file":"cav_example.vpr",
-  "bound":3,
   "entry":"order_tickets_client_2",
   "sc_holds":true,
   "errors":[]
@@ -78,14 +71,14 @@
 },
 { 
   "file":"watchdog.vpr",
-  "bound":2,
+  "bound":1,
   "entry":"main",
   "sc_holds":true,
   "errors":[]
 },
 { 
   "file":"watchdog_error.vpr",
-  "bound":2,
+  "bound":1,
   "entry":"main",
   "sc_holds":true,
   "errors":[{"tag": "fold.failed:assertion.false"}]

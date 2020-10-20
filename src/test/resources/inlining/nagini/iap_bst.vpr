@@ -753,7 +753,7 @@ method client_error(_cthread_173: Ref, _caller_measures_173: Seq[Measure$], _res
   _cwl_173, target := BinarySearchTree___getitem__(_cthread_173, _method_measures_173, _residue_173, _checkDefined(mytree, 4123786645886174867), i_1)
   assert target == null
 
-  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  /** Exhaling postcondition explicitly (since tool does not take postcondition of initial method into account for SC) */
   exhale [(forperm _r_2: Ref [_r_2.MustReleaseBounded] :: Level(_r_2) <= _current_wait_level_173) && ((forperm _r_2: Ref [_r_2.MustReleaseUnbounded] :: Level(_r_2) <= _current_wait_level_173) && _residue_173 <= _current_wait_level_173), true]
   exhale [true, (forperm _r_3: Ref [MustInvokeBounded(_r_3)] :: false) && ((forperm _r_3: Ref [MustInvokeUnbounded(_r_3)] :: false) && ((forperm _r_3: Ref [_r_3.MustReleaseBounded] :: false) && (forperm _r_3: Ref [_r_3.MustReleaseUnbounded] :: false)))]
 }

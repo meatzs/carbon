@@ -9,10 +9,6 @@
 // The resulting example is a simplified version of that in ARCStronger, 
 // whose source code is shown in the appendix of our submission (Fig. 16)
 
-// Note that verification times via the web frontend are considerably 
-// longer than with the desktop application.
-
-
 // PART 1: translation of code
 
 // ARC(a, b, g) := acc(a,rd) && acc(g,rd) && RMWAcq(b, Q0) && Rel(b,Q0) && Init(b) && realRef(a) && realRef(b) && ghostRef(g) 

@@ -4,8 +4,6 @@
 // "Relaxed separation logic: a program logic for C11 concurrency", by Vafeiadis and Narayan
 // The source code for this example is shown in the appendix of our submission (Fig. 12)
 
-// Note that verification times via the web frontend are considerably longer than with the desktop application.
-
 // PART 1: translation of code
 
 // version without using the shorthand macro for waiting loops

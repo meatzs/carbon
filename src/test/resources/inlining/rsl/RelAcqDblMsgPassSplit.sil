@@ -4,8 +4,6 @@
 // This requires the "splitting" of acquire predicates, achieved automatically in our encoding.
 // We also use release writes and acquire reads, in place of relaxed writes + release fences and relaxed reads + acquire fences.
 
-// Note that verification times via the web frontend are considerably longer than with the desktop application.
-
 // PART 1: translation of code
 
 // Q0(v) := (v==0 ? true : acc(a) && *a==42)

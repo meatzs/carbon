@@ -885,7 +885,7 @@ method order_tickets_client_1(_cthread_161: Ref, _caller_measures_161: Seq[Measu
   
   _err := null
   }
-  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  /** Exhaling postcondition explicitly (since tool does not take postcondition of initial method into account for SC) */
   exhale [(forperm _r_8: Ref [_r_8.MustReleaseBounded] :: Level(_r_8) <= _current_wait_level_161) && ((forperm _r_8: Ref [_r_8.MustReleaseUnbounded] :: Level(_r_8) <= _current_wait_level_161) && _residue_161 <= _current_wait_level_161), true]
   exhale _err != null && issubtype(typeof(_err), SoldoutException()) ==> true
   exhale _err != null ==> issubtype(typeof(_err), SoldoutException())

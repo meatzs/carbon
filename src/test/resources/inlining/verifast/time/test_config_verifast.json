@@ -42,14 +42,15 @@
 },
 { 
   "file":"vstte2012_problem2_error0.vpr",
-  "bound":4,
+  "bound":5,
+  "max_inl":50,
   "entry":"client",
   "sc_holds":true,
   "errors":[]
 },
 { 
   "file":"vstte2012_problem2_error1.vpr",
-  "bound":4,
+  "bound":3,
   "entry":"client",
   "sc_holds":true,
   "errors":[{"tag": "unfold.failed:insufficient.permission"}]

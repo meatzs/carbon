@@ -608,7 +608,6 @@ method client_1_1(_cthread_164: Ref, _caller_measures_164: Seq[Measure$], _resid
   _cwl_164, get_res := A_get(_cthread_164, _method_measures_164, _residue_164, _checkDefined(a, 97))
   assert int___eq__(get_res, _checkDefined(a, 97).A_b)
   assert int___eq__(_checkDefined(a, 97).A_b, __prim__int___box__(56))
-  
 }
 
 method client_1_2(_cthread_165: Ref, _caller_measures_165: Seq[Measure$], _residue_165: Perm) returns (_current_wait_level_165: Perm)
@@ -719,7 +718,6 @@ method client_3_2(_cthread_168: Ref, _caller_measures_168: Seq[Measure$], _resid
   _cwl_168 := A___init__(_cthread_168, _method_measures_168, _residue_168, A_res_3)
   a_3 := A_res_3
   inhale _isDefined(3366753)
-  inhale acc(_checkDefined(a_3, 3366753).A_b, write)
   _cwl_168 := A_set2(_cthread_168, _method_measures_168, _residue_168, _checkDefined(a_3, 3366753), __prim__int___box__(56))
   _cwl_168 := A_set(_cthread_168, _method_measures_168, _residue_168, _checkDefined(a_3, 3366753), __prim__int___box__(43))
   assert false
@@ -1105,56 +1103,4 @@ method A_get(_cthread_163: Ref, _caller_measures_163: Seq[Measure$], _residue_16
   _err := null
   self_14 := self_6
   _res := self_14.A_b
-  
-}
-
-method main(_cthread_174: Ref, _caller_measures_174: Seq[Measure$], _residue_174: Perm) returns (_current_wait_level_174: Perm)
-  requires _cthread_174 != null
-  requires issubtype(typeof(_cthread_174), Thread_0())
-  requires [true, perm(MustTerminate(_cthread_174)) == none && ((forperm _r_55: Ref [MustInvokeBounded(_r_55)] :: false) && ((forperm _r_55: Ref [MustInvokeUnbounded(_r_55)] :: false) && ((forperm _r_55: Ref [_r_55.MustReleaseBounded] :: false) && (forperm _r_55: Ref [_r_55.MustReleaseUnbounded] :: false))))]
-  ensures [(forperm _r_53: Ref [_r_53.MustReleaseBounded] :: Level(_r_53) <= _current_wait_level_174) && ((forperm _r_53: Ref [_r_53.MustReleaseUnbounded] :: Level(_r_53) <= _current_wait_level_174) && _residue_174 <= _current_wait_level_174), true]
-  ensures [true, (forperm _r_54: Ref [MustInvokeBounded(_r_54)] :: false) && ((forperm _r_54: Ref [MustInvokeUnbounded(_r_54)] :: false) && ((forperm _r_54: Ref [_r_54.MustReleaseBounded] :: false) && (forperm _r_54: Ref [_r_54.MustReleaseUnbounded] :: false)))]
-{
-  var module_defined_0: Bool
-  var module_names_0: Set[_Name]
-  var _cwl_174: Perm
-  var _method_measures_174: Seq[Measure$]
-  _method_measures_174 := Seq[Measure$]()
-  module_defined_0 := true
-  module_names_0 := Set[_Name]()
-  module_names_0 := (module_names_0 union Set(_single(3106082509126931487350218591)))
-  inhale acc(__file__()._val, 99 / 100) && issubtype(typeof(__file__()._val), str()) && issubtype(typeof(__file__()._val), str())
-  module_names_0 := (module_names_0 union Set(_single(2489530350921051593165922143)))
-  inhale acc(__name__()._val, 99 / 100) && issubtype(typeof(__name__()._val), str()) && issubtype(typeof(__name__()._val), str()) && str___eq__(str___create__(8, 2489249333222104298408468319), __name__()._val)
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(3493880855485680332086796127)))
-  module_names_0 := (module_names_0 union Set(_single(7628147)))
-  module_names_0 := (module_names_0 union Set(_single(846488947)))
-  module_names_0 := (module_names_0 union Set(_single(863266163)))
-  module_names_0 := (module_names_0 union Set(_single(880043379)))
-  module_names_0 := (module_names_0 union Set(_single(896820595)))
-  module_names_0 := (module_names_0 union Set(_single(913597811)))
-  module_names_0 := (module_names_0 union Set(_single(7628135)))
-  module_names_0 := (module_names_0 union Set(_single(65)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(5583153227172562048106720355)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(5583157949539044917751934051)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(2671807346066756509)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(5892638236849791928755645539)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(5892642959216274798400859235)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(5892647681582757668046072931)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(2815922534142612381)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(2887980128180540317)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(2960037722218468253)))
-  assert true
-  module_names_0 := (module_names_0 union Set(_single(3104152910294324125)))
-  
 }

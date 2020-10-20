@@ -671,7 +671,7 @@ method cell_client_1(_cthread_165: Ref, _caller_measures_165: Seq[Measure$], _re
   _cwl_165 := Cell_set(_cthread_165, _method_measures_165, _residue_165, _checkDefined(c, 99), __prim__bool___box__(true))
   assert object___bool__(Cell_get_contents(_checkDefined(c, 99)))
 
-  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  /** Exhaling postcondition explicitly (since tool does not take postcondition of initial method into account for SC) */
   exhale [(forperm _r: Ref [_r.MustReleaseBounded] :: Level(_r) <= _current_wait_level_165) && ((forperm _r: Ref [_r.MustReleaseUnbounded] :: Level(_r) <= _current_wait_level_165) && _residue_165 <= _current_wait_level_165), true]
   exhale [true, (forperm _r_0: Ref [MustInvokeBounded(_r_0)] :: false) && ((forperm _r_0: Ref [MustInvokeUnbounded(_r_0)] :: false) && ((forperm _r_0: Ref [_r_0.MustReleaseBounded] :: false) && (forperm _r_0: Ref [_r_0.MustReleaseUnbounded] :: false)))]
 }
