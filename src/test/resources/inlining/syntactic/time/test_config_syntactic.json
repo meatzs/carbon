@@ -1,14 +1,14 @@
 [
 { 
   "file":"array_list_error0.vpr",
-  "bound":5,
+  "bound":1,
   "entry":"client_create",
   "sc_holds":true,
   "errors":[]
 },
 { 
   "file":"array_list_error1.vpr",
-  "bound":2,
+  "bound":1,
   "entry":"client_create",
   "sc_holds":true,
   "errors":[
@@ -17,14 +17,14 @@
 },
 { 
   "file":"array_list_error0.vpr",
-  "bound":5,
+  "bound":1,
   "entry":"client_addAtEnd",
   "sc_holds":true,
   "errors":[]
 },
 { 
   "file":"array_list_error1.vpr",
-  "bound":5,
+  "bound":1,
   "entry":"client_addAtEnd",
   "sc_holds":true,
   "errors":[{"tag": "assignment.failed:insufficient.permission"}, 
@@ -32,50 +32,47 @@
 },
 { 
   "file":"array_list_error0.vpr",
-  "bound":5,
+  "bound":2,
   "entry":"client_insert",
   "sc_holds":true,
   "errors":[]
 },
 { 
   "file":"array_list_error1.vpr",
-  "bound":5,
+  "bound":2,
   "entry":"client_insert",
   "sc_holds":true,
   "errors":[
     {"tag": "assignment.failed:insufficient.permission"}, 
-    {"tag": "assignment.failed:insufficient.permission"},
-    {"tag": "assignment.failed:insufficient.permission"},
-    {"tag": "assignment.failed:insufficient.permission"},
     {"tag": "assignment.failed:insufficient.permission"}
   ]
 },
 { 
   "file":"array_max_elim_error0.vpr",
-  "bound":5,
-  "entry":"client",
-  "sc_holds":true,
-  "errors":[
-    {"tag": "assignment.failed:insufficient.permission"}
-  ]
-},
-{ 
-  "file":"array_max_elim_error1.vpr",
-  "bound":5,
+  "bound":3,
   "entry":"client",
   "sc_holds":true,
   "errors":[]
 },
 { 
+  "file":"array_max_elim_error1.vpr",
+  "bound":3,
+  "entry":"client",
+  "sc_holds":true,
+  "errors":[
+    {"tag": "assert.failed:assertion.false"}
+  ]
+},
+{ 
   "file":"array_max_straightforward_error0.vpr",
-  "bound":5,
+  "bound":3,
   "entry":"client",
   "sc_holds":true,
   "errors":[]
 },
 { 
   "file":"array_max_straightforward_error1.vpr",
-  "bound":5,
+  "bound":3,
   "entry":"client",
   "sc_holds":true,
   "errors":[
@@ -84,14 +81,14 @@
 },
 { 
   "file":"binary_search_seq_error0.vpr",
-  "bound":5,
+  "bound":2,
   "entry":"client",
   "sc_holds":true,
   "errors":[]
 },
 { 
   "file":"binary_search_seq_error1.vpr",
-  "bound":5,
+  "bound":2,
   "entry":"client",
   "sc_holds":true,
   "errors":[
@@ -100,14 +97,14 @@
 },
 { 
   "file":"binary_search_QP_error0.vpr",
-  "bound":5,
+  "bound":2,
   "entry":"client",
   "sc_holds":true,
   "errors":[]
 },
 { 
   "file":"binary_search_QP_error1.vpr",
-  "bound":5,
+  "bound":2,
   "entry":"client",
   "sc_holds":true,
   "errors":[
@@ -116,66 +113,55 @@
 },
 { 
   "file":"dutch_flag_error0.vpr",
-  "bound":5,
+  "bound":3,
   "entry":"client",
   "sc_holds":true,
   "errors":[]
 },
 { 
   "file":"dutch_flag_error1.vpr",
-  "bound":5,
+  "bound":3,
   "entry":"client",
   "sc_holds":true,
   "errors":[
-    {"tag": "assignment.failed:insufficient.permission"},
-    {"tag": "assignment.failed:insufficient.permission"},
     {"tag": "assignment.failed:insufficient.permission"}
   ]
 },
 { 
   "file":"graph_copy_error0.vpr",
-  "bound":5,
+  "bound":3,
   "entry":"client",
   "sc_holds":true,
   "errors":[]
 },
 { 
   "file":"graph_copy_error1.vpr",
-  "bound":5,
+  "bound":2,
   "entry":"client",
   "sc_holds":true,
   "errors":[
-    {"tag": "call.precondition:assertion.false"},
-    {"tag": "call.precondition:assertion.false"},
-    {"tag": "call.precondition:assertion.false"},
-    {"tag": "call.precondition:assertion.false"},
-    {"tag": "call.precondition:assertion.false"},
-    {"tag": "call.precondition:assertion.false"},
     {"tag": "call.precondition:assertion.false"}
   ]
 },
 { 
   "file":"graph_copy_error2.vpr",
-  "bound":5,
+  "bound":3,
   "entry":"client",
   "sc_holds":true,
   "errors":[
-    {"tag": "assignment.failed:insufficient.permission"},
-    {"tag": "assignment.failed:insufficient.permission"},
-    {"tag": "assignment.failed:insufficient.permission"},
     {"tag": "assignment.failed:insufficient.permission"}
   ]
 },
 { 
   "file":"graph_marking.vpr",
-  "bound":5,
+  "bound":1,
   "entry":"client_success",
   "sc_holds":true,
   "errors":[]
 },
 { 
   "file":"graph_marking.vpr",
-  "bound":5,
+  "bound":1,
   "entry":"client_failure",
   "sc_holds":true,
   "errors":[
@@ -184,14 +170,14 @@
 },
 { 
   "file":"guarded_by_monitor_error0.vpr",
-  "bound":5,
+  "bound":1,
   "entry":"test",
   "sc_holds":true,
   "errors":[]
 },
 { 
   "file":"guarded_by_monitor_error1.vpr",
-  "bound":5,
+  "bound":1,
   "entry":"insert",
   "sc_holds":true,
   "errors":[
@@ -200,14 +186,15 @@
 },
 { 
   "file":"linked_list_error0.vpr",
-  "bound":5,
+  "bound":2,
   "entry":"test",
+  "no_fun_pre_sc":"",
   "sc_holds":true,
   "errors":[]
 },
 { 
   "file":"linked_list_error1.vpr",
-  "bound":2,
+  "bound":1,
   "entry":"insert",
   "sc_holds":true,
   "errors":[
@@ -216,26 +203,23 @@
 },
 { 
   "file":"linked_list_error0.vpr",
-  "bound":5,
+  "bound":2,
   "entry":"concat_client",
   "sc_holds":true,
   "errors":[
-    {"tag": "fold.failed:assertion.false"},
-    {"tag": "fold.failed:assertion.false"},
-    {"tag": "fold.failed:assertion.false"},
     {"tag": "fold.failed:assertion.false"}
   ]
 },
 { 
   "file":"longest_common_prefix.vpr",
-  "bound":5,
+  "bound":2,
   "entry":"lcp",
   "sc_holds":true,
   "errors":[]
 },
 { 
   "file":"longest_common_prefix.vpr",
-  "bound":5,
+  "bound":2,
   "entry":"lcp_error",
   "sc_holds":true,
   "errors":[
@@ -245,14 +229,14 @@
 },
 { 
   "file":"sorted_list.vpr",
-  "bound":5,
+  "bound":1,
   "entry":"insert",
   "sc_holds":true,
   "errors":[]
 },
 { 
   "file":"sorted_list.vpr",
-  "bound":5,
+  "bound":1,
   "entry":"insert_error",
   "sc_holds":true,
   "errors":[
