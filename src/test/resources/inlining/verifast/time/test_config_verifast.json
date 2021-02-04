@@ -69,5 +69,26 @@
   "entry":"client",
   "sc_holds":true,
   "errors":[{"tag": "assert.failed:insufficient.permission"}]
+},
+{ 
+  "file":"ghost_lists_error0.vpr",
+  "bound":2,
+  "entry":"client",
+  "sc_holds":true,
+  "errors":[]
+},
+{ 
+  "file":"ghost_lists_error1.vpr",
+  "bound":2,
+  "entry":"client",
+  "sc_holds":true,
+  "errors":[{"tag": "unfold.failed:insufficient.permission"}]
+},
+{ 
+  "file":"ghost_lists_error2.vpr",
+  "bound":2,
+  "entry":"client",
+  "sc_holds":true,
+  "errors":[{"tag": "assert.failed:insufficient.permission"}]
 }
 ]

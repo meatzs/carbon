@@ -1,4 +1,4 @@
-define ERROR (2)
+define ERROR (0)
 
 domain map {
     function map_fst(xs: Ref): Ref
