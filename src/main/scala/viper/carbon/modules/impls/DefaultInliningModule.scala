@@ -1063,6 +1063,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           if (s.undeclLocalVars.contains(d.localVar)) {
             s match {
               case sil.Seqn(ss, scopedDecls) => r = r.updated(i, sil.Seqn(ss, scopedDecls ++ Seq(d))(s.pos, s.info, s.errT))
+              case _ => count += (d -> 2) // We return it if not caught
             }
           }
         }
