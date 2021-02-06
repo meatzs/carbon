@@ -98,7 +98,7 @@ trait InliningModule extends Module with Component {
   def inlinable(stmt: sil.Stmt): Boolean
 
   def alreadyGroupedInlinableStmts(ss: Seq[sil.Stmt]): Boolean
-  def groupNonInlinableStmts(ss: Seq[sil.Stmt], orig_s: sil.Stmt): Seq[sil.Stmt]
+  def groupNonInlinableStmts(ss: Seq[sil.Stmt], orig_s: sil.Stmt, locals: Seq[sil.LocalVarDecl]): (Seq[sil.Stmt], Seq[sil.LocalVarDecl])
 
   // ----------------------------------------------------------------
   // ACTUAL INLINING

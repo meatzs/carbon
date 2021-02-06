@@ -1013,7 +1013,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     (ss forall inlinable) || (ss forall (!inlinable(_)))
   }
 
-  def groupNonInlinableStmts(ss: Seq[sil.Stmt], orig_s: sil.Stmt): Seq[sil.Stmt] = {
+  def groupNonInlinableStmts(ss: Seq[sil.Stmt], orig_s: sil.Stmt, locals: Seq[sil.LocalVarDecl]): (Seq[sil.Stmt], Seq[sil.LocalVarDecl]) = {
 
       var currentNonInlinable: Seq[sil.Stmt] = Seq()
       var r: Seq[sil.Stmt] = Seq()
@@ -1042,7 +1042,34 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           r :+= sil.Seqn(currentNonInlinable, Seq())(orig_s.pos, orig_s.info, orig_s.errT)
         }
       }
-      r
+
+    // Reorganizing variable declarations to capture more patterns
+
+    var count: Map[sil.Declaration, Int] = Map()
+    for (d <- locals) {
+      count += (d -> 0)
+    }
+    for (s <- r) {
+      for (d <- locals) {
+        if (s.undeclLocalVars.contains(d.localVar)) {
+          count += (d -> (count(d) + 1))
+        }
+      }
+    }
+
+    for (d <- locals) {
+      if (count(d) == 1) {
+        for ((s, i) <- r.zipWithIndex) {
+          if (s.undeclLocalVars.contains(d.localVar)) {
+            s match {
+              case sil.Seqn(ss, scopedDecls) => r = r.updated(i, sil.Seqn(ss, scopedDecls ++ Seq(d))(s.pos, s.info, s.errT))
+            }
+          }
+        }
+      }
+    }
+
+    (r, locals.filter(count(_) > 1))
     }
 
   // ----------------------------------------------------------------

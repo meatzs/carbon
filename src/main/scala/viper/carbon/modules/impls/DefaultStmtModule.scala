@@ -267,17 +267,19 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
       var comment = "Translating statement: " + stmt.toString.replace("\n", "\n  // ")
       stmt match {
         case sil.Seqn(old_ss, scopedDecls) =>
-          val locals = scopedDecls.collect { case l: sil.LocalVarDecl => l }
-          locals map (v => mainModule.env.define(v.localVar)) // add local variables to environment
+          var locals = scopedDecls.collect { case l: sil.LocalVarDecl => l }
           val ss = {
             // if (isCheckingFraming() || verifier.staticInlining.isEmpty || syntacticFraming(stmt)) {
             if (isCheckingFraming() || verifier.staticInlining.isEmpty || inliningModule.alreadyGroupedInlinableStmts(old_ss)) {
               old_ss
             }
             else {
-              groupNonInlinableStmts(old_ss, stmt)
+              val r = groupNonInlinableStmts(old_ss, stmt, locals)
+              locals = r._2
+              r._1
             }
           }
+          locals map (v => mainModule.env.define(v.localVar)) // add local variables to environment
           val s =
             MaybeCommentBlock("Assumptions about local variables", locals map (a => mainModule.allAssumptionsAboutValue(a.typ, mainModule.translateLocalVarDecl(a), true))) ++
               Seqn(ss map (st => translateStmt(st, statesStack, allStateAssms, duringPackage)))

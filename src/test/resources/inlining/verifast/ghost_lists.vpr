@@ -91,7 +91,7 @@ method ghost_assoc_list_create_member_handle(id: Int, x: Ref, f1: Perm, xys: Ref
     assert acc(ghost_list_member_handle(id, x), f)
     // close [f]ghost_assoc_list_member_handle(id, x);
     fold acc(ghost_assoc_list_member_handle(id, x), f)
-    f := none
+    // f := none
 }
 
 method ghost_assoc_list_add(id: Int, x: Ref, xys: Ref) returns (xyz: Ref)
