@@ -1146,7 +1146,75 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     current_depth == maxDepth || (verifier.maxInl.isDefined && (n_inl >= verifier.maxInl.get))
   }
 
+  def foldStar(s: Seq[ast.Exp], a: ast.Position, b: ast.Info, c: ast.ErrorTrafo): ast.Exp =
+  {
+    if (s.isEmpty) {
+      ast.BoolLit(true)(a, b, c)
+    }
+    (s.tail fold (s.head))((e1: ast.Exp, e2: ast.Exp) => ast.And(e1, e2)(a, b, c))
+  }
+
   def inlineMethod(m: Method, args: Seq[ast.Exp], targets: Seq[ast.LocalVar]): Stmt = {
+
+
+    /*
+          // save pre-call state
+          val (preCallStateStmt, state) = stateModule.freshTempState("PreCall")
+          val preCallState = stateModule.state
+          val oldState = stateModule.oldState
+          stateModule.replaceState(state)
+
+          For renaming: Use renameExp
+
+          // Not needed?
+          val toUndefine = collection.mutable.ListBuffer[sil.LocalVar]()
+          val actualArgs = args.zipWithIndex map (a => {
+            val (actual, i) = a
+            // use the concrete argument if it is just a variable or constant (to avoid code bloat)
+            val useConcrete = actual match {
+              case v: sil.LocalVar if !targets.contains(v) => true
+              case _: sil.Literal => true
+              case _ => false
+            }
+            if (!useConcrete) {
+              val silFormal = method.formalArgs(i)
+              val tempArg = sil.LocalVar("arg_" + silFormal.name, silFormal.typ)()
+              mainModule.env.define(tempArg)
+              toUndefine.append(tempArg)
+              val translatedTempArg = translateExp(tempArg)
+              val translatedActual = translateExp(actual)
+              val stmt = translatedTempArg := translatedActual
+              (tempArg, stmt, Some(actual))
+            } else {
+              (args(i), Nil: Stmt, None)
+            }
+          })
+          val neededRenamings: Seq[(sil.AbstractLocalVar, sil.Exp)] = actualArgs.filter((_._3.isDefined)).map(element => (element._1.asInstanceOf[sil.LocalVar], element._3.get))
+          val removingTriggers: (errors.ErrorNode => errors.ErrorNode) =
+            ((n: errors.ErrorNode) => n.transform { case q: sil.Forall => q.copy(triggers = Nil)(q.pos, q.info, q.errT) })
+          val renamingArguments: (errors.ErrorNode => errors.ErrorNode) = ((n: errors.ErrorNode) => removingTriggers(n).transform({
+            case e: sil.Exp => Expressions.instantiateVariables[sil.Exp](e, neededRenamings map (_._1), neededRenamings map (_._2))
+          }))
+
+          val pres = method.pres map (e => Expressions.instantiateVariables(e, method.formalArgs ++ method.formalReturns, (actualArgs map (_._1)) ++ targets, mainModule.env.allDefinedNames(program)))
+          val posts = method.posts map (e => Expressions.instantiateVariables(e, method.formalArgs ++ method.formalReturns, (actualArgs map (_._1)) ++ targets, mainModule.env.allDefinedNames(program)))
+          val res = preCallStateStmt ++
+            (targets map (e => checkDefinedness(e, errors.CallFailed(mc), insidePackageStmt = insidePackageStmt))) ++
+            (args map (e => checkDefinedness(e, errors.CallFailed(mc), insidePackageStmt = insidePackageStmt))) ++
+            (actualArgs map (_._2)) ++
+            Havoc((targets map translateExp).asInstanceOf[Seq[Var]]) ++
+            MaybeCommentBlock("Exhaling precondition", executeUnfoldings(pres, (pre => errors.PreconditionInCallFalse(mc).withReasonNodeTransformed(renamingArguments))) ++
+              exhale(pres map (e => (e, errors.PreconditionInCallFalse(mc).withReasonNodeTransformed(renamingArguments))), statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt)) ++ {
+            stateModule.replaceOldState(preCallState)
+            val res = MaybeCommentBlock("Inhaling postcondition", inhale(posts, statesStack, insidePackageStmt) ++
+              executeUnfoldings(posts, (post => errors.Internal(post).withReasonNodeTransformed(renamingArguments))))
+            stateModule.replaceOldState(oldState)
+            toUndefine map mainModule.env.undefine
+            res
+          }
+          res
+
+     */
 
     val old_inside_initial_method = inside_initial_method
     inside_initial_method = false
@@ -1166,8 +1234,14 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
       currentRenaming = Map()
       inRenaming = Set()
-      val pre_body = m.body.get
-      val body = alphaRename(pre_body)
+
+      val pre_body: ast.Stmt = alphaRename(m.body.get)
+      // Partial annotation:
+      // We assert the precondition and the postcondition in Silver, before inlining
+      // such that it also help to prove the soundness condition
+      val prec: ast.Exp = foldStar(m.pres map renameExp, m.pos, m.info, m.errT)
+      val post: ast.Exp = foldStar(m.posts map renameExp, m.pos, m.info, m.errT)
+      val body = ast.Seqn(Seq(ast.Assert(prec)(m.pos, m.info, m.errT), pre_body, ast.Assert(post)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
       val renamedFormalArgsVars: Seq[ast.LocalVar] = (m.formalArgs map (_.localVar)) map renameVar
       val renamedFormalReturnsVars: Seq[ast.LocalVar] = ((m.formalReturns map (_.localVar))) map renameVar
 

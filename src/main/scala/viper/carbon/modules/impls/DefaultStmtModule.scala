@@ -29,7 +29,7 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
   import inhaleModule._
   import funcPredModule._
   import wandModule._
-  import inliningModule.{isCheckingFraming, checkFraming, inlineLoop, inlineMethod, inlinable, syntacticFraming, groupNonInlinableStmts}
+  import inliningModule.{isCheckingFraming, checkFraming, inlineLoop, inlinable, syntacticFraming, groupNonInlinableStmts}
 
   override def start() {
     // this is the main translation, so it should come at the "beginning"; it defines the innermost code used in the translation; other modules can wrap this with their own code
