@@ -772,19 +772,19 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   // Wrapper for modular approximation
-  def checkFraming(pre_orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt = {
+  def checkFraming(body1: sil.Stmt, body2: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt = {
     if (modularSC) {
       if (checkMono) {
         if (inside_initial_method) {
-          checkFramingAux(pre_orig_s, orig, true, checkWFM, modif_vars)
+          checkFramingAux(body1, body2, true, checkWFM, modif_vars)
         }
         else {
-          checkFramingAux(pre_orig_s, orig, false, checkWFM, modif_vars)
+          checkFramingAux(body1, body2, false, checkWFM, modif_vars)
         }
       }
       else {
-        if (!inlinable(pre_orig_s)) {
-          checkFramingAux(pre_orig_s, orig, checkMono, checkWFM, modif_vars)
+        if (!inlinable(body1)) {
+          checkFramingAux(body1, body2, checkMono, checkWFM, modif_vars)
         }
         else {
           // Avoiding to check framing thanks to compositional property
@@ -793,20 +793,21 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       }
     }
     else {
-      checkFramingAux(pre_orig_s, orig, checkMono, checkWFM, modif_vars)
+      checkFramingAux(body1, body2, checkMono, checkWFM, modif_vars)
     }
   }
 
   var n_syntactic = 0
   var n_syntactic_not = 0
 
-  def checkFramingAux(pre_orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt = {
+  def checkFramingAux(pre_body1: sil.Stmt, pre_body2: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt = {
 
     namesAlreadyUsed = Set()
-    val orig_s: ast.Stmt = inlineSil(pre_orig_s, maxDepth - current_depth)
+    val body1: ast.Stmt = inlineSil(pre_body1, maxDepth - current_depth)
+    val body2: ast.Stmt = inlineSil(pre_body2, maxDepth - current_depth)
     // val orig_s: ast.Stmt = pre_orig_s
     if (verifier.printSC)
-      println("checkFraming", current_depth, "framing", !checkMono, "length", length(orig_s))
+      println("checkFraming", current_depth, "framing", !checkMono, "length", length(body1))
 
     var ignore = false
 
@@ -819,7 +820,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     else if (isCheckingFraming()) {
       ignore = true
     }
-    else if (syntacticFraming(orig_s, checkMono)) {
+    else if (syntacticFraming(body1, checkMono)) {
       if (!checkWFM) {
         n_syntactic += 1
       }
@@ -832,7 +833,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           println("Syntactically framing")
         }
         println("-----------------------------------------------------------")
-        println(orig_s)
+        println(body1)
         println("¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯")
       }
       ignore = true
@@ -862,13 +863,13 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       if (verifier.printSC) {
         println(errorType + " " + id_error)
         println("-----------------------------------------------------------")
-        println(orig_s)
+        println(body1)
         println("¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯")
       }
 
-      val aa = orig_s.pos
-      val bb = orig_s.info
-      val cc = orig_s.errT
+      val aa = body1.pos
+      val bb = body1.info
+      val cc = body1.errT
 
       val silExistsDecl: ast.LocalVarDecl = sil.LocalVarDecl(silNameNotUsed("exists"), sil.Bool)(aa, bb, cc)
       val exists: LocalVar = mainModule.env.define(silExistsDecl.localVar)
@@ -879,13 +880,13 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
 
       // val orig_s1: sil.Stmt = sil.Seqn(Seq(sil.LocalVarAssign(silExistsDecl.localVar, sil.TrueLit()(aa, bb, cc))(aa, bb, cc),
-      val orig_s1: sil.Stmt = recordVarsSil(orig_s, silExistsDecl.localVar)
+      val orig_s1: sil.Stmt = recordVarsSil(body1, silExistsDecl.localVar)
         //Seq(silExistsDecl))(aa, bb, cc)
         //Seq())(aa, bb, cc)
-      val orig_s2: sil.Stmt = assignVarsSil(orig_s, silExistsDecl.localVar)
+      val orig_s2: sil.Stmt = assignVarsSil(body2, silExistsDecl.localVar)
       // val orig_s1 = orig_s
 
-      val converted_vars: Seq[LocalVar] = (orig_s.writtenVars filter (v => mainModule.env.isDefinedAt(v))) map translateLocalVar
+      val converted_vars: Seq[LocalVar] = (body1.writtenVars filter (v => mainModule.env.isDefinedAt(v))) map translateLocalVar
       // val oldVars = converted_vars map ((v: LocalVar) => newVar(v.typ).l)
       val oldVars = converted_vars map ((v: LocalVar) => getVarDecl(v.name.name, v.typ).l)
       // val tempVars = converted_vars map ((v: LocalVar) => newVar(v.typ).l)
@@ -918,20 +919,20 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
 
       val text = {if (checkWFM) "WFM" else "monoOut"}
-      val nm_exists: VerificationError = SoundnessFailed(orig, DummyReason, text + " (trace may disappear)", id_error, errorType)
-      val nm_smaller: VerificationError = SoundnessFailed(orig, DummyReason, text + " (order not preserved)", id_error, errorType)
-      val nm_variables: VerificationError = SoundnessFailed(orig, DummyReason, text + " (variables)", id_error, errorType)
+      val nm_exists: VerificationError = SoundnessFailed(body1, DummyReason, text + " (trace may disappear)", id_error, errorType)
+      val nm_smaller: VerificationError = SoundnessFailed(body1, DummyReason, text + " (order not preserved)", id_error, errorType)
+      val nm_variables: VerificationError = SoundnessFailed(body1, DummyReason, text + " (variables)", id_error, errorType)
 
 
-      val nf: VerificationError = SoundnessFailed(orig, DummyReason, "framing", id_error, errorType)
-      val error_ignore: VerificationError = SoundnessFailed(orig, DummyReason, "monoOut (structural)", id_error, errorType)
-      val nsm: VerificationError = SoundnessFailed(orig, DummyReason, "safeMono", id_error, errorType)
+      val nf: VerificationError = SoundnessFailed(body1, DummyReason, "framing", id_error, errorType)
+      val error_ignore: VerificationError = SoundnessFailed(body1, DummyReason, "monoOut (structural)", id_error, errorType)
+      val nsm: VerificationError = SoundnessFailed(body1, DummyReason, "safeMono", id_error, errorType)
 
       declareFalseAtBegin = Seq()
       val (modif_s, l) = recordDeterminism(assumify(addIfExists(changeStateWfState(s1, exists), exists)))
       val assign_false_branches_taken: Seq[Stmt] = declareFalseAtBegin map ((x) => Assign(x.l, FalseLit()))
 
-      val (modif_s2, ll) = determinize(doubleErrorSafeMono(s2, orig, id_error, errorType, check, id_check), l, check, id_check, error_ignore)
+      val (modif_s2, ll) = determinize(doubleErrorSafeMono(s2, body2, id_error, errorType, check, id_check), l, check, id_check, error_ignore)
 
       val sumState = (getVarDecl("sumMask", maskType), getVarDecl("sumHeap", heapType))
 
@@ -1154,6 +1155,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     (s.tail fold (s.head))((e1: ast.Exp, e2: ast.Exp) => ast.And(e1, e2)(a, b, c))
   }
 
+  var n_label = 0
+
   def inlineMethod(m: Method, args: Seq[ast.Exp], targets: Seq[ast.LocalVar]): Stmt = {
 
 
@@ -1239,9 +1242,30 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       // Partial annotation:
       // We assert the precondition and the postcondition in Silver, before inlining
       // such that it also help to prove the soundness condition
-      val prec: ast.Exp = foldStar(m.pres map renameExp, m.pos, m.info, m.errT)
-      val post: ast.Exp = foldStar(m.posts map renameExp, m.pos, m.info, m.errT)
-      val body = ast.Seqn(Seq(ast.Assert(prec)(m.pos, m.info, m.errT), pre_body, ast.Assert(post)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
+      val prec: ast.Exp = foldStar(m.pres map renameExp, m.pos, m.info, m.errT).whenInhaling
+      val pre_post: ast.Exp = foldStar(m.posts map renameExp, m.pos, m.info, m.errT).whenExhaling
+      val lab1 = ast.Label(n_label.toString, Seq())(m.pos, m.info, m.errT)
+      val lab2 = ast.Label((n_label + 1).toString, Seq())(m.pos, m.info, m.errT)
+      val lab3 = ast.Label((n_label + 2).toString, Seq())(m.pos, m.info, m.errT)
+      val post1 = pre_post.transform(
+        {
+          case sil.Old(e) => sil.LabelledOld(e, n_label.toString)(e.pos, m.info, m.errT)
+        })
+      val post2 = pre_post.transform(
+        {
+          case sil.Old(e) => sil.LabelledOld(e, (n_label + 1).toString)(e.pos, m.info, m.errT)
+        })
+      val post3 = pre_post.transform(
+        {
+          case sil.Old(e) => sil.LabelledOld(e, (n_label + 2).toString)(e.pos, m.info, m.errT)
+        })
+
+
+      n_label += 3
+
+      val body1 = ast.Seqn(Seq(lab1, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body, ast.Assert(post1)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
+      val body2 = ast.Seqn(Seq(lab2, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body, ast.Assert(post2)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
+      val body3 = ast.Seqn(Seq(lab3, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body, ast.Assert(post3)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
       val renamedFormalArgsVars: Seq[ast.LocalVar] = (m.formalArgs map (_.localVar)) map renameVar
       val renamedFormalReturnsVars: Seq[ast.LocalVar] = ((m.formalReturns map (_.localVar))) map renameVar
 
@@ -1257,12 +1281,12 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         }
       }
 
-      val r1 = checkFraming(body, body)
+      val r1 = checkFraming(body1, body2)
       val oldCheckingFraming = checkingFraming
-      if (!inlinable(body)) {
+      if (!inlinable(body1)) {
         checkingFraming = true
       }
-      val r2 = stmtModule.translateStmt(body)
+      val r2 = stmtModule.translateStmt(body3)
       checkingFraming = oldCheckingFraming
 
       current_depth -= 1
