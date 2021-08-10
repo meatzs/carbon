@@ -1099,7 +1099,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     // Add the invariant before and after the loop body, before inlining it
     val (a, b, c) = (body.pos, body.info, body.errT)
     val inv = foldStar(invs, a, b, c)
-    val annotated_body = ast.Seqn(Seq(ast.Assert(inv.whenInhaling)(a, b, c), body, ast.Assert(inv.whenExhaling)(a, b, c)), Seq())(a, b, c)
+    val annotated_body = ast.Seqn(Seq(ast.Assert(inv)(a, b, c), body, ast.Assert(inv)(a, b, c)), Seq())(a, b, c)
     inlineLoopAux(cond, invs, annotated_body)
   }
 
@@ -1203,8 +1203,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       // Partial annotation:
       // We assert the precondition and the postcondition in Silver, before inlining
       // such that it also help to prove the soundness condition
-      val prec: ast.Exp = foldStar(m.pres map renameExp, m.pos, m.info, m.errT).whenInhaling
-      val pre_post: ast.Exp = foldStar(m.posts map renameExp, m.pos, m.info, m.errT).whenExhaling
+      val prec: ast.Exp = foldStar(m.pres map renameExp, m.pos, m.info, m.errT)
+      val pre_post: ast.Exp = foldStar(m.posts map renameExp, m.pos, m.info, m.errT)
       val lab1 = ast.Label(n_label.toString, Seq())(m.pos, m.info, m.errT)
       val lab2 = ast.Label((n_label + 1).toString, Seq())(m.pos, m.info, m.errT)
       val lab3 = ast.Label((n_label + 2).toString, Seq())(m.pos, m.info, m.errT)
