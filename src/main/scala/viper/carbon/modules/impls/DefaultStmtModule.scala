@@ -176,7 +176,7 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
         }
       case w@sil.While(cond, invs, body) =>
         if (verifier.staticInlining.isDefined) {
-          inlineLoop(w, cond, invs, body)
+          inlineLoop(cond, invs, body)
         }
         else {
           val guard = translateExp(cond)

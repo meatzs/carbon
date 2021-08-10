@@ -1095,21 +1095,28 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       stmt
     }
   }
+  def inlineLoop(cond: ast.Exp, invs: Seq[ast.Exp], body: ast.Seqn): Stmt = {
+    // Add the invariant before and after the loop body, before inlining it
+    val (a, b, c) = (body.pos, body.info, body.errT)
+    val inv = foldStar(invs, a, b, c)
+    val annotated_body = ast.Seqn(Seq(ast.Assert(inv.whenInhaling)(a, b, c), body, ast.Assert(inv.whenExhaling)(a, b, c)), Seq())(a, b, c)
+    inlineLoopAux(cond, invs, annotated_body)
+  }
 
-  def inlineLoop(w: sil.Stmt, cond: ast.Exp, invs: Seq[ast.Exp], body: ast.Seqn): Stmt = {
+  def inlineLoopAux(cond: ast.Exp, invs: Seq[ast.Exp], body: ast.Seqn): Stmt = {
 
     val old_inside_initial_method = inside_initial_method
     inside_initial_method = false
 
     if (verifier.printSC)
-      println("inlineLoop", current_depth, cond, "length", length(w), n_inl)
+      println("inlineLoop", current_depth, cond, "length", length(body), n_inl)
     val guard = translateExp(cond)
 
     val depth = maxDepth - current_depth
 
     if (stopInlining) {
       val cond_neg: sil.Stmt = sil.Inhale(sil.Not(cond)(cond.pos, cond.info, cond.errT))(cond.pos, cond.info, cond.errT)
-      val wfm: Stmt = checkFraming(cond_neg, w, true, true)
+      val wfm: Stmt = checkFraming(cond_neg, cond_neg, true, true)
       inside_initial_method = old_inside_initial_method
       MaybeCommentBlock("0: Check SC and cut branch (loop)", wfm ++ Assume(guard ==> FalseLit()))
     }
@@ -1119,15 +1126,15 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       // Real inlining
       n_inl += 1
 
-      val r1 = checkFraming(body, w)
+      val r1 = checkFraming(body, body)
 
-      val modif_vars: Seq[LocalVar] = (w.writtenVars filter (v => mainModule.env.isDefinedAt(v))) map translateLocalVar
+      val modif_vars: Seq[LocalVar] = (body.writtenVars filter (v => mainModule.env.isDefinedAt(v))) map translateLocalVar
 
       val check_wfm = {
         val cond_pos: sil.Stmt = sil.Inhale(cond)(cond.pos, cond.info, cond.errT)
         val cond_neg: sil.Stmt = sil.Inhale(sil.Not(cond)(cond.pos, cond.info, cond.errT))(cond.pos, cond.info, cond.errT)
-        MaybeCommentBlock("Check WFM", checkFraming(cond_pos, w, true, true, modif_vars=modif_vars)
-          ++ checkFraming(cond_neg, w, true, true, modif_vars=modif_vars))
+        MaybeCommentBlock("Check WFM", checkFraming(cond_pos, cond_pos, true, true, modif_vars=modif_vars)
+          ++ checkFraming(cond_neg, cond_neg, true, true, modif_vars=modif_vars))
       }
 
       val oldCheckingFraming = checkingFraming
@@ -1136,7 +1143,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       }
       val r2 = MaybeCommentBlock(depth + ": Loop body", stmtModule.translateStmt(body))
       checkingFraming = oldCheckingFraming
-      val remaining = inlineLoop(w, cond, invs, body)
+      val remaining = inlineLoopAux(cond, invs, body)
       current_depth -= 1
       inside_initial_method = old_inside_initial_method
       MaybeCommentBlock(depth + ": Inlined loop", check_wfm ++ If(guard, r1 ++ getBoundedComplete() ++ r2 ++ remaining, Statements.EmptyStmt) ++ getBoundedComplete())
@@ -1152,72 +1159,14 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     if (s.isEmpty) {
       ast.BoolLit(true)(a, b, c)
     }
-    (s.tail fold (s.head))((e1: ast.Exp, e2: ast.Exp) => ast.And(e1, e2)(a, b, c))
+    else {
+      (s.tail fold (s.head))((e1: ast.Exp, e2: ast.Exp) => ast.And(e1, e2)(a, b, c))
+    }
   }
 
   var n_label = 0
 
   def inlineMethod(m: Method, args: Seq[ast.Exp], targets: Seq[ast.LocalVar]): Stmt = {
-
-
-    /*
-          // save pre-call state
-          val (preCallStateStmt, state) = stateModule.freshTempState("PreCall")
-          val preCallState = stateModule.state
-          val oldState = stateModule.oldState
-          stateModule.replaceState(state)
-
-          For renaming: Use renameExp
-
-          // Not needed?
-          val toUndefine = collection.mutable.ListBuffer[sil.LocalVar]()
-          val actualArgs = args.zipWithIndex map (a => {
-            val (actual, i) = a
-            // use the concrete argument if it is just a variable or constant (to avoid code bloat)
-            val useConcrete = actual match {
-              case v: sil.LocalVar if !targets.contains(v) => true
-              case _: sil.Literal => true
-              case _ => false
-            }
-            if (!useConcrete) {
-              val silFormal = method.formalArgs(i)
-              val tempArg = sil.LocalVar("arg_" + silFormal.name, silFormal.typ)()
-              mainModule.env.define(tempArg)
-              toUndefine.append(tempArg)
-              val translatedTempArg = translateExp(tempArg)
-              val translatedActual = translateExp(actual)
-              val stmt = translatedTempArg := translatedActual
-              (tempArg, stmt, Some(actual))
-            } else {
-              (args(i), Nil: Stmt, None)
-            }
-          })
-          val neededRenamings: Seq[(sil.AbstractLocalVar, sil.Exp)] = actualArgs.filter((_._3.isDefined)).map(element => (element._1.asInstanceOf[sil.LocalVar], element._3.get))
-          val removingTriggers: (errors.ErrorNode => errors.ErrorNode) =
-            ((n: errors.ErrorNode) => n.transform { case q: sil.Forall => q.copy(triggers = Nil)(q.pos, q.info, q.errT) })
-          val renamingArguments: (errors.ErrorNode => errors.ErrorNode) = ((n: errors.ErrorNode) => removingTriggers(n).transform({
-            case e: sil.Exp => Expressions.instantiateVariables[sil.Exp](e, neededRenamings map (_._1), neededRenamings map (_._2))
-          }))
-
-          val pres = method.pres map (e => Expressions.instantiateVariables(e, method.formalArgs ++ method.formalReturns, (actualArgs map (_._1)) ++ targets, mainModule.env.allDefinedNames(program)))
-          val posts = method.posts map (e => Expressions.instantiateVariables(e, method.formalArgs ++ method.formalReturns, (actualArgs map (_._1)) ++ targets, mainModule.env.allDefinedNames(program)))
-          val res = preCallStateStmt ++
-            (targets map (e => checkDefinedness(e, errors.CallFailed(mc), insidePackageStmt = insidePackageStmt))) ++
-            (args map (e => checkDefinedness(e, errors.CallFailed(mc), insidePackageStmt = insidePackageStmt))) ++
-            (actualArgs map (_._2)) ++
-            Havoc((targets map translateExp).asInstanceOf[Seq[Var]]) ++
-            MaybeCommentBlock("Exhaling precondition", executeUnfoldings(pres, (pre => errors.PreconditionInCallFalse(mc).withReasonNodeTransformed(renamingArguments))) ++
-              exhale(pres map (e => (e, errors.PreconditionInCallFalse(mc).withReasonNodeTransformed(renamingArguments))), statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt)) ++ {
-            stateModule.replaceOldState(preCallState)
-            val res = MaybeCommentBlock("Inhaling postcondition", inhale(posts, statesStack, insidePackageStmt) ++
-              executeUnfoldings(posts, (post => errors.Internal(post).withReasonNodeTransformed(renamingArguments))))
-            stateModule.replaceOldState(oldState)
-            toUndefine map mainModule.env.undefine
-            res
-          }
-          res
-
-     */
 
     val old_inside_initial_method = inside_initial_method
     inside_initial_method = false
@@ -1238,6 +1187,18 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       currentRenaming = Map()
       inRenaming = Set()
 
+      val t1: (PartialFunction[viper.silver.ast.Node,viper.silver.ast.Node]) = {
+        case sil.Old(e) => sil.LabelledOld(e, n_label.toString)(e.pos, m.info, m.errT)
+      }
+      val t2: (PartialFunction[viper.silver.ast.Node,viper.silver.ast.Node]) = {
+        case sil.Old(e) => sil.LabelledOld(e, (n_label + 1).toString)(e.pos, m.info, m.errT)
+      }
+      val t3: (PartialFunction[viper.silver.ast.Node,viper.silver.ast.Node]) = {
+        case sil.Old(e) => sil.LabelledOld(e, (n_label + 2).toString)(e.pos, m.info, m.errT)
+      }
+
+
+
       val pre_body: ast.Stmt = alphaRename(m.body.get)
       // Partial annotation:
       // We assert the precondition and the postcondition in Silver, before inlining
@@ -1247,25 +1208,17 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val lab1 = ast.Label(n_label.toString, Seq())(m.pos, m.info, m.errT)
       val lab2 = ast.Label((n_label + 1).toString, Seq())(m.pos, m.info, m.errT)
       val lab3 = ast.Label((n_label + 2).toString, Seq())(m.pos, m.info, m.errT)
-      val post1 = pre_post.transform(
-        {
-          case sil.Old(e) => sil.LabelledOld(e, n_label.toString)(e.pos, m.info, m.errT)
-        })
-      val post2 = pre_post.transform(
-        {
-          case sil.Old(e) => sil.LabelledOld(e, (n_label + 1).toString)(e.pos, m.info, m.errT)
-        })
-      val post3 = pre_post.transform(
-        {
-          case sil.Old(e) => sil.LabelledOld(e, (n_label + 2).toString)(e.pos, m.info, m.errT)
-        })
+      val post1 = pre_post.transform(t1)
+      val post2 = pre_post.transform(t2)
+      val post3 = pre_post.transform(t3)
 
+
+      val body1 = ast.Seqn(Seq(lab1, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body.transform(t1), ast.Assert(post1)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
+      val body2 = ast.Seqn(Seq(lab2, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body.transform(t2), ast.Assert(post2)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
+      val body3 = ast.Seqn(Seq(lab3, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body.transform(t3), ast.Assert(post3)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
 
       n_label += 3
 
-      val body1 = ast.Seqn(Seq(lab1, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body, ast.Assert(post1)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
-      val body2 = ast.Seqn(Seq(lab2, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body, ast.Assert(post2)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
-      val body3 = ast.Seqn(Seq(lab3, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body, ast.Assert(post3)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
       val renamedFormalArgsVars: Seq[ast.LocalVar] = (m.formalArgs map (_.localVar)) map renameVar
       val renamedFormalReturnsVars: Seq[ast.LocalVar] = ((m.formalReturns map (_.localVar))) map renameVar
 
