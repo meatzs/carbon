@@ -51,11 +51,35 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
 
   override def translate(p: sil.Program): (Program, Map[String, Map[String, String]]) = {
 
+    def replaceInhExhWithTrue(e: sil.Exp) : sil.Exp = {
+      e.transform(
+        {
+          case inhExh: sil.InhaleExhaleExp => sil.TrueLit()(inhExh.pos, inhExh.info, inhExh.errT)
+        }
+      )
+    }
+
     verifier.replaceProgram(
       p.transform(
         {
           case f: sil.Forall => f.autoTrigger
           case e: sil.Exists => e.autoTrigger
+          case m: sil.Method =>
+            /**
+              * For all potentially inlined methods except the entry method:
+              * Replace inhale-exhale assertions in specifications with "true", since taking them into account
+              * for inlining does not work in the standard approach.
+              * Specifications for abstract methods are left unchanged (since they cannot be inlined).
+              */
+
+            if(m.body.isDefined && entry.fold(true)(entryName => !m.name.equals(entryName))) {
+              m.copy(
+                pres = m.pres.map(replaceInhExhWithTrue),
+                posts = m.posts.map(replaceInhExhWithTrue)
+              )(m.pos, m.info, m.errT)
+            } else {
+              m
+            }
         },
         Traverse.TopDown)
     )
