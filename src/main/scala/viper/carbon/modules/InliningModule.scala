@@ -9,6 +9,9 @@ import viper.carbon.boogie._
 
 trait InliningModule extends Module with Component {
 
+  def annotateMethod(m: ast.Method): ast.Method
+  def annotateStmt(s: ast.Stmt): ast.Stmt
+
   def length(s: sil.Stmt): Int
 
   def staticHeap(): Var

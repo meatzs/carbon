@@ -1095,12 +1095,62 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       stmt
     }
   }
+
+  def annotateMethod(m: ast.Method): ast.Method = {
+    val (a, b, c) = (m.pos, m.info, m.errT)
+    val pre = foldStar(m.pres, a, b, c)
+    val post = foldStar(m.posts, a, b, c)
+    val annotated_body = ast.Seqn(Seq(ast.Assert(pre)(a, b, c), annotateStmt(m.body.get), ast.Assert(post)(a, b, c)), Seq())(a, b, c)
+    m.copy(body = Some(annotated_body))(a, b, c)
+  }
+
+  def annotateStmt(s: ast.Stmt): ast.Stmt = {
+    val (a, b, c) = (s.pos, s.info, s.errT)
+    s match {
+      case ast.MethodCall(methodName, args, targets) =>
+      {
+        val method = verifier.program.findMethod(methodName)
+        val toUndefine = collection.mutable.ListBuffer[sil.LocalVar]()
+        val actualArgs = args.zipWithIndex map (a => {
+          val (actual, i) = a
+          // use the concrete argument if it is just a variable or constant (to avoid code bloat)
+          val useConcrete = actual match {
+            case v: sil.LocalVar if !targets.contains(v) => true
+            case _: sil.Literal => true
+            case _ => false
+          }
+          if (!useConcrete) {
+            val silFormal = method.formalArgs(i)
+            val tempArg = sil.LocalVar("arg_" + silFormal.name, silFormal.typ)()
+            mainModule.env.define(tempArg)
+            toUndefine.append(tempArg)
+            val translatedTempArg = translateExp(tempArg)
+            val translatedActual = translateExp(actual)
+            val stmt = translatedTempArg := translatedActual
+            (tempArg, stmt, Some(actual))
+          } else {
+            (args(i), Nil: Stmt, None)
+          }
+        })
+        val pre = foldStar(method.pres map (e => Expressions.instantiateVariables(e, (method.formalArgs ++ method.formalReturns) map (_.localVar), (actualArgs map (_._1)) ++ targets)), a, b, c)
+        val post = foldStar(method.posts map (e => Expressions.instantiateVariables(e, (method.formalArgs ++ method.formalReturns) map (_.localVar), (actualArgs map (_._1)) ++ targets)), a, b, c)
+        ast.Seqn(Seq(sil.Assert(pre)(a, b, c), s, sil.Assert(post)(a, b, c)), Seq())(a, b, c)
+      }
+      case ast.Seqn(ss, scope) => ast.Seqn(ss map annotateStmt, scope)(a, b, c)
+      case ast.If(cond, thn, els) => ast.If(cond, annotateStmt(thn).asInstanceOf[ast.Seqn], annotateStmt(els).asInstanceOf[ast.Seqn])(a, b, c)
+      case ast.While(cond, invs, body) =>
+        val inv = foldStar(invs, a, b, c)
+        val assert = ast.Assert(inv)(a, b, c)
+        val annotated_body = ast.Seqn(Seq(assert, body, assert), Seq())(a, b, c)
+        val new_while = ast.While(cond, invs, annotated_body.asInstanceOf[ast.Seqn])(a, b, c)
+        ast.Seqn(Seq(assert, new_while, assert), Seq())(a, b, c)
+      case _ => s // Probably useless
+    }
+  }
+
   def inlineLoop(cond: ast.Exp, invs: Seq[ast.Exp], body: ast.Seqn): Stmt = {
     // Add the invariant before and after the loop body, before inlining it
-    val (a, b, c) = (body.pos, body.info, body.errT)
-    val inv = foldStar(invs, a, b, c)
-    val annotated_body = ast.Seqn(Seq(ast.Assert(inv)(a, b, c), body, ast.Assert(inv)(a, b, c)), Seq())(a, b, c)
-    inlineLoopAux(cond, invs, annotated_body)
+    inlineLoopAux(cond, invs, body)
   }
 
   def inlineLoopAux(cond: ast.Exp, invs: Seq[ast.Exp], body: ast.Seqn): Stmt = {
@@ -1203,19 +1253,28 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       // Partial annotation:
       // We assert the precondition and the postcondition in Silver, before inlining
       // such that it also help to prove the soundness condition
+      /*
       val prec: ast.Exp = foldStar(m.pres map renameExp, m.pos, m.info, m.errT)
       val pre_post: ast.Exp = foldStar(m.posts map renameExp, m.pos, m.info, m.errT)
+       */
       val lab1 = ast.Label(n_label.toString, Seq())(m.pos, m.info, m.errT)
       val lab2 = ast.Label((n_label + 1).toString, Seq())(m.pos, m.info, m.errT)
       val lab3 = ast.Label((n_label + 2).toString, Seq())(m.pos, m.info, m.errT)
+      /*
       val post1 = pre_post.transform(t1)
       val post2 = pre_post.transform(t2)
       val post3 = pre_post.transform(t3)
+       */
 
 
-      val body1 = ast.Seqn(Seq(lab1, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body.transform(t1), ast.Assert(post1)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
-      val body2 = ast.Seqn(Seq(lab2, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body.transform(t2), ast.Assert(post2)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
-      val body3 = ast.Seqn(Seq(lab3, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body.transform(t3), ast.Assert(post3)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
+      // OLD VERSION: WE ASSERTED HERE
+      //val body1 = ast.Seqn(Seq(lab1, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body.transform(t1), ast.Assert(post1)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
+      //val body2 = ast.Seqn(Seq(lab2, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body.transform(t2), ast.Assert(post2)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
+      //val body3 = ast.Seqn(Seq(lab3, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body.transform(t3), ast.Assert(post3)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
+      val body1 = ast.Seqn(Seq(lab1, pre_body.transform(t1)), Seq())(m.pos, m.info, m.errT)
+      val body2 = ast.Seqn(Seq(lab2, pre_body.transform(t2)), Seq())(m.pos, m.info, m.errT)
+      val body3 = ast.Seqn(Seq(lab3, pre_body.transform(t3)), Seq())(m.pos, m.info, m.errT)
+
 
       n_label += 3
 

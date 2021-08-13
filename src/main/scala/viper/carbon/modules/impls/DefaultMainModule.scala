@@ -72,11 +72,13 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
               * Specifications for abstract methods are left unchanged (since they cannot be inlined).
               */
 
-            if(m.body.isDefined && entry.fold(true)(entryName => !m.name.equals(entryName))) {
-              m.copy(
-                pres = m.pres.map(replaceInhExhWithTrue),
-                posts = m.posts.map(replaceInhExhWithTrue)
-              )(m.pos, m.info, m.errT)
+            if(staticInlining.isDefined && m.body.isDefined) {
+              if (entry.fold(true)(entryName => !m.name.equals(entryName)))
+                inliningModule.annotateMethod(m.copy(
+                  pres = m.pres.map(replaceInhExhWithTrue),
+                  posts = m.posts.map(replaceInhExhWithTrue)
+                )(m.pos, m.info, m.errT))
+              else m.copy(body = Some(inliningModule.annotateStmt(m.body.get).asInstanceOf[sil.Seqn]))(m.pos, m.info, m.errT)
             } else {
               m
             }
