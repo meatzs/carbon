@@ -70,15 +70,17 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
               * Replace inhale-exhale assertions in specifications with "true", since taking them into account
               * for inlining does not work in the standard approach.
               * Specifications for abstract methods are left unchanged (since they cannot be inlined).
+             * Once this has been done, we "maximize" the sequences
               */
 
             if(staticInlining.isDefined && m.body.isDefined) {
               if (entry.fold(true)(entryName => !m.name.equals(entryName)))
                 inliningModule.annotateMethod(m.copy(
                   pres = m.pres.map(replaceInhExhWithTrue),
-                  posts = m.posts.map(replaceInhExhWithTrue)
+                  posts = m.posts.map(replaceInhExhWithTrue),
+                  body = Some(inliningModule.flattenStmt(m.body.get).asInstanceOf[sil.Seqn])
                 )(m.pos, m.info, m.errT))
-              else m.copy(body = Some(inliningModule.annotateStmt(m.body.get).asInstanceOf[sil.Seqn]))(m.pos, m.info, m.errT)
+              else m.copy(body = Some(inliningModule.flattenStmt(inliningModule.annotateStmt(m.body.get)).asInstanceOf[sil.Seqn]))(m.pos, m.info, m.errT)
             } else {
               m
             }

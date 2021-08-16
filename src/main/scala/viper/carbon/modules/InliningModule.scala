@@ -11,6 +11,7 @@ trait InliningModule extends Module with Component {
 
   def annotateMethod(m: ast.Method): ast.Method
   def annotateStmt(s: ast.Stmt): ast.Stmt
+  def flattenStmt(s: sil.Stmt): sil.Stmt
 
   def length(s: sil.Stmt): Int
 

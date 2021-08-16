@@ -1010,6 +1010,33 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
+  def combine[A, B](p1: (Seq[A], Seq[B]), p2: (Seq[A], Seq[B])): (Seq[A], Seq[B]) = {
+    (p1._1 ++ p2._1, p1._2 ++ p2._2)
+  }
+
+  // Takes as input a sequence of stmts
+  // Returns a sequence of statements (potentially longer) such that none of the statement is a sequence
+  def flattenSeqn(s: Seq[sil.Stmt]): (Seq[sil.Stmt], Seq[sil.Declaration]) = {
+    s match {
+      case Nil => (Nil, Nil)
+      case sil.Seqn(stmts, scopedDecls) +: xs => combine(combine(flattenSeqn(stmts), (Nil, scopedDecls)), flattenSeqn(xs))
+      case x +: xs => combine((Seq(x), Nil), flattenSeqn(xs))
+    }
+  }
+
+  def flattenStmt(s: sil.Stmt): sil.Stmt = {
+    val (a, b, c) = (s.pos, s.info, s.errT)
+    s match {
+      case ast.Seqn(ss, scope) => {
+        val (stmts, decls) = flattenSeqn(ss)
+        sil.Seqn(stmts, scope ++ decls)(a, b, c)
+      }
+      case ast.If(cond, thn, els) => ast.If(cond, flattenStmt(thn).asInstanceOf[sil.Seqn], flattenStmt(els).asInstanceOf[sil.Seqn])(a, b, c)
+      case ast.While(cond, invs, body) => sil.While(cond, invs, flattenStmt(body).asInstanceOf[sil.Seqn])(a, b, c)
+      case _ => s
+    }
+  }
+
   def alreadyGroupedInlinableStmts(ss: Seq[sil.Stmt]): Boolean = {
     (ss forall inlinable) || (ss forall (!inlinable(_)))
   }
