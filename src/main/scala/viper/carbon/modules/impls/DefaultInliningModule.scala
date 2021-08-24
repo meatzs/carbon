@@ -1138,7 +1138,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       {
         val method = verifier.program.findMethod(methodName)
         val toUndefine = collection.mutable.ListBuffer[sil.LocalVar]()
-        val actualArgs = args.zipWithIndex map (a => {
+        val actualArgs: Seq[ast.Exp] = args.zipWithIndex map (a => {
           val (actual, i) = a
           // use the concrete argument if it is just a variable or constant (to avoid code bloat)
           val useConcrete = actual match {
@@ -1149,18 +1149,22 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           if (!useConcrete) {
             val silFormal = method.formalArgs(i)
             val tempArg = sil.LocalVar("arg_" + silFormal.name, silFormal.typ)()
+            /*
             mainModule.env.define(tempArg)
             toUndefine.append(tempArg)
             val translatedTempArg = translateExp(tempArg)
             val translatedActual = translateExp(actual)
             val stmt = translatedTempArg := translatedActual
             (tempArg, stmt, Some(actual))
+             */
+            tempArg
           } else {
-            (args(i), Nil: Stmt, None)
+            //(args(i), Nil: Stmt, None)
+            args(i)
           }
         })
-        val pre = foldStar(method.pres map (e => Expressions.instantiateVariables(e, (method.formalArgs ++ method.formalReturns) map (_.localVar), (actualArgs map (_._1)) ++ targets)), a, b, c)
-        val post = foldStar(method.posts map (e => Expressions.instantiateVariables(e, (method.formalArgs ++ method.formalReturns) map (_.localVar), (actualArgs map (_._1)) ++ targets)), a, b, c)
+        val pre = foldStar(method.pres map (e => Expressions.instantiateVariables(e, (method.formalArgs ++ method.formalReturns) map (_.localVar), actualArgs ++ targets)), a, b, c)
+        val post = foldStar(method.posts map (e => Expressions.instantiateVariables(e, (method.formalArgs ++ method.formalReturns) map (_.localVar), actualArgs ++ targets)), a, b, c)
         ast.Seqn(Seq(sil.Assert(pre)(a, b, c), s, sil.Assert(post)(a, b, c)), Seq())(a, b, c)
       }
       case ast.Seqn(ss, scope) => ast.Seqn(ss map annotateStmt, scope)(a, b, c)
