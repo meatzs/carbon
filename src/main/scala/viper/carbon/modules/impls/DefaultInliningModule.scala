@@ -71,6 +71,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   private val axiomNamespace = verifier.freshNamespace("inlining.axiom")
 
+  //counter used to generate unique temporary argument names
+  private var currentArgInt = 0
+
   var current_depth = 0
   var n_inl = 0
 
@@ -1131,14 +1134,37 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     m.copy(body = Some(annotated_body))(a, b, c)
   }
 
+  private def getUniqueTempArgName() : String = {
+    //FIXME: we are assuming that there are no other variables with such a prefix
+    val result = "arg$$_"+currentArgInt
+    currentArgInt += 1
+    result
+  }
+
   def annotateStmt(s: ast.Stmt): ast.Stmt = {
     val (a, b, c) = (s.pos, s.info, s.errT)
     s match {
       case ast.MethodCall(methodName, args, targets) =>
       {
+        /**
+          * we rename "z1, z2, ... := m(e1,e2,...)" to
+          * tempArg1 := e1
+          * tempArg2 := e2
+          * ...
+          * assert pre_m[tempArg1/mArg1, tempArg2/mArg2,...]
+          * z1, z2, ... := m(tempArg1, tempArg2, ...)
+          * assert post_m[tempArg1/mArg1, tempArg2/mArg2,...]
+          *
+          * The assignments are required due to expressions that are dependent on where they are evaluated such as
+          * field accesses, old expressions, target variables.
+          * In some cases we omit the assignment and instead use the original expression for the argument
+          * if it's safe to do so.
+          *
+          * This code is similar to the translation of method calls in the statement module
+          * */
         val method = verifier.program.findMethod(methodName)
-        val toUndefine = collection.mutable.ListBuffer[sil.LocalVar]()
-        val actualArgs: Seq[ast.Exp] = args.zipWithIndex map (a => {
+
+        val actualArgs : Seq[(sil.Exp, sil.Stmt, Option[sil.LocalVarDecl])] = args.zipWithIndex map (a => {
           val (actual, i) = a
           // use the concrete argument if it is just a variable or constant (to avoid code bloat)
           val useConcrete = actual match {
@@ -1148,24 +1174,32 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           }
           if (!useConcrete) {
             val silFormal = method.formalArgs(i)
-            val tempArg = sil.LocalVar("arg_" + silFormal.name, silFormal.typ)()
-            /*
-            mainModule.env.define(tempArg)
-            toUndefine.append(tempArg)
-            val translatedTempArg = translateExp(tempArg)
-            val translatedActual = translateExp(actual)
-            val stmt = translatedTempArg := translatedActual
-            (tempArg, stmt, Some(actual))
-             */
-            tempArg
+            val tempArgDecl = sil.LocalVarDecl(getUniqueTempArgName(), silFormal.typ)()
+            val stmt = sil.LocalVarAssign(tempArgDecl.localVar, actual)()
+            (tempArgDecl.localVar, stmt, Some(tempArgDecl))
           } else {
-            //(args(i), Nil: Stmt, None)
-            args(i)
+            (actual, sil.utility.Statements.EmptyStmt, None)
           }
         })
-        val pre = foldStar(method.pres map (e => Expressions.instantiateVariables(e, (method.formalArgs ++ method.formalReturns) map (_.localVar), actualArgs ++ targets)), a, b, c)
-        val post = foldStar(method.posts map (e => Expressions.instantiateVariables(e, (method.formalArgs ++ method.formalReturns) map (_.localVar), actualArgs ++ targets)), a, b, c)
-        ast.Seqn(Seq(sil.Assert(pre)(a, b, c), s, sil.Assert(post)(a, b, c)), Seq())(a, b, c)
+
+        val argVars = actualArgs.collect {
+          case actualArg if actualArg._1.isInstanceOf[sil.LocalVar] => actualArg._1.asInstanceOf[sil.LocalVar].name
+        }.toSet
+
+        val argDecls : Seq[sil.Declaration] = actualArgs.collect( {
+          case actualArg if actualArg._3.isDefined => actualArg._3.get
+        })
+
+        val argAssignments : sil.Stmt = sil.Seqn(actualArgs.map(arg => arg._2), Nil)(a, b, c)
+
+        val pre = foldStar(method.pres map (e => Expressions.instantiateVariables(e, method.formalArgs ++ method.formalReturns, (actualArgs map (_._1)) ++ targets, argVars)), a, b, c)
+        val post = foldStar(method.posts map (e => Expressions.instantiateVariables(e, method.formalArgs ++ method.formalReturns, (actualArgs map (_._1)) ++ targets, argVars)), a, b, c)
+
+
+        //renamed method call
+        val renamedMethodCall = ast.MethodCall(methodName, actualArgs.map(arg => arg._1), targets)(a, b, c)
+
+        ast.Seqn(Seq(argAssignments, sil.Assert(pre)(a, b, c), renamedMethodCall, sil.Assert(post)(a, b, c)), argDecls)(a, b, c)
       }
       case ast.Seqn(ss, scope) => ast.Seqn(ss map annotateStmt, scope)(a, b, c)
       case ast.If(cond, thn, els) => ast.If(cond, annotateStmt(thn).asInstanceOf[ast.Seqn], annotateStmt(els).asInstanceOf[ast.Seqn])(a, b, c)

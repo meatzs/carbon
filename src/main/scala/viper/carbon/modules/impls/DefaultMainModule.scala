@@ -59,34 +59,50 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
       )
     }
 
-    verifier.replaceProgram(
-      p.transform(
-        {
-          case f: sil.Forall => f.autoTrigger
-          case e: sil.Exists => e.autoTrigger
-          case m: sil.Method =>
-            /**
-              * For all potentially inlined methods except the entry method:
-              * Replace inhale-exhale assertions in specifications with "true", since taking them into account
-              * for inlining does not work in the standard approach.
-              * Specifications for abstract methods are left unchanged (since they cannot be inlined).
-             * Once this has been done, we "maximize" the sequences
-              */
+    if(staticInlining.isDefined) {
+      val progWithoutInhExhSpec =
+        p.transform(
+          {
+            case f: sil.Forall => f.autoTrigger
+            case e: sil.Exists => e.autoTrigger
+            case m: sil.Method =>
+              /**
+                * For all potentially inlined methods except the entry method:
+                * Replace inhale-exhale assertions in specifications with "true", since taking them into account
+                * for inlining does not work in the standard approach.
+                * Specifications for abstract methods are left unchanged (since they cannot be inlined).
+                * Once this has been done, we "maximize" the sequences
+                */
+              if (m.body.isDefined && entry.fold(true)(entryName => !m.name.equals(entryName))) {
+                m.copy(
+                  pres = m.pres.map(replaceInhExhWithTrue).filter(e => !e.equals(sil.TrueLit()())),
+                  posts = m.posts.map(replaceInhExhWithTrue).filter(e => !e.equals(sil.TrueLit()()))
+                )(m.pos, m.info, m.errT)
+              } else {
+                m
+              }
+          },
+          Traverse.TopDown)
 
-            if(staticInlining.isDefined && m.body.isDefined) {
-              if (entry.fold(true)(entryName => !m.name.equals(entryName)))
-                inliningModule.annotateMethod(m.copy(
-                  pres = m.pres.map(replaceInhExhWithTrue),
-                  posts = m.posts.map(replaceInhExhWithTrue),
-                  body = Some(inliningModule.flattenStmt(m.body.get).asInstanceOf[sil.Seqn])
-                )(m.pos, m.info, m.errT))
-              else m.copy(body = Some(inliningModule.flattenStmt(inliningModule.annotateStmt(m.body.get)).asInstanceOf[sil.Seqn]))(m.pos, m.info, m.errT)
-            } else {
-              m
-            }
-        },
-        Traverse.TopDown)
-    )
+      verifier.replaceProgram(
+        progWithoutInhExhSpec.transform(
+          {
+            case f: sil.Forall => f.autoTrigger
+            case e: sil.Exists => e.autoTrigger
+            case m: sil.Method =>
+              if (m.body.isDefined) {
+                if (entry.fold(true)(entryName => !m.name.equals(entryName)))
+                  inliningModule.annotateMethod(m.copy(
+                    body = Some(inliningModule.flattenStmt(m.body.get).asInstanceOf[sil.Seqn])
+                  )(m.pos, m.info, m.errT))
+                else m.copy(body = Some(inliningModule.flattenStmt(inliningModule.annotateStmt(m.body.get)).asInstanceOf[sil.Seqn]))(m.pos, m.info, m.errT)
+              } else {
+                m
+              }
+          },
+          Traverse.TopDown)
+      )
+    }
 
     // We record the Boogie names of all Viper variables in this map.
     // The format is Viper member name -> (Viper variable name -> Boogie variable name).
