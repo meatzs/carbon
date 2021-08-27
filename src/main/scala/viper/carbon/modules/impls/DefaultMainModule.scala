@@ -59,6 +59,9 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
       )
     }
 
+    def replaceInhExhWithTrueSeq(es: Seq[sil.Exp]) : Seq[sil.Exp] =
+      es.map(replaceInhExhWithTrue).filter(e => !e.equals(sil.TrueLit()()))
+
       val progTriggersWithoutInhExhSpec =
         p.transform(
           {
@@ -74,11 +77,17 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
                 */
               if (staticInlining.isDefined && !ignoreAnnotations && m.body.isDefined && entry.fold(true)(entryName => !m.name.equals(entryName))) {
                 m.copy(
-                  pres = m.pres.map(replaceInhExhWithTrue).filter(e => !e.equals(sil.TrueLit()())),
-                  posts = m.posts.map(replaceInhExhWithTrue).filter(e => !e.equals(sil.TrueLit()()))
+                  pres = replaceInhExhWithTrueSeq(m.pres),
+                  posts = replaceInhExhWithTrueSeq(m.posts)
                 )(m.pos, m.info, m.errT)
               } else {
                 m
+              }
+            case w: sil.While =>
+              if(staticInlining.isDefined && !ignoreAnnotations) {
+                w.copy(invs = replaceInhExhWithTrueSeq(w.invs))(w.pos, w.info, w.errT)
+              } else {
+                w
               }
           },
           Traverse.TopDown)
