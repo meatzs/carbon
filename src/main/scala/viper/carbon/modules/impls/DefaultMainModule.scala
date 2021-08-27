@@ -83,6 +83,11 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
           },
           Traverse.TopDown)
 
+    /* we replace the program already here even though we may replace it again later, since the annotation refers to the
+     * program via the verifier
+     */
+    verifier.replaceProgram(progTriggersWithoutInhExhSpec)
+
     if (staticInlining.isDefined && !ignoreAnnotations) {
       verifier.replaceProgram(
         progTriggersWithoutInhExhSpec.transform(
@@ -100,8 +105,6 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
           },
           Traverse.TopDown)
       )
-    } else {
-      verifier.replaceProgram(progTriggersWithoutInhExhSpec)
     }
 
     // We record the Boogie names of all Viper variables in this map.
