@@ -213,28 +213,19 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
             )
         }
       case i@sil.If(cond, thn, els) =>
-        if (verifier.staticInlining.isDefined && !isCheckingFraming() && inlinable(stmt)) {
-          // Since inlinable, should not be inside a package or something
-          // CHECK WFM HERE
-
-          val check_wfm = {
+        (if (verifier.staticInlining.isDefined && !isCheckingFraming() && inlinable(stmt)) {
             val cond_pos: sil.Stmt = sil.Inhale(cond)(cond.pos, cond.info, cond.errT)
             val cond_neg: sil.Stmt = sil.Inhale(sil.Not(cond)(cond.pos, cond.info, cond.errT))(cond.pos, cond.info, cond.errT)
-            MaybeCommentBlock("Check WFM for if", inliningModule.checkFraming(cond_pos, stmt, true, true)
-              ++ checkFraming(cond_neg, stmt, true, true))
+            MaybeCommentBlock("Check WFM for if", inliningModule.checkFraming(cond_pos, cond_pos, true, true)
+              ++ checkFraming(cond_neg, cond_neg, true, true))
           }
-          inliningModule.checkingFraming = true
-          val r2 = simpleHandleStmt(stmt, statesStack, allStateAssms, insidePackageStmt)
-          // val r2 = translateStmt(stmt, statesStack, allStateAssms, duringPackage)
-          inliningModule.checkingFraming = false
-          check_wfm ++ r2
-        }
-        else {
+          else {
+            Statements.EmptyStmt
+          }) ++
           checkDefinedness(cond, errors.IfFailed(cond), insidePackageStmt = insidePackageStmt) ++
             If((allStateAssms) ==> translateExpInWand(cond),
               translateStmt(thn, statesStack, allStateAssms, insidePackageStmt),
               translateStmt(els, statesStack, allStateAssms, insidePackageStmt))
-        }
       case sil.Label(name, invs) => {
         val (stmt, currentState) = stateModule.freshTempState("Label" + name)
         stateModule.stateRepositoryPut(name, stateModule.state)

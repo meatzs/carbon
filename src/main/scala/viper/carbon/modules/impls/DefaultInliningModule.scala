@@ -804,7 +804,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   var n_syntactic_not = 0
 
   def checkFramingAux(pre_body1: sil.Stmt, pre_body2: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt = {
-
     namesAlreadyUsed = Set()
     val body1: ast.Stmt = inlineSil(pre_body1, maxDepth - current_depth)
     val body2: ast.Stmt = inlineSil(pre_body2, maxDepth - current_depth)
@@ -886,6 +885,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val orig_s1: sil.Stmt = recordVarsSil(body1, silExistsDecl.localVar)
         //Seq(silExistsDecl))(aa, bb, cc)
         //Seq())(aa, bb, cc)
+      println(body1)
+      println(body2)
       val orig_s2: sil.Stmt = assignVarsSil(body2, silExistsDecl.localVar)
       // val orig_s1 = orig_s
 
