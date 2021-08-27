@@ -59,8 +59,7 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
       )
     }
 
-    if(staticInlining.isDefined && !ignoreAnnotations) {
-      val progWithoutInhExhSpec =
+      val progTriggersWithoutInhExhSpec =
         p.transform(
           {
             case f: sil.Forall => f.autoTrigger
@@ -73,7 +72,7 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
                 * Specifications for abstract methods are left unchanged (since they cannot be inlined).
                 * Once this has been done, we "maximize" the sequences
                 */
-              if (m.body.isDefined && entry.fold(true)(entryName => !m.name.equals(entryName))) {
+              if (staticInlining.isDefined && !ignoreAnnotations && m.body.isDefined && entry.fold(true)(entryName => !m.name.equals(entryName))) {
                 m.copy(
                   pres = m.pres.map(replaceInhExhWithTrue).filter(e => !e.equals(sil.TrueLit()())),
                   posts = m.posts.map(replaceInhExhWithTrue).filter(e => !e.equals(sil.TrueLit()()))
@@ -84,11 +83,10 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
           },
           Traverse.TopDown)
 
+    if (staticInlining.isDefined && !ignoreAnnotations) {
       verifier.replaceProgram(
-        progWithoutInhExhSpec.transform(
+        progTriggersWithoutInhExhSpec.transform(
           {
-            case f: sil.Forall => f.autoTrigger
-            case e: sil.Exists => e.autoTrigger
             case m: sil.Method =>
               if (m.body.isDefined) {
                 if (entry.fold(true)(entryName => !m.name.equals(entryName)))
@@ -102,6 +100,8 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
           },
           Traverse.TopDown)
       )
+    } else {
+      verifier.replaceProgram(progTriggersWithoutInhExhSpec)
     }
 
     // We record the Boogie names of all Viper variables in this map.
