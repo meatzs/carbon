@@ -59,7 +59,7 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
       )
     }
 
-    if(staticInlining.isDefined) {
+    if(staticInlining.isDefined && !ignoreAnnotations) {
       val progWithoutInhExhSpec =
         p.transform(
           {

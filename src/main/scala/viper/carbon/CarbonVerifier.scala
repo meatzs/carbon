@@ -225,5 +225,6 @@ case class CarbonVerifier(private var _debugInfo: Seq[(String, Any)] = Nil) exte
   def pureFunctionsSC: Boolean = if (config != null) {config.pureFunctionsSC.toOption.getOrElse(false)} else {false}
   // def simpleWFM: Boolean = if (config != null) {config.simpleWFM.toOption.getOrElse(false)} else {false}
   def entry = if (config != null) {config.entry.toOption} else None
+  def ignoreAnnotations: Boolean = if (config != null) {config.ignoreAnnotations.toOption.getOrElse(false)} else {false}
 
 }

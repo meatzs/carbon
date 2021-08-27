@@ -157,5 +157,11 @@ class CarbonConfig(args: Seq[String]) extends SilFrontendConfig(args, "Carbon") 
     noshort = true
   )
 
+  val ignoreAnnotations = opt[Boolean]("ignoreAnnotations",
+    descr = "Disable syntactic check to speed up checking soundness condition for inlining (default: enabled)",
+    default = None,
+    noshort = true
+  )
+
   verify()
 }

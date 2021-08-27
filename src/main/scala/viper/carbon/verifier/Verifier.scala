@@ -84,5 +84,5 @@ trait Verifier {
   def pureFunctionsSC: Boolean
   def noSyntacticCheck: Boolean
   def entry: Option[String]
-
+  def ignoreAnnotations: Boolean
 }
