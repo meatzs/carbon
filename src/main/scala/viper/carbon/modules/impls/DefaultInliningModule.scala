@@ -885,8 +885,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val orig_s1: sil.Stmt = recordVarsSil(body1, silExistsDecl.localVar)
         //Seq(silExistsDecl))(aa, bb, cc)
         //Seq())(aa, bb, cc)
-      println(body1)
-      println(body2)
       val orig_s2: sil.Stmt = assignVarsSil(body2, silExistsDecl.localVar)
       // val orig_s1 = orig_s
 
