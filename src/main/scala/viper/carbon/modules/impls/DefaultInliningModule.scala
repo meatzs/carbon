@@ -1149,6 +1149,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     s match {
       case ast.MethodCall(methodName, args, targets) =>
       {
+        val method = verifier.program.findMethod(methodName)
+        if (!method.body.isDefined) {
+          return s
+        }
+
         /**
           * we rename "z1, z2, ... := m(e1,e2,...)" to
           * tempArg1 := e1
@@ -1165,8 +1170,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           *
           * This code is similar to the translation of method calls in the statement module
           * */
-        val method = verifier.program.findMethod(methodName)
-
         val actualArgs : Seq[(sil.Exp, sil.Stmt, Option[sil.LocalVarDecl])] = args.zipWithIndex map (a => {
           val (actual, i) = a
           // use the concrete argument if it is just a variable or constant (to avoid code bloat)
