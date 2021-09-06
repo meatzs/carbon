@@ -105,8 +105,17 @@ trait InliningModule extends Module with Component {
   def groupNonInlinableStmts(ss: Seq[sil.Stmt], orig_s: sil.Stmt, locals: Seq[sil.LocalVarDecl]): (Seq[sil.Stmt], Seq[sil.LocalVarDecl])
 
   // ----------------------------------------------------------------
+  // LABEL RENAMING
+  // ----------------------------------------------------------------
+
+  def getLabel(s: String): String
+
+  def updateLabel(s: String): String
+
+  // ----------------------------------------------------------------
   // ACTUAL INLINING
   // ----------------------------------------------------------------
+
 
   def ignoreErrorsWhenBounded(stmt: Stmt): Stmt
 

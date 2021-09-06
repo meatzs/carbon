@@ -84,7 +84,8 @@ class DefaultExpModule(val verifier: Verifier) extends ExpModule with Definednes
         stateModule.replaceState(prevState)
         res
       case sil.LabelledOld(exp, oldLabel) =>
-        var findLabel = oldLabel
+        //var findLabel = oldLabel
+        var findLabel = if (oldLabel == "lhs") "lhs" else inliningModule.getLabel(oldLabel)
         if(findLabel.equals("lhs"))
           findLabel = findLabel+wandModule.getActiveLhs()
         val prevState = stateModule.state
@@ -412,7 +413,7 @@ class DefaultExpModule(val verifier: Verifier) extends ExpModule with Definednes
             stateModule.replaceState(prevState)
             res
           case sil.LabelledOld(_, oldLabel) =>
-            var findLabel = oldLabel
+            var findLabel = if (oldLabel == "lhs") "lhs" else inliningModule.getLabel(oldLabel)
             if(findLabel.equals("lhs"))
               findLabel = "lhs"+wandModule.getActiveLhs()
             val prevState = stateModule.state

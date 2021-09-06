@@ -29,7 +29,6 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
   import inhaleModule._
   import funcPredModule._
   import wandModule._
-  import inliningModule.{isCheckingFraming, checkFraming, inlineLoop, inlinable, syntacticFraming, groupNonInlinableStmts}
 
   override def start() {
     // this is the main translation, so it should come at the "beginning"; it defines the innermost code used in the translation; other modules can wrap this with their own code
@@ -176,7 +175,7 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
         }
       case w@sil.While(cond, invs, body) =>
         if (verifier.staticInlining.isDefined) {
-          inlineLoop(cond, invs, body)
+          inliningModule.inlineLoop(cond, invs, body)
         }
         else {
           val guard = translateExp(cond)
@@ -213,11 +212,11 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
             )
         }
       case i@sil.If(cond, thn, els) =>
-        (if (verifier.staticInlining.isDefined && !isCheckingFraming() && inlinable(stmt)) {
+        (if (verifier.staticInlining.isDefined && !inliningModule.isCheckingFraming() && inliningModule.inlinable(stmt)) {
             val cond_pos: sil.Stmt = sil.Inhale(cond)(cond.pos, cond.info, cond.errT)
             val cond_neg: sil.Stmt = sil.Inhale(sil.Not(cond)(cond.pos, cond.info, cond.errT))(cond.pos, cond.info, cond.errT)
             MaybeCommentBlock("Check WFM for if", inliningModule.checkFraming(cond_pos, cond_pos, true, true)
-              ++ checkFraming(cond_neg, cond_neg, true, true))
+              ++ inliningModule.checkFraming(cond_neg, cond_neg, true, true))
           }
           else {
             Statements.EmptyStmt
@@ -226,20 +225,19 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
             If((allStateAssms) ==> translateExpInWand(cond),
               translateStmt(thn, statesStack, allStateAssms, insidePackageStmt),
               translateStmt(els, statesStack, allStateAssms, insidePackageStmt))
-      case sil.Label(name, invs) => {
+      case sil.Label(old_name, invs) => {
+        val name = inliningModule.updateLabel(old_name)
+        // FIXME: Maybe only do this if inlining is active?
         val (stmt, currentState) = stateModule.freshTempState("Label" + name)
         stateModule.stateRepositoryPut(name, stateModule.state)
         stateModule.replaceState(currentState)
-        if (verifier.staticInlining.isDefined) {
-          println("Warning: Labels are only partially supported")
-        }
         stmt ++ Label(Lbl(Identifier(name)(lblNamespace)))
       }
       case sil.Goto(target) =>
-        if (verifier.staticInlining.isDefined) {
-          println("Warning: Goto statements are only partially supported")
-        }
-        Goto(Lbl(Identifier(target)(lblNamespace)))
+        // We actually need to use the last goto we saw, and it can have been renamed
+        // FIXME: Maybe only do this if inlining is active?
+        val name = inliningModule.getLabel(target)
+        Goto(Lbl(Identifier(name)(lblNamespace)))
       case pa@sil.Package(wand, proof) => {
         checkDefinedness(wand, errors.MagicWandNotWellformed(wand), insidePackageStmt = insidePackageStmt)
         translatePackage(pa, errors.PackageFailed(pa), statesStack, allStateAssms, insidePackageStmt)
@@ -261,13 +259,18 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
     */
   override def translateStmt(stmt: sil.Stmt, statesStack: List[Any] = null, allStateAssms: Exp = TrueLit(), duringPackage: Boolean = false): Stmt = {
 
-    if (verifier.staticInlining.isDefined && !isCheckingFraming() && !inlinable(stmt)) {
-        // CHECK MONO HERE
-        val r1 = inliningModule.checkFraming(stmt, stmt, true)
-        inliningModule.checkingFraming = true
-        val r2 = translateStmt(stmt, statesStack, allStateAssms, duringPackage)
-        inliningModule.checkingFraming = false
-        r1 ++ r2
+    if (verifier.staticInlining.isDefined && !inliningModule.isCheckingFraming() && !inliningModule.inlinable(stmt)) {
+      val r1 = inliningModule.checkFraming(stmt, stmt, true)
+      inliningModule.checkingFraming = true
+      // We need to transform to the new labels
+      // Otherwise labels in this stmt might not be taken into account?
+      // What about expressions in general?
+      // Should not be needed
+      // Only when we generate new code
+      // i.e., inlining
+      val r2 = translateStmt(stmt, statesStack, allStateAssms, duringPackage)
+      inliningModule.checkingFraming = false
+      r1 ++ r2
     }
     else {
       if (duringPackage) {
@@ -278,12 +281,11 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
         case sil.Seqn(old_ss, scopedDecls) =>
           var locals = scopedDecls.collect { case l: sil.LocalVarDecl => l }
           val ss = {
-            // if (isCheckingFraming() || verifier.staticInlining.isEmpty || syntacticFraming(stmt)) {
-            if (isCheckingFraming() || verifier.staticInlining.isEmpty || inliningModule.alreadyGroupedInlinableStmts(old_ss)) {
+            if (inliningModule.isCheckingFraming() || verifier.staticInlining.isEmpty || inliningModule.alreadyGroupedInlinableStmts(old_ss)) {
               old_ss
             }
             else {
-              val r = groupNonInlinableStmts(old_ss, stmt, locals)
+              val r = inliningModule.groupNonInlinableStmts(old_ss, stmt, locals)
               locals = r._2
               r._1
             }

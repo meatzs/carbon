@@ -11,6 +11,7 @@ import viper.silver.verifier.{DummyReason, VerificationError}
 import viper.silver.ast.utility.Expressions
 import viper.silver.verifier.errors.SoundnessFailed
 import viper.silver.ast
+import viper.silver.ast.utility.rewriter.Traverse
 
 class DefaultInliningModule(val verifier: Verifier) extends InliningModule with Component {
 
@@ -776,6 +777,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   // Wrapper for modular approximation
   def checkFraming(body1: sil.Stmt, body2: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt = {
+    //println("CHECK FRAMING", old_body1, old_body2)
+    //val body1 = transformLabelsAndOld(old_body1)
+    //val body2 = transformLabelsAndOld(old_body2)
     if (modularSC) {
       if (checkMono) {
         if (inside_initial_method) {
@@ -885,8 +889,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val orig_s1: sil.Stmt = recordVarsSil(body1, silExistsDecl.localVar)
         //Seq(silExistsDecl))(aa, bb, cc)
         //Seq())(aa, bb, cc)
-      println(body1)
-      println(body2)
       val orig_s2: sil.Stmt = assignVarsSil(body2, silExistsDecl.localVar)
       // val orig_s1 = orig_s
 
@@ -1214,18 +1216,83 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
-  def inlineLoop(cond: ast.Exp, invs: Seq[ast.Exp], body: ast.Seqn): Stmt = {
-    // Add the invariant before and after the loop body, before inlining it
-    inlineLoopAux(cond, invs, body)
+  // We need to map labels (strings) to labels (strings)
+  // If we see the same label for a second time, then we "rename" its image
+  // We use this renaming to rename old-expressions when inlining
+
+  var renamingLabels: Map[String, String] = Map()
+
+  def getFreshName(s: String): String = {
+    //FIXME: We rely on the assumption that this label name is unique and fresh
+    s + "$"
   }
 
-  def inlineLoopAux(cond: ast.Exp, invs: Seq[ast.Exp], body: ast.Seqn): Stmt = {
+  // Follows the path until reaches a fixed point
+  // Needed to safely apply the transformation several times on same code
+  def getLabel(s: String): String = {
+    if (renamingLabels(s) == s) {
+      s
+    }
+    else {
+      val r = getLabel(renamingLabels(s))
+      renamingLabels += (s -> r)
+      r
+    }
+  }
 
-    val old_inside_initial_method = inside_initial_method
-    inside_initial_method = false
+  // Needs to always ensure that at the end of each path there is a fixed point
+  def updateLabel(s: String): String = {
+    if (renamingLabels contains s) {
+      if (renamingLabels(s) == s) {
+        // We reached the fixed point, we create a new fresh name
+        val ss = getFreshName(s)
+        renamingLabels += (s -> ss)
+        renamingLabels += (ss -> ss)
+      }
+      else {
+        // We only* update the fixed point
+        val r = updateLabel(renamingLabels(s))
+        renamingLabels += (s -> r)
+      }
+    }
+    else {
+      renamingLabels += (s -> s)
+    }
+    renamingLabels(s)
+  }
+
+  /*
+  // TODO: Continue here
+  // MAYBE ONLY rename exps usually?
+  def transformLabelsAndOld(s: ast.Stmt): ast.Stmt = {
+    println("TRANFORM BEFORE", s)
+    val r = s.transform(
+      {
+        case l@sil.Label(name, invs) =>
+          println("Inside transform...", l, l.pos) ; sil.Label(updateLabel(name), invs)(l.pos, l.info, l.errT)
+        case e@sil.LabelledOld(exp, label) => sil.LabelledOld(exp, renamingLabels(label))(e.pos, e.info, e.errT)
+      },
+      Traverse.TopDown)
+    println("TRANFORM AFTER", r)
+    println("CURRENT TRANSFORMATION", renamingLabels)
+    r
+  }
+
+  def transformOld(s: ast.Stmt): ast.Stmt = {
+    s.transform(
+      {
+        case e@sil.LabelledOld(exp, label) => (if (renamingLabels contains label) sil.LabelledOld(exp, renamingLabels(label))(e.pos, e.info, e.errT) else e)
+      },
+      Traverse.TopDown)
+  }
+   */
+
+
+  def inlineLoop(cond: ast.Exp, invs: Seq[ast.Exp], body: ast.Seqn): Stmt = {
 
     if (verifier.printSC)
       println("inlineLoop", current_depth, cond, "length", length(body), n_inl)
+
     val guard = translateExp(cond)
 
     val depth = maxDepth - current_depth
@@ -1233,16 +1300,23 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     if (stopInlining) {
       val cond_neg: sil.Stmt = sil.Inhale(sil.Not(cond)(cond.pos, cond.info, cond.errT))(cond.pos, cond.info, cond.errT)
       val wfm: Stmt = checkFraming(cond_neg, cond_neg, true, true)
-      inside_initial_method = old_inside_initial_method
       MaybeCommentBlock("0: Check SC and cut branch (loop)", wfm ++ Assume(guard ==> FalseLit()))
     }
     else {
+
+      // Remembering some parameters to restore at the end of the method
+      val old_inside_initial_method = inside_initial_method
+      inside_initial_method = false
+      val old_renaming = renamingLabels
+
       current_depth += 1
 
       // Real inlining
       n_inl += 1
 
       val r1 = checkFraming(body, body)
+
+      //val body_labels_renamed = transformLabelsAndOld(body).asInstanceOf[ast.Seqn]
 
       val modif_vars: Seq[LocalVar] = (body.writtenVars filter (v => mainModule.env.isDefinedAt(v))) map translateLocalVar
 
@@ -1259,9 +1333,12 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       }
       val r2 = MaybeCommentBlock(depth + ": Loop body", stmtModule.translateStmt(body))
       checkingFraming = oldCheckingFraming
-      val remaining = inlineLoopAux(cond, invs, body)
+      val remaining = inlineLoop(cond, invs, body)
+
+      // Restoring...
       current_depth -= 1
       inside_initial_method = old_inside_initial_method
+      renamingLabels = old_renaming
       MaybeCommentBlock(depth + ": Inlined loop", check_wfm ++ If(guard, r1 ++ getBoundedComplete() ++ r2 ++ remaining, Statements.EmptyStmt) ++ getBoundedComplete())
     }
   }
@@ -1284,16 +1361,19 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   def inlineMethod(m: Method, args: Seq[ast.Exp], targets: Seq[ast.LocalVar]): Stmt = {
 
-    val old_inside_initial_method = inside_initial_method
-    inside_initial_method = false
-
     if (verifier.printSC)
       println("inlineMethod", current_depth, m.name, "length", length(m.body.get), n_inl)
+
     if (stopInlining) {
-      inside_initial_method = old_inside_initial_method
       MaybeComment("0: Cut branch (method call)", Assume(FalseLit()))
     }
     else {
+
+      val old_inside_initial_method = inside_initial_method
+      inside_initial_method = false
+
+      // LABELS: We save the current state of "Renaming", and we restore it at the end
+      val old_renaming: Map[String, String] = renamingLabels
 
       // Real inlining
       n_inl += 1
@@ -1364,6 +1444,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       if (!inlinable(body1)) {
         checkingFraming = true
       }
+      //val r2 = stmtModule.translateStmt(transformLabelsAndOld(body3))
       val r2 = stmtModule.translateStmt(body3)
       checkingFraming = oldCheckingFraming
 
@@ -1386,7 +1467,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         }
       }
 
+      // Restoring...
       inside_initial_method = old_inside_initial_method
+      renamingLabels = old_renaming
+
       Seqn(assignArgs) ++ r1  ++ getBoundedComplete() ++ r2 ++ Seqn(assignRets) ++ getBoundedComplete()
     }
   }
@@ -1534,7 +1618,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       case ast.Seqn(ss, scope) => ast.Seqn(ss map alphaRename, scope map renameDecl)(a, b, c)
       case ast.If(cond, thn, els) => ast.If(renameExp(cond), alphaRename(thn).asInstanceOf[ast.Seqn], alphaRename(els).asInstanceOf[ast.Seqn])(a, b, c)
       case ast.While(cond, invs, body) => ast.While(renameExp(cond), invs map renameExp, alphaRename(body).asInstanceOf[ast.Seqn])(a, b, c)
-      case ast.Label(name, scope) => ast.Label(name + "_check", scope map renameExp)(a, b, c)
+      case ast.Label(name, scope) => ast.Label(name, scope map renameExp)(a, b, c)
       case ast.Goto(_) => s
       case ast.NewStmt(lhs, fields) => ast.NewStmt(renameVar(lhs), fields)(a, b, c)
       case ast.LocalVarDeclStmt(decl) => ast.LocalVarDeclStmt(renameDecl(decl).asInstanceOf[sil.LocalVarDecl])(a, b, c)
