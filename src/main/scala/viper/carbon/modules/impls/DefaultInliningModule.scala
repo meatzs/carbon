@@ -75,6 +75,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   //counter used to generate unique temporary argument names
   private var currentArgInt = 0
 
+  //counter used to generate unique temporary label names
+  private var currentLabelInt = 0
+
+
   var current_depth = 0
   var n_inl = 0
 
@@ -1144,6 +1148,20 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     result
   }
 
+  private def getUniqueLabelName() : String = {
+    //FIXME: we are assuming that there are no other labels with such a prefix
+    val result = "label$$_"+currentLabelInt
+    currentLabelInt += 1
+    result
+  }
+
+  private def rewriteOldToLabelledOld[T <: sil.Node](n: T, labelName: String) : T = {
+    n.transform({
+      case oldE@sil.Old(e) =>
+        sil.LabelledOld(e, labelName)(oldE.pos, oldE.info, oldE.errT).asInstanceOf[sil.Node]
+    })
+  }
+
   def annotateStmt(s: ast.Stmt): ast.Stmt = {
     val (a, b, c) = (s.pos, s.info, s.errT)
     s match {
@@ -1201,11 +1219,23 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         val pre = foldStar(method.pres map (e => Expressions.instantiateVariables(e, method.formalArgs ++ method.formalReturns, (actualArgs map (_._1)) ++ targets, argVars)), a, b, c)
         val post = foldStar(method.posts map (e => Expressions.instantiateVariables(e, method.formalArgs ++ method.formalReturns, (actualArgs map (_._1)) ++ targets, argVars)), a, b, c)
 
+        /** if the pre or post contain old expressions, then we need to create a new unique label before the call,
+          * otherwise the old expressions in the corresponding assertions will point evaluate incorrectly */
+        val (rewrittenPre, rewrittenPost, newLabelOpt) =
+          if(List(pre,post).exists( a => a.existsDefined( { case sil.Old(_) => true }))) {
+            val newLabelName = getUniqueLabelName()
+            val newLabel = sil.Label(newLabelName, Seq())(a, b, c)
+            (rewriteOldToLabelledOld(pre, newLabelName), rewriteOldToLabelledOld(post, newLabelName), Some(newLabel))
+          } else {
+            (pre, post, None)
+          }
 
         //renamed method call
         val renamedMethodCall = ast.MethodCall(methodName, actualArgs.map(arg => arg._1), targets)(a, b, c)
 
-        ast.Seqn(Seq(argAssignments, sil.Assert(pre)(a, b, c), renamedMethodCall, sil.Assert(post)(a, b, c)), argDecls)(a, b, c)
+        ast.Seqn(
+          newLabelOpt.fold[Seq[sil.Stmt]](Seq())(lbl => Seq(lbl)) ++
+          Seq(argAssignments, sil.Assert(rewrittenPre)(a, b, c), renamedMethodCall, sil.Assert(rewrittenPost)(a, b, c)), argDecls)(a, b, c)
       }
       case ast.Seqn(ss, scope) => ast.Seqn(ss map annotateStmt, scope)(a, b, c)
       case ast.If(cond, thn, els) => ast.If(cond, annotateStmt(thn).asInstanceOf[ast.Seqn], annotateStmt(els).asInstanceOf[ast.Seqn])(a, b, c)
