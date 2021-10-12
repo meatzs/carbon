@@ -1,3 +1,5 @@
+define ERROR (0)
+
 field balance: Int
 
 predicate valid(r: Ref, b: Int) {
@@ -5,8 +7,8 @@ predicate valid(r: Ref, b: Int) {
 }
 
 method Account() returns (r: Ref)
-    requires true
-    ensures valid(r, 0)
+    //requires true
+    //ensures valid(r, 0)
 {
     inhale acc(r.balance) && r.balance == 0
     // Models creation
@@ -14,8 +16,8 @@ method Account() returns (r: Ref)
 }
 
 method getBalance(this: Ref, b: Int) returns (r: Int)
-    requires valid(this, b)
-    ensures valid(this, b) && r == b
+    //requires valid(this, b)
+    //ensures valid(this, b) && r == b
 {
     var f: Perm := perm(valid(this, b))
     unfold acc(valid(this, b), f)
@@ -24,26 +26,32 @@ method getBalance(this: Ref, b: Int) returns (r: Int)
 }
 
 method deposit(this: Ref, amount: Int, b: Int)
-    requires valid(this, b)
-    ensures valid(this, b + amount)
+    //requires valid(this, b)
+    //ensures valid(this, b + amount)
 {
     var f: Perm := perm(valid(this, b))
     unfold acc(valid(this, b), f)
     this.balance := this.balance + amount
-    fold valid(this, b + amount)
+    if (ERROR != 1)
+    {
+        fold valid(this, b + amount)
+    }
 }
 
 method transferTo(this: Ref, target: Ref, amount: Int, b: Int, bt: Int)
-    requires valid(this, b) && valid(target, bt)
-    ensures valid(this, b - amount) && valid(target, bt + amount)
+    //requires valid(this, b) && valid(target, bt)
+    //ensures valid(this, b - amount) && valid(target, bt + amount)
 {
     deposit(this, -amount, b)
-    deposit(target, amount, bt)
+    if (ERROR == 2) {
+        deposit(target, -amount, bt)
+    }
+    else {
+        deposit(target, amount, bt)
+    }
 }
 
 method main()
-    requires true
-    ensures true
 {
     var a: Ref
     a := Account()
