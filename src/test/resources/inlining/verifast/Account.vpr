@@ -19,6 +19,7 @@ method getBalance(this: Ref, b: Int) returns (r: Int)
     //requires valid(this, b)
     //ensures valid(this, b) && r == b
 {
+
     var f: Perm := perm(valid(this, b))
     unfold acc(valid(this, b), f)
     r := this.balance
@@ -32,8 +33,11 @@ method deposit(this: Ref, amount: Int, b: Int)
     var f: Perm := perm(valid(this, b))
     unfold acc(valid(this, b), f)
     this.balance := this.balance + amount
-    if (ERROR != 1)
+    if (ERROR == 1)
     {
+        fold valid(this, b)
+    }
+    else {
         fold valid(this, b + amount)
     }
 }
@@ -43,12 +47,7 @@ method transferTo(this: Ref, target: Ref, amount: Int, b: Int, bt: Int)
     //ensures valid(this, b - amount) && valid(target, bt + amount)
 {
     deposit(this, -amount, b)
-    if (ERROR == 2) {
-        deposit(target, -amount, bt)
-    }
-    else {
-        deposit(target, amount, bt)
-    }
+    deposit(target, amount, bt)
 }
 
 method main()
@@ -68,6 +67,10 @@ method main()
     var bb: Int
     bb := getBalance(b, 2500)
 
-    assert ba == 500 && bb == 2500
-
+    if (ERROR == 2){
+        assert ba == 500 && bb == 500
+    }
+    else {
+        assert ba == 500 && bb == 2500
+    }
 }
