@@ -1008,6 +1008,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
+  //contains method call or loop
   def inlinable(stmt: sil.Stmt): Boolean = {
     stmt match {
       case mc@sil.MethodCall(methodName, _, _) =>

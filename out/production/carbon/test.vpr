@@ -1,0 +1,147 @@
+// Generated on 2022-03-29 at 15:57:02
+domain TYPE {
+  
+  unique function class_java_DOT_lang_DOT_Object(): TYPE
+  
+  unique function class_Node(): TYPE
+  
+  unique function class_Test(): TYPE
+  
+  unique function class_EncodedGlobalVariables(): TYPE
+  
+  function directSuperclass(t: TYPE): TYPE
+  
+  function type_of(val: Ref): TYPE
+  
+  axiom java_DOT_lang_DOT_Object_directSuperclass {
+    directSuperclass(class_java_DOT_lang_DOT_Object()) == class_java_DOT_lang_DOT_Object()
+  }
+  
+  axiom Node_directSuperclass {
+    directSuperclass(class_Node()) == class_java_DOT_lang_DOT_Object()
+  }
+  
+  axiom Test_directSuperclass {
+    directSuperclass(class_Test()) == class_java_DOT_lang_DOT_Object()
+  }
+  
+  axiom EncodedGlobalVariables_directSuperclass {
+    directSuperclass(class_EncodedGlobalVariables()) == class_java_DOT_lang_DOT_Object()
+  }
+}
+
+domain frac {
+  
+  function frac_val(a: frac): Perm
+  
+  axiom frac_eq {
+    (forall a: frac, b: frac :: { frac_val(a),frac_val(b) } (frac_val(a) == frac_val(b)) == (a == b))
+  }
+  
+  axiom frac_bound {
+    (forall a: frac :: { frac_val(a) } 0 / 1 < frac_val(a) && frac_val(a) <= 1 / 1)
+  }
+}
+
+domain zfrac {
+  
+  function zfrac_val(a: zfrac): Perm
+  
+  axiom zfrac_eq {
+    (forall a: zfrac, b: zfrac :: { zfrac_val(a),zfrac_val(b) } (zfrac_val(a) == zfrac_val(b)) == (a == b))
+  }
+  
+  axiom zfrac_bound {
+    (forall a: zfrac :: { zfrac_val(a) } 0 / 1 <= zfrac_val(a) && zfrac_val(a) <= 1 / 1)
+  }
+}
+
+//  a field 
+field Node_value: Int
+
+function instanceof_TYPE_TYPE(t: TYPE, u: TYPE): Bool
+  ensures result == (t == u || directSuperclass(t) == u)
+
+
+function new_frac(x: Perm): frac
+  requires 0 / 1 < x && x <= 1 / 1
+  ensures frac_val(result) == x
+
+
+function new_zfrac(x: Perm): zfrac
+  requires 0 / 1 <= x && x <= 1 / 1
+  ensures zfrac_val(result) == x
+
+
+predicate Node_P_EncodedGlobalVariables(diz: Ref, globals: Ref) {
+  diz != null && acc(diz.Node_value, wildcard)
+}
+
+method java_DOT_lang_DOT_Object_Object_EncodedGlobalVariables(globals: Ref) returns (sys__result: Ref)
+  ensures sys__result != null
+  ensures type_of(sys__result) == class_java_DOT_lang_DOT_Object()
+{
+  inhale false
+}
+
+method java_DOT_lang_DOT_Object_internal_Object_EncodedGlobalVariables(globals: Ref) returns (sys__result: Ref)
+  ensures sys__result != null
+  ensures type_of(sys__result) == class_java_DOT_lang_DOT_Object()
+{
+  inhale false
+}
+
+method Test___contract_unsatisfiable__leftLeaf_EncodedGlobalVariables_Node(globals: Ref, x: Ref) returns (sys__result: Ref)
+{
+  inhale true && acc(x.Node_value, write)
+  // assert
+  assert false
+  inhale false
+}
+
+method Test_leftLeaf_EncodedGlobalVariables_Node(globals: Ref, x: Ref) returns (sys__result: Ref)
+  requires acc(x.Node_value, write)
+  ensures acc(Node_P_EncodedGlobalVariables(x, globals), write)
+  ensures acc(x.Node_value, 1 / 2)
+{
+  Test_callee_EncodedGlobalVariables_Node(globals, x)
+  sys__result := x
+  // assert
+  assert acc(Node_P_EncodedGlobalVariables(x, globals), write) && acc(x.Node_value, 1 / 2)
+  inhale false
+}
+
+method Test___contract_unsatisfiable__callee_EncodedGlobalVariables_Node(globals: Ref, x: Ref)
+{
+  inhale true && acc(x.Node_value, 1 / 2)
+  // assert
+  assert false
+  inhale false
+}
+
+method Test_callee_EncodedGlobalVariables_Node(globals: Ref, x: Ref)
+  requires acc(x.Node_value, 1 / 2)
+  ensures acc(Node_P_EncodedGlobalVariables(x, globals), write)
+{
+  fold acc(Node_P_EncodedGlobalVariables(x, globals), write)
+}
+
+method Test___contract_unsatisfiable__leftLeafInlined_EncodedGlobalVariables_Node(globals: Ref, x: Ref) returns (sys__result: Ref)
+{
+  inhale true && acc(x.Node_value, write)
+  // assert
+  assert false
+  inhale false
+}
+
+method Test_leftLeafInlined_EncodedGlobalVariables_Node(globals: Ref, x: Ref) returns (sys__result: Ref)
+  requires acc(x.Node_value, write)
+  ensures acc(Node_P_EncodedGlobalVariables(x, globals), write)
+  ensures acc(x.Node_value, 1 / 2)
+{
+  fold acc(Node_P_EncodedGlobalVariables(x, globals), write)
+  sys__result := x
+  // assert
+  assert acc(Node_P_EncodedGlobalVariables(x, globals), write) && acc(x.Node_value, 1 / 2)
+  inhale false
+}
