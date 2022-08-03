@@ -1,0 +1,11 @@
+.idea
+.idea_modules
+project/project
+project/target
+target
+bin/**
+carbon_classpath.txt
+lib/
+silver
+viper_tutorial_examples
+tmp/

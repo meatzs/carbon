@@ -116,8 +116,10 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
       )
     }
 
-    // We record the Boogie names of all Viper variables in this map.
-    // The format is Viper member name -> (Viper variable name -> Boogie variable name).
+    /**
+     * We record the Boogie names of all Viper variables in this map.
+     * The format is Viper member name -> (Viper variable name -> Boogie variable name).
+     */
     var nameMaps : Map[String, mutable.HashMap[String, String]] = null
 
     val output = verifier.program match {
@@ -127,8 +129,12 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
 
         if (staticInlining.isDefined) {
           entry match {
-            case None => methods = Seq(methods.head)
-            case Some(s) => methods = Seq(program.findMethod(s))
+            case None =>
+              methods = Seq(methods.head)
+              inliningModule.entryMethod = methods.head.name
+            case Some(s) =>
+              methods = Seq(program.findMethod(s))
+              inliningModule.entryMethod = entry.toString
           }
         }
 
@@ -217,7 +223,7 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
 
     val reset = stateModule.resetBoogieState
 
-    // note that the order here matters - onlyExhalePosts should be computed with respect to the reset state
+    /** note that the order here matters - onlyExhalePosts should be computed with respect to the reset state */
     val onlyExhalePosts: Seq[Stmt] = checkDefinednessOfExhaleSpecAndInhale(
     posts, {
       errors.ContractNotWellformed(_)
@@ -225,8 +231,10 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
 
     val stmts = stmt ++ reset ++ (
     if (Expressions.contains[sil.InhaleExhaleExp](posts)) {
-      // Postcondition contains InhaleExhale expression.
-      // Need to check inhale and exhale parts separately.
+      /**
+       * Postcondition contains InhaleExhale expression.
+       * Need to check inhale and exhale parts separately.
+       */
       val onlyInhalePosts: Seq[Stmt] = checkDefinednessOfInhaleSpecAndInhale(
       posts, {
         errors.ContractNotWellformed(_)

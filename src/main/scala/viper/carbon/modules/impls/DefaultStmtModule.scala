@@ -13,6 +13,7 @@ import viper.silver.{ast => sil}
 import viper.carbon.boogie.{Havoc, MaybeComment, _}
 import viper.carbon.verifier.Verifier
 import Implicits._
+import viper.silver.ast.{HasLineColumn, NoPosition}
 import viper.silver.verifier.{PartialVerificationError, errors}
 import viper.silver.ast.utility.Expressions
 
@@ -82,45 +83,46 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
     * For more details see the general node in 'wandModule'
     */
   override def simpleHandleStmt(stmt: sil.Stmt, statesStack: List[Any] = null, allStateAssms: Exp = TrueLit(), insidePackageStmt: Boolean = false): Stmt = {
-    stmt match {
-      case assign@sil.LocalVarAssign(lhs, rhs) =>
-        checkDefinedness(lhs, errors.AssignmentFailed(assign), insidePackageStmt = insidePackageStmt) ++
-          checkDefinedness(rhs, errors.AssignmentFailed(assign), insidePackageStmt = insidePackageStmt) ++
-        {if(insidePackageStmt)
-          Assign(translateExpInWand(lhs), translateExpInWand(rhs))
-        else
-          Assign(translateExp(lhs), translateExp(rhs))}
-      case assign@sil.FieldAssign(lhs, rhs) =>
-        checkDefinedness(lhs.rcv, errors.AssignmentFailed(assign)) ++
-          checkDefinedness(rhs, errors.AssignmentFailed(assign))
-      case fold@sil.Fold(e) => sys.error("Internal error: translation of fold statement cannot be handled by simpleHandleStmt code; found:" + fold.toString())
-      case unfold@sil.Unfold(e) =>
-        translateUnfold(unfold, statesStack, insidePackageStmt)
-      case inh@sil.Inhale(e) =>
-        checkDefinednessOfSpecAndInhale(whenInhaling(e), errors.InhaleFailed(inh), statesStack, insidePackageStmt)
-      case exh@sil.Exhale(e) =>
-        val transformedExp = whenExhaling(e)
-        checkDefinedness(transformedExp, errors.ExhaleFailed(exh), insidePackageStmt = insidePackageStmt, ignoreIfInWand = true)++
-        exhale((transformedExp, errors.ExhaleFailed(exh)), statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt)
-      case a@sil.Assert(e) =>
-        val transformedExp = whenExhaling(e)
-        if (transformedExp.isPure) {
-          // if e is pure, then assert and exhale are the same
-          checkDefinedness(transformedExp, errors.AssertFailed(a), insidePackageStmt = insidePackageStmt, ignoreIfInWand = true) ++
-            exhale((transformedExp, errors.AssertFailed(a)), statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt)
-        } else {
-          // we create a temporary state to ignore the side-effects
-          val (backup, snapshot) = freshTempState("Assert")
-          val exhaleStmt = exhale((transformedExp, errors.AssertFailed(a)), isAssert =  true, statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt, havocHeap = false)
-          replaceState(snapshot)
+    if (verifier.staticInlining.isDefined) {
+      simpleHandleStmtInlining(stmt, statesStack, allStateAssms, insidePackageStmt)
+    }
+    else {
+      stmt match {
+        case assign@sil.LocalVarAssign(lhs, rhs) =>
+          checkDefinedness(lhs, errors.AssignmentFailed(assign), insidePackageStmt = insidePackageStmt) ++
+            checkDefinedness(rhs, errors.AssignmentFailed(assign), insidePackageStmt = insidePackageStmt) ++ {
+            if (insidePackageStmt)
+              Assign(translateExpInWand(lhs), translateExpInWand(rhs))
+            else
+              Assign(translateExp(lhs), translateExp(rhs))
+          }
+        case assign@sil.FieldAssign(lhs, rhs) =>
+          checkDefinedness(lhs.rcv, errors.AssignmentFailed(assign)) ++
+            checkDefinedness(rhs, errors.AssignmentFailed(assign))
+        case fold@sil.Fold(e) => sys.error("Internal error: translation of fold statement cannot be handled by simpleHandleStmt code; found:" + fold.toString())
+        case unfold@sil.Unfold(e) =>
+          translateUnfold(unfold, statesStack, insidePackageStmt)
+        case inh@sil.Inhale(e) =>
+          checkDefinednessOfSpecAndInhale(whenInhaling(e), errors.InhaleFailed(inh), statesStack, insidePackageStmt)
+        case exh@sil.Exhale(e) =>
+          val transformedExp = whenExhaling(e)
+          checkDefinedness(transformedExp, errors.ExhaleFailed(exh), insidePackageStmt = insidePackageStmt, ignoreIfInWand = true) ++
+            exhale((transformedExp, errors.ExhaleFailed(exh)), statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt)
+        case a@sil.Assert(e) =>
+          val transformedExp = whenExhaling(e)
+          if (transformedExp.isPure) {
+            // if e is pure, then assert and exhale are the same
+            checkDefinedness(transformedExp, errors.AssertFailed(a), insidePackageStmt = insidePackageStmt, ignoreIfInWand = true) ++
+              exhale((transformedExp, errors.AssertFailed(a)), statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt)
+          } else {
+            // we create a temporary state to ignore the side-effects
+            val (backup, snapshot) = freshTempState("Assert")
+            val exhaleStmt = exhale((transformedExp, errors.AssertFailed(a)), isAssert = true, statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt, havocHeap = false)
+            replaceState(snapshot)
             checkDefinedness(transformedExp, errors.AssertFailed(a), insidePackageStmt = insidePackageStmt, ignoreIfInWand = true) :: backup :: exhaleStmt :: Nil
-        }
-      case mc@sil.MethodCall(methodName, args, targets) =>
-        val method = verifier.program.findMethod(methodName)
-        if (verifier.staticInlining.isDefined && method.body.isDefined) {
-          inliningModule.inlineMethod(method, args, targets)
-        }
-        else {
+          }
+        case mc@sil.MethodCall(methodName, args, targets) =>
+          val method = verifier.program.findMethod(methodName)
           // save pre-call state
           val (preCallStateStmt, state) = stateModule.freshTempState("PreCall")
           val preCallState = stateModule.state
@@ -172,12 +174,7 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
             res
           }
           res
-        }
-      case w@sil.While(cond, invs, body) =>
-        if (verifier.staticInlining.isDefined) {
-          inliningModule.inlineLoop(cond, invs, body)
-        }
-        else {
+        case w@sil.While(cond, invs, body) =>
           val guard = translateExp(cond)
           MaybeCommentBlock("Exhale loop invariant before loop",
             executeUnfoldings(w.invs, (inv => errors.LoopInvariantNotEstablished(inv))) ++ exhale(w.invs map (e => (e, errors.LoopInvariantNotEstablished(e))))
@@ -210,9 +207,148 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
               Assume(guard.not) ++ stateModule.assumeGoodState ++
                 inhale(w.invs) ++ executeUnfoldings(w.invs, (inv => errors.Internal(inv)))
             )
+        case i@sil.If(cond, thn, els) =>
+          checkDefinedness(cond, errors.IfFailed(cond), insidePackageStmt = insidePackageStmt) ++
+          If((allStateAssms) ==> translateExpInWand(cond),
+            translateStmt(thn, statesStack, allStateAssms, insidePackageStmt),
+            translateStmt(els, statesStack, allStateAssms, insidePackageStmt))
+        case sil.Label(old_name, invs) => {
+          val name = inliningModule.updateLabel(old_name)
+          // FIXME: Maybe only do this if inlining is active?
+          val (stmt, currentState) = stateModule.freshTempState("Label" + name)
+          stateModule.stateRepositoryPut(name, stateModule.state)
+          stateModule.replaceState(currentState)
+          stmt ++ Label(Lbl(Identifier(name)(lblNamespace)))
         }
-      case i@sil.If(cond, thn, els) =>
-        (if (verifier.staticInlining.isDefined && !inliningModule.isCheckingFraming() && inliningModule.inlinable(stmt)) {
+        case sil.Goto(target) =>
+          // We actually need to use the last goto we saw, and it can have been renamed
+          // FIXME: Maybe only do this if inlining is active?
+          val name = inliningModule.getLabel(target)
+          Goto(Lbl(Identifier(name)(lblNamespace)))
+        case pa@sil.Package(wand, proof) => {
+          checkDefinedness(wand, errors.MagicWandNotWellformed(wand), insidePackageStmt = insidePackageStmt)
+          translatePackage(pa, errors.PackageFailed(pa), statesStack, allStateAssms, insidePackageStmt)
+        }
+        case a@sil.Apply(wand) =>
+          translateApply(a, errors.ApplyFailed(a), statesStack, allStateAssms, insidePackageStmt)
+        case _ =>
+          Nil
+      }
+    }
+  }
+
+  /**
+   * @param statesStack stack of states used in translating statements during packaging a wand (carries currentState and LHS of wands)
+   * @param insidePackageStmt Boolean that represents whether 'stmt' is being translated inside package statement or not
+   * @param allStateAssms represents all assumptions about states on the statesStack
+   *
+   * These wand-related parameters are used when the method is called during packaging a wand.
+   * For more details see the general node in 'wandModule'
+   */
+  def simpleHandleStmtInlining(stmt: sil.Stmt, statesStack: List[Any] = null, allStateAssms: Exp = TrueLit(), insidePackageStmt: Boolean = false): Stmt = {
+    var line = ""
+    if(stmt.pos!= NoPosition) {line = "; On Line: "+ stmt.pos.asInstanceOf[HasLineColumn].line}
+
+    var addInfo: String = "At depth: "+ inliningModule.current_depth + line + "; Stacktrace: "+ inliningModule.callStackToString()
+    stmt.inlMsg = Some(addInfo)
+
+    stmt match {
+        case assign@sil.LocalVarAssign(lhs, rhs) =>
+          checkDefinedness(lhs, errors.AssignmentFailed(assign), insidePackageStmt = insidePackageStmt) ++
+            checkDefinedness(rhs, errors.AssignmentFailed(assign), insidePackageStmt = insidePackageStmt) ++ {
+            if (insidePackageStmt)
+              Assign(translateExpInWand(lhs), translateExpInWand(rhs))
+            else
+              Assign(translateExp(lhs), translateExp(rhs))
+          }
+        case assign@sil.FieldAssign(lhs, rhs) =>
+          checkDefinedness(lhs.rcv, errors.AssignmentFailed(assign)) ++
+            checkDefinedness(rhs, errors.AssignmentFailed(assign))
+        case fold@sil.Fold(e) => sys.error("Internal error: translation of fold statement cannot be handled by simpleHandleStmt code; found:" + fold.toString())
+        case unfold@sil.Unfold(e) =>
+          translateUnfold(unfold, statesStack, insidePackageStmt)
+        case inh@sil.Inhale(e) =>
+          checkDefinednessOfSpecAndInhale(whenInhaling(e), errors.InhaleFailed(inh), statesStack, insidePackageStmt)
+        case exh@sil.Exhale(e) =>
+          val transformedExp = whenExhaling(e)
+          checkDefinedness(transformedExp, errors.ExhaleFailed(exh), insidePackageStmt = insidePackageStmt, ignoreIfInWand = true) ++
+            exhale((transformedExp, errors.ExhaleFailed(exh)), statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt)
+        case a@sil.Assert(e) =>
+          val transformedExp = whenExhaling(e)
+          if (transformedExp.isPure) {
+            // if e is pure, then assert and exhale are the same
+            checkDefinedness(transformedExp, errors.AssertFailed(a), insidePackageStmt = insidePackageStmt, ignoreIfInWand = true) ++
+              exhale((transformedExp, errors.AssertFailed(a)), statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt)
+          } else {
+            // we create a temporary state to ignore the side-effects
+            val (backup, snapshot) = freshTempState("Assert")
+            val exhaleStmt = exhale((transformedExp, errors.AssertFailed(a)), isAssert = true, statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt, havocHeap = false)
+            replaceState(snapshot)
+            checkDefinedness(transformedExp, errors.AssertFailed(a), insidePackageStmt = insidePackageStmt, ignoreIfInWand = true) :: backup :: exhaleStmt :: Nil
+          }
+        case mc@sil.MethodCall(methodName, args, targets) =>
+          val method = verifier.program.findMethod(methodName)
+          if (verifier.staticInlining.isDefined && method.body.isDefined) {
+            inliningModule.inlineMethod(mc, method, args, targets)
+          }
+          else {
+            // save pre-call state
+            val (preCallStateStmt, state) = stateModule.freshTempState("PreCall")
+            val preCallState = stateModule.state
+            val oldState = stateModule.oldState
+            stateModule.replaceState(state)
+            val toUndefine = collection.mutable.ListBuffer[sil.LocalVar]()
+            val actualArgs = args.zipWithIndex map (a => {
+              val (actual, i) = a
+              // use the concrete argument if it is just a variable or constant (to avoid code bloat)
+              val useConcrete = actual match {
+                case v: sil.LocalVar if !targets.contains(v) => true
+                case _: sil.Literal => true
+                case _ => false
+              }
+              if (!useConcrete) {
+                val silFormal = method.formalArgs(i)
+                val tempArg = sil.LocalVar("arg_" + silFormal.name, silFormal.typ)()
+                mainModule.env.define(tempArg)
+                toUndefine.append(tempArg)
+                val translatedTempArg = translateExp(tempArg)
+                val translatedActual = translateExp(actual)
+                val stmt = translatedTempArg := translatedActual
+                (tempArg, stmt, Some(actual))
+              } else {
+                (args(i), Nil: Stmt, None)
+              }
+            })
+            val neededRenamings: Seq[(sil.AbstractLocalVar, sil.Exp)] = actualArgs.filter((_._3.isDefined)).map(element => (element._1.asInstanceOf[sil.LocalVar], element._3.get))
+            val removingTriggers: (errors.ErrorNode => errors.ErrorNode) =
+              ((n: errors.ErrorNode) => n.transform { case q: sil.Forall => q.copy(triggers = Nil)(q.pos, q.info, q.errT) })
+            val renamingArguments: (errors.ErrorNode => errors.ErrorNode) = ((n: errors.ErrorNode) => removingTriggers(n).transform({
+              case e: sil.Exp => Expressions.instantiateVariables[sil.Exp](e, neededRenamings map (_._1), neededRenamings map (_._2))
+            }))
+
+            val pres = method.pres map (e => Expressions.instantiateVariables(e, method.formalArgs ++ method.formalReturns, (actualArgs map (_._1)) ++ targets, mainModule.env.allDefinedNames(program)))
+            val posts = method.posts map (e => Expressions.instantiateVariables(e, method.formalArgs ++ method.formalReturns, (actualArgs map (_._1)) ++ targets, mainModule.env.allDefinedNames(program)))
+            val res = preCallStateStmt ++
+              (targets map (e => checkDefinedness(e, errors.CallFailed(mc), insidePackageStmt = insidePackageStmt))) ++
+              (args map (e => checkDefinedness(e, errors.CallFailed(mc), insidePackageStmt = insidePackageStmt))) ++
+              (actualArgs map (_._2)) ++
+              Havoc((targets map translateExp).asInstanceOf[Seq[Var]]) ++
+              MaybeCommentBlock("Exhaling precondition", executeUnfoldings(pres, (pre => errors.PreconditionInCallFalse(mc).withReasonNodeTransformed(renamingArguments))) ++
+                exhale(pres map (e => (e, errors.PreconditionInCallFalse(mc).withReasonNodeTransformed(renamingArguments))), statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt)) ++ {
+              stateModule.replaceOldState(preCallState)
+              val res = MaybeCommentBlock("Inhaling postcondition", inhale(posts, statesStack, insidePackageStmt) ++
+                executeUnfoldings(posts, (post => errors.Internal(post).withReasonNodeTransformed(renamingArguments))))
+              stateModule.replaceOldState(oldState)
+              toUndefine map mainModule.env.undefine
+              res
+            }
+            res
+          }
+        case w@sil.While(cond, invs, body) =>
+          inliningModule.incrementLoopEnumCounter()
+          inliningModule.inlineLoop(sil.WhileInl(w, inliningModule.loopEnumerationCounter, 1)(w.pos,w.info,w.errT))
+        case i@sil.If(cond, thn, els) =>
+          (if (verifier.staticInlining.isDefined && !inliningModule.isCheckingFraming() && inliningModule.inlinable(stmt)) {
             val cond_pos: sil.Stmt = sil.Inhale(cond)(cond.pos, cond.info, cond.errT)
             val cond_neg: sil.Stmt = sil.Inhale(sil.Not(cond)(cond.pos, cond.info, cond.errT))(cond.pos, cond.info, cond.errT)
             MaybeCommentBlock("Check WFM for if", inliningModule.checkFraming(cond_pos, cond_pos, true, true)
@@ -221,32 +357,32 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
           else {
             Statements.EmptyStmt
           }) ++
-          checkDefinedness(cond, errors.IfFailed(cond), insidePackageStmt = insidePackageStmt) ++
+            checkDefinedness(cond, errors.IfFailed(cond), insidePackageStmt = insidePackageStmt) ++
             If((allStateAssms) ==> translateExpInWand(cond),
               translateStmt(thn, statesStack, allStateAssms, insidePackageStmt),
               translateStmt(els, statesStack, allStateAssms, insidePackageStmt))
-      case sil.Label(old_name, invs) => {
-        val name = inliningModule.updateLabel(old_name)
-        // FIXME: Maybe only do this if inlining is active?
-        val (stmt, currentState) = stateModule.freshTempState("Label" + name)
-        stateModule.stateRepositoryPut(name, stateModule.state)
-        stateModule.replaceState(currentState)
-        stmt ++ Label(Lbl(Identifier(name)(lblNamespace)))
+        case sil.Label(old_name, invs) => {
+          val name = inliningModule.updateLabel(old_name)
+          // FIXME: Maybe only do this if inlining is active?
+          val (stmt, currentState) = stateModule.freshTempState("Label" + name)
+          stateModule.stateRepositoryPut(name, stateModule.state)
+          stateModule.replaceState(currentState)
+          stmt ++ Label(Lbl(Identifier(name)(lblNamespace)))
+        }
+        case sil.Goto(target) =>
+          // We actually need to use the last goto we saw, and it can have been renamed
+          // FIXME: Maybe only do this if inlining is active?
+          val name = inliningModule.getLabel(target)
+          Goto(Lbl(Identifier(name)(lblNamespace)))
+        case pa@sil.Package(wand, proof) => {
+          checkDefinedness(wand, errors.MagicWandNotWellformed(wand), insidePackageStmt = insidePackageStmt)
+          translatePackage(pa, errors.PackageFailed(pa), statesStack, allStateAssms, insidePackageStmt)
+        }
+        case a@sil.Apply(wand) =>
+          translateApply(a, errors.ApplyFailed(a), statesStack, allStateAssms, insidePackageStmt)
+        case _ =>
+          Nil
       }
-      case sil.Goto(target) =>
-        // We actually need to use the last goto we saw, and it can have been renamed
-        // FIXME: Maybe only do this if inlining is active?
-        val name = inliningModule.getLabel(target)
-        Goto(Lbl(Identifier(name)(lblNamespace)))
-      case pa@sil.Package(wand, proof) => {
-        checkDefinedness(wand, errors.MagicWandNotWellformed(wand), insidePackageStmt = insidePackageStmt)
-        translatePackage(pa, errors.PackageFailed(pa), statesStack, allStateAssms, insidePackageStmt)
-      }
-      case a@sil.Apply(wand) =>
-        translateApply(a, errors.ApplyFailed(a), statesStack, allStateAssms, insidePackageStmt)
-      case _ =>
-        Nil
-    }
   }
 
   /**
@@ -317,7 +453,8 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
       for (c <- components) { // NOTE: this builds up the translation inside-out, so the *first* component defines the innermost code.
         //      val (before, after) = c.handleStmt(stmt, statesStack, allStateAssms, inWand)
         //      stmts = before ++ stmts ++ after
-        val f = c.handleStmt(stmt, statesStack, allStateAssms, duringPackage)
+        val stmtCopy = stmt.shallowClone()
+        val f = c.handleStmt(stmtCopy, statesStack, allStateAssms, duringPackage)
         stmts = f(stmts)
       }
       if (stmts.children.size == 0) {

@@ -6,13 +6,17 @@ import viper.carbon.boogie._
 import viper.carbon.verifier.Verifier
 import Implicits._
 import viper.carbon.modules.components.Component
-import viper.silver.ast.{CurrentPerm, ErrorTrafo, FieldAccess, FieldAssign, ForPerm, Info, LocalVarAssign, LocationAccess, Method, Position, WildcardPerm}
+import viper.silver.ast.{CurrentPerm, ErrorTrafo, FieldAccess, FieldAssign, ForPerm, HasLineColumn, Info, LocalVarAssign, LocationAccess, Method, Position, WildcardPerm}
 import viper.silver.verifier.{DummyReason, VerificationError}
 import viper.silver.ast.utility.Expressions
 import viper.silver.verifier.errors.SoundnessFailed
 import viper.silver.ast
-import viper.silver.ast.utility.rewriter.Traverse
 
+import scala.collection.mutable
+
+/**
+ * Handels the inlining of programs.
+ */
 class DefaultInliningModule(val verifier: Verifier) extends InliningModule with Component {
 
   import verifier._
@@ -31,6 +35,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   def name = "Inlining module"
 
+  /**
+   * @param s A Viper statement
+   * @return returns the number of Exp's and Stmt's in s. MethodCalls are counted as one and invariants are not
+   *         counted.
+   */
   def length(s: sil.Stmt): Int = {
     s match {
       case ast.Seqn(ss, _) => ss.foldLeft(0)(_ + length(_))
@@ -72,16 +81,19 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   private val axiomNamespace = verifier.freshNamespace("inlining.axiom")
 
-  //counter used to generate unique temporary argument names
+  /** counter used to generate unique temporary argument names */
   private var currentArgInt = 0
 
-  //counter used to generate unique temporary label names
+  /** counter used to generate unique temporary label names */
   private var currentLabelInt = 0
 
-
+  /** Counter for the current depth; never decrements; gets incremented when a new level gets inlined */
   var current_depth = 0
+  /** Counter for the current number of inlined loops or methods; gets incremented when a loop or method that has not
+   * yet been inlined gets inlined (-> not equivalent to depth)*/
   var n_inl = 0
 
+  /** assigns the max depth given by the user to "maxDepth". If no arg is given by user then "maxDepth"==0 */
   def maxDepth: Int = verifier.staticInlining match {
     case None => 0
     case Some(n) => n
@@ -103,6 +115,195 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       s
     }
   }
+
+  // ----------------------------------------------------------------
+  // CALLSTACK AND ERROR-MESSAGE GENERATION
+  // ----------------------------------------------------------------
+
+  /** Name of entry method when verifying a program. Either defined by option verifier.entry or default. */
+  var entryMethod: String = ""
+
+  /** gives the inlined loops a unique id to distinguish between inlined loops with same position*/
+  var loopEnumerationCounter = 0
+
+  /** increments loopEnumerationCounter by 1 */
+  def incrementLoopEnumCounter(): Unit = {
+    loopEnumerationCounter += 1
+  }
+
+  /**
+   * Callstack of loops and methods that gets build during inlining. It does not include the entryMethod.
+   *
+   * Stack of tuples with sil.Stmt's at first and Booleans at second. All sil.Stmt's are either of type sil.WhileInl
+   * or sil.MethodCall. The corresponding Boolean is true for sil.WhileInl if stopInlining() is true and is true for
+   * sil.MethodCall if stopInlining() is true or if the MethodCall exits.
+   *
+   * Finished loops and methods build "brackets" around the nested calls inside. For MethodCalls from
+   * (sil.MethodCall, false) -> (sil.MethodCall, true) and for loops from (sil.WhileInl(_,id,1), false) to
+   * (sil.WhileInl(_,id,_),true). Unfinished loops or methods do not have the second==true "bracket". These "brackets"
+   * are used to collapse the callStack for callStackToString().
+   */
+  private var callStack: mutable.Stack[(sil.Stmt, Boolean)] = mutable.Stack[(sil.Stmt, Boolean)]()
+
+  /** Gets set to true if n_inl>verifier.maxInl.get and used to print this information in callStackToString() */
+  var maxInlineReached: Boolean = false
+
+
+  /**
+   * Pushes tuple onto inlining callStack.
+   *
+   * @param s sil.Stmt either of type sil.WhileInl or sil.MethodCall.
+   * @param end true for s==sil.WhileInl if stopInlining() is true. True for s==sil.Methodcall if stopInlining() is
+   *            true or if MethodCall exits.
+   */
+  def extendCallstack(s : sil.Stmt, end: Boolean = false): Unit = {
+    //TODO: simplify if no more changes are made
+    s match {
+      case wi@sil.WhileInl(_,_,_) =>
+        callStack.push((wi,end))
+      case mc@sil.MethodCall(name, args, _) =>
+        callStack.push((mc, end))
+      case _ =>
+    }
+  }
+
+  /**
+   * Does not consume the callstack (DefaultInliningModule.callStack) generated during inlining and does
+   * not modify any variables.
+   *
+   * @return returns String of the callstack generated during inlining. If verifier.verboseCallstack.isDefined it will
+   *         use the non-collapsed callstack in the return. Otherwise, it will use the collapsed version of the
+   *         callStack given by DefaultInliningModule.collapseCallStack().
+   */
+  def callStackToString() : String = {
+    if (verifier.verboseCallstack) {
+      return callStackToStringVerbose()
+    }
+
+    var res = ""
+    var collapsedCallstack: mutable.Stack[(sil.Stmt, Boolean)] = collapseCallstack(callStack)
+    while (collapsedCallstack.nonEmpty) {
+      var call = collapsedCallstack.pop()
+      call match {
+        case (w@sil.WhileInl(_,id,_), true) =>
+          res = "Loop@" + w.pos.asInstanceOf[HasLineColumn].line +"_id"+id + " (fin.)"+ res
+        case (w@sil.WhileInl(_, id, iteration), false) =>
+          res = "Loop@"+ w.pos.asInstanceOf[HasLineColumn].line +"_id"+ id +" iteration: " + iteration + res
+        case (mc@sil.MethodCall(name,args,_), true) =>
+          res = name + "@"+mc.pos.asInstanceOf[HasLineColumn].line+ "(" + args.toString() + ") (fin.)" +/*mc.pos +*/ res
+        case (mc@sil.MethodCall(name, args, _), false) =>
+          res = name + "@"+mc.pos.asInstanceOf[HasLineColumn].line+ "(" + args.toString() + ")" + /*mc.pos +*/ res
+        case _ =>
+      }
+      res = " -> " + res
+    }
+    entryMethod + res
+  }
+
+  /**
+   * Does not consume the callstack (DefaultInliningModule.callStack) generated during inlining and does
+   * not modify any variables.
+   *
+   * @return returns String of the non-collapsed callstack generated during inlining
+   */
+  def callStackToStringVerbose(): String = {
+    var res: String = ""
+    for (call <- callStack){
+      if (!call._2) {
+        call._1 match {
+          case w@sil.WhileInl(_, id, iteration) =>
+            res = "Loop@" + w.pos.asInstanceOf[HasLineColumn].line+ "_id" +id+ ": " + /*w.pos +*/ "; iter.: " + iteration + res
+          case mc@sil.MethodCall(name, args, _) =>
+            res = name + "@"+mc.pos.asInstanceOf[HasLineColumn].line +"(" + args.toString() + ")" + /*mc.pos +*/ res
+          case _ =>
+        }
+        res = " -> " + res
+      }
+    }
+    if (maxInlineReached) {res+= "; maxInline was reached!"}
+    entryMethod + res
+  }
+
+/* assumes that collapseCallstack ensures that if method or loop finished execution then end is on top of start with
+  * no nested loops or methods in between (does not count for entry method) */
+
+  /**
+   * requires that there is already some information attached to the elements in what iteration they are and ofc that
+   * each the while statements are separate objects
+   *
+   * @param stack takes the callStack as argument but will not change it
+   * @return returns a collapsed version of the callStack. Contains only the last execution of loops and
+   *         methods. Any nested loops or methods of finished executions are filtered. Maintains the order of input
+   *         stack.
+   */
+  def collapseCallstack(stack: mutable.Stack[(sil.Stmt, Boolean)]) : mutable.Stack[(sil.Stmt, Boolean)] = {
+    var stackClone = stack.clone()
+    var res: mutable.Stack[(sil.Stmt, Boolean)] = mutable.Stack[(sil.Stmt, Boolean)]()
+
+    while (stackClone.nonEmpty) {
+      var s = stackClone.top
+      s match {
+        case (mc@sil.MethodCall(_,_,_), false) =>
+        case (w@sil.WhileInl(_,_,1), false) =>
+        case (_, _) =>
+          collapseCallstackNest(stackClone)
+      }
+      stackClone.pop()
+      res.push(s)
+    }
+    res.reverse
+  }
+
+  /**
+   * All nested elements get removed form the input stack by using the start/end "brackets" of var callStack. Only the
+   * end "bracket" will remain in the stack.
+   *
+   * @param stack partial callStack of which _2 of the top element is true or if false then _1 is of type sil.WhileInl
+   *              and the iteration number of sil.WhileInl is greater 1. This means that top is either a finished
+   *              execution of a MethodCall or Loop, or an unfinished loop with more than one iteration.
+   *              Input stack may not be empty. Assumes that all MethodCalls in the input stack have finished their
+   *              execution and start and end are contained in input stack. Assumes that if _1 is of type WhileInl
+   *              with id ID and some iteration number it then there exist another element in the
+   *              stack of type WhileInl with id==ID and iteration==1.
+   */
+  def collapseCallstackNest(stack: mutable.Stack[(sil.Stmt, Boolean)]) : Unit = {
+    assert(stack.nonEmpty)
+
+    var s = stack.pop()
+    if (stack.nonEmpty ) {
+      var next = stack.top
+
+      s._1 match {
+        case sil.WhileInl(_, id, iteration) =>
+          if (iteration>1) {
+            var contin:Boolean = true
+            while (contin && stack.nonEmpty) {
+              next = stack.top
+              next._1 match {
+                case sil.WhileInl(_, nextID, nextIteration) =>
+                  if (id == nextID && nextIteration == 1) {
+                    contin = false
+                  }
+                case _ =>
+              }
+              stack.pop()
+            }
+          }
+          else {
+            stack.pop()
+          }
+        case mc@sil.MethodCall(_, _, _) =>
+          while (next._1 != mc) {
+            stack.pop()
+            next=stack.top
+          }
+          stack.pop()
+        case _ =>
+      }
+    }
+    stack.push(s)
+  }
+
 
   // ----------------------------------------------------------------
   // MATCH DETERMINISM
@@ -245,11 +446,13 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       MaybeComment("Back to the former state", Assign(normalState._1, beforeMask.l) ++ Assign(normalState._2, beforeHeap.l))
   }
 
-  // Records:
-  // - exhale heaps
-  // - wildcard values
-  // - new version of predicates unfolded (?)
-  // - values of "freshObj"
+  /**
+   *  Records:
+   *  - exhale heaps
+   *  - wildcard values
+   *  - new version of predicates unfolded (?)
+   *  - values of "freshObj"
+  */
   def recordDeterminism(s: Stmt): (Stmt, Seq[LocalVarDecl]) = {
     s match {
       case Seqn(stmts) => val r = (stmts map recordDeterminism)
@@ -458,6 +661,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
           false
         case ast.NewStmt(lhs, fields) => true
         case ast.LocalVarDeclStmt(decl) => true
+        case ast.WhileInl(_,_,_) =>
+          assert(false); false //should not happen
         case _: ast.ExtensionStmt =>
           assert(false); false // This should not happen
       }
@@ -650,7 +855,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   var first_block: Boolean = true
 
-  // TO DISTINGUISH MONO AND FRAMING
+  /** Distinguishes Mono and Framing. Small optimization since initial method does not have to be framing. */
   var inside_initial_method = true
 
   val getBounded = getVarDecl("getBounded", Bool)
@@ -746,7 +951,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   def read(s: sil.Stmt): Set[sil.LocalVar] = {
-
     s match {
       case sil.Seqn(ss, scopedDecls) => (ss map read).fold(Set())(_ ++ _) ++ (scopedDecls map (readVarsDecl(_).toSet)).fold(Set())(_ ++ _)
       case sil.If(cond, thn, els) => readVarsExp(cond) ++ read(thn) ++ read(els)
@@ -767,6 +971,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       case ast.Goto(_) => Set()
       case ast.NewStmt(lhs, fields) => Set(lhs)
       case ast.LocalVarDeclStmt(decl) => readVarsDecl(decl).toSet
+      case ast.WhileInl(_,_,_) =>
+        assert(false);  Set() //should not happen
       case _: ast.ExtensionStmt => Set()
 
     }
@@ -1003,31 +1209,50 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val r: Stmt = MaybeComment(id_checkFraming + {if (checkWFM) ": Check WFM" else if (checkMono) ": Check MONO" else ": Check FRAMING"},
         NondetIf(If(getBounded.l, statement, Statements.EmptyStmt) ++ Assume(FalseLit()), Statements.EmptyStmt))
       checkingFraming = false
+      checkingFraming = false
       mainModule.env.undefine(silExistsDecl.localVar)
       r
     }
   }
 
-//hell
-  //contains method call or loop
+
+  /**
+   * Only checks if the code contains method calls or loops. Does not check soundness.
+   *
+   * @param stmt a Viper statement
+   * @return True if stmt contains a method call of a defined method or a loop
+   */
   def inlinable(stmt: sil.Stmt): Boolean = {
     stmt match {
-      case mc@sil.MethodCall(methodName, _, _) =>
+      case sil.MethodCall(methodName, _, _) =>
         val method = verifier.program.findMethod(methodName)
         method.body.isDefined
-      case w@sil.While(_, _, _) => true
-      case i@sil.If(_, thn, els) => inlinable(thn) || inlinable(els)
+      case sil.While(_, _, _) => true
+      case sil.If(_, thn, els) => inlinable(thn) || inlinable(els)
       case sil.Seqn(ss, _) => ss.exists(inlinable)
       case _ => false
     }
   }
 
+  /**
+   * The first and second type of p1 and p2 respectively have to match.
+   *
+   * @param p1 tupel of two sequences of independet types
+   * @param p2 tupel of two sequences of independet types
+   * @return returns tuple where Seq[A] of p2 is appended to Seq[A] of p1 and Seq[B] of p2 is appended to  Seq[B] of p1
+   */
   def combine[A, B](p1: (Seq[A], Seq[B]), p2: (Seq[A], Seq[B])): (Seq[A], Seq[B]) = {
     (p1._1 ++ p2._1, p1._2 ++ p2._2)
   }
 
-  // Takes as input a sequence of stmts
-  // Returns a sequence of statements (potentially longer) such that none of the statement is a sequence
+  /**
+   * Returns a sequence of statements (potentially longer) such that none of the statement is a sequence.
+   *
+   * @param s Sequence of Viper statements
+   * @return returns pair with a sequence of Viper statements of which none are a sequence and their corresponding
+   *         declaration. If the statement has no declaration then the corresponding declaration is Nil. If the
+   *         sequence of statements itself is Nil it returns a the tuple (Nil,Nil). --> and are semantically equivalent
+   */
   def flattenSeqn(s: Seq[sil.Stmt]): (Seq[sil.Stmt], Seq[sil.Declaration]) = {
     s match {
       case Nil => (Nil, Nil)
@@ -1036,6 +1261,16 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
+  /**
+   * Transforms statements recursively such that no statement of type Seqn has an element in its sequence
+   * of statements with type Seqn.
+   *
+   * @param s a Viper statement
+   * @return If s is not of Viper type Seqn, if, or While it will simply return s. For if and while statements it will
+   *         return the same if or while statement after recursively applying itself to the body. If s is a Seqn
+   *         then it will travers s in order, split up/flatten all statements of type Seqn into Stmt's though
+   *         flattenStmtSeqn(), and add the corresponding declarations to s.
+   */
   def flattenStmt(s: sil.Stmt): sil.Stmt = {
     val (a, b, c) = (s.pos, s.info, s.errT)
     s match {
@@ -1136,24 +1371,29 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   }
 
   def annotateMethod(m: ast.Method): ast.Method = {
-    val (a, b, c) = (m.pos, m.info, m.errT)
-    val pre = foldStar(m.pres, a, b, c)
-    val post = foldStar(m.posts, a, b, c)
-    val annotated_body = ast.Seqn(Seq(ast.Assert(pre)(a, b, c), annotateStmt(m.body.get), ast.Assert(post)(a, b, c)), Seq())(a, b, c)
-    m.copy(body = Some(annotated_body))(a, b, c)
+    val (pos, info, errT) = (m.pos, m.info, m.errT)
+    val pre = foldStar(m.pres, pos, info, errT)
+    val post = foldStar(m.posts, pos, info, errT)
+    val annotated_body = ast.Seqn(Seq(ast.Assert(pre)(pos, info, errT), annotateStmt(m.body.get), ast.Assert(post)(pos, info, errT)), Seq())(pos, info, errT)
+    m.copy(body = Some(annotated_body))(pos, info, errT)
   }
 
   private def getUniqueTempArgName() : String = {
     //FIXME: we are assuming that there are no other variables with such a prefix
-    val result = "arg$$_"+currentArgInt
+    val result = "tempArg$$_"+currentArgInt
     currentArgInt += 1
     result
   }
 
   private def getUniqueLabelName() : String = {
     //FIXME: we are assuming that there are no other labels with such a prefix
-    val result = "label$$_"+currentLabelInt
+    var result = "label_$_"+currentLabelInt
     currentLabelInt += 1
+    var i:Int = 1
+    while (mainModule.env.allDefinedNames(verifier.program).contains(result)) {
+      val temp: Int = i +currentLabelInt
+      result = "label_$_"+temp
+    }
     result
   }
 
@@ -1164,6 +1404,15 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     })
   }
 
+  /**
+   * Recursively traverses a statement and applies transformations with regard to the annothations to ast.stmt
+   * of type ast.MethodCall and ast.While.
+   *
+   * @param s s is a Viper Statement.
+   * @return Returns the same statement but adds the conjunction of all pre-conditions, post-conditions, or invariants
+   *         for method calls or loops as ast.Assert statements to the start and/or end of the body as well as the start
+   *         and/or end of the method or loop
+   */
   def annotateStmt(s: ast.Stmt): ast.Stmt = {
     val (a, b, c) = (s.pos, s.info, s.errT)
     s match {
@@ -1244,6 +1493,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       case ast.While(cond, invs, body) =>
         val inv = foldStar(invs, a, b, c)
         val assert = ast.Assert(inv)(a, b, c)
+        //"Seq() represents the scope (Seq[Declaration])
         val annotated_body = ast.Seqn(Seq(assert, body, assert), Seq())(a, b, c)
         val new_while = ast.While(cond, invs, annotated_body.asInstanceOf[ast.Seqn])(a, b, c)
         ast.Seqn(Seq(assert, new_while, assert), Seq())(a, b, c)
@@ -1251,23 +1501,52 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
-  // We need to map labels (strings) to labels (strings)
-  // If we see the same label for a second time, then we "rename" its image
-  // We use this renaming to rename old-expressions when inlining
-
+  /**
+   * Contains all labels from the program and maps labels (Strings) to labels (Strings).
+   * The first time a label appears we map it to itself. After we create a new label, map the new label to
+   * itself, and map the existing label to the new one.
+   * The newest label acts as fixed point when traversing the mapping.
+   * The labels and the renaming are used for "old[]"-expressions when inlining.
+   *
+   * @note: All label keys should point directly to a fixed point.
+  */
   var renamingLabels: Map[String, String] = Map()
+  var allNamesSet: Set[String] = Set()
+
+  var labelCounter: Int = 0
 
   def getFreshName(s: String): String = {
     //FIXME: We rely on the assumption that this label name is unique and fresh
-    s + "$"
+    allNamesSet = allNamesSet ++ mainModule.env.allDefinedNames(verifier.program)
+
+    var result: String = s
+    if (result.contains("$$_"))
+      result = result.substring(0, s.length-s.indexOf("$$_"))
+    result += "$$_" +labelCounter
+    var i:Int = 1
+    while (allNamesSet.contains(result)) {
+      result = result.substring(0, result.length- labelCounter.toString.length) + (labelCounter + i)
+    }
+    labelCounter += 1
+    allNamesSet += result
+    result
   }
 
-  // Follows the path until reaches a fixed point
-  // Needed to safely apply the transformation several times on same code
+  /**
+   * Follows the path until it reaches a fixed point.
+   * Needed to safely apply the transformation several times on same code
+   * @param s s is a label that is contained in the mapping "renamingLabels". All labels get added to "renamingLabels"
+   *          through the method "updateLabels"
+   * @return follows the path of "renamingLabels" until it reaches fixed point
+   *
+   * @note: renamingLabels should always directly point to a fixed point because of updateLabel method. So it should
+   * be enought to just return "renamingLabels(s)"
+   */
   def getLabel(s: String): String = {
-    if (renamingLabels(s) == s) {
+    //the datastructure is always compact
+    assert(renamingLabels(s) == renamingLabels(renamingLabels(s)))
+    if (renamingLabels(s) == s)
       s
-    }
     else {
       val r = getLabel(renamingLabels(s))
       renamingLabels += (s -> r)
@@ -1275,7 +1554,14 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
-  // Needs to always ensure that at the end of each path there is a fixed point
+  /**
+   * Needs to always ensure that at the end of each path there is a fixed point
+   *
+   * @param s Label from program
+   * @return Returns the fixed point of the label s in the mapping "renamingLabels"
+   *
+   * @note: Should ensures that a label always points to a fixed point.
+   */
   def updateLabel(s: String): String = {
     if (renamingLabels contains s) {
       if (renamingLabels(s) == s) {
@@ -1323,29 +1609,33 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
    */
 
 
-  def inlineLoop(cond: ast.Exp, invs: Seq[ast.Exp], body: ast.Seqn): Stmt = {
+  def inlineLoop(w: sil.WhileInl): Stmt = {
+
+    val cond: sil.Exp = w.w.cond
+    val invs: Seq[ast.Exp] = w.w.invs
+    val body: ast.Seqn = w.w.body
+
+    extendCallstack(w)
 
     if (verifier.printSC)
       println("inlineLoop", current_depth, cond, "length", length(body), n_inl)
 
     val guard = translateExp(cond)
-
     val depth = maxDepth - current_depth
 
     if (stopInlining) {
       val cond_neg: sil.Stmt = sil.Inhale(sil.Not(cond)(cond.pos, cond.info, cond.errT))(cond.pos, cond.info, cond.errT)
       val wfm: Stmt = checkFraming(cond_neg, cond_neg, true, true)
+      extendCallstack(callStack.pop()._1, true) //remove top s.t. we do not push the same iteration twice
       MaybeCommentBlock("0: Check SC and cut branch (loop)", wfm ++ Assume(guard ==> FalseLit()))
     }
     else {
-
       // Remembering some parameters to restore at the end of the method
       val old_inside_initial_method = inside_initial_method
       inside_initial_method = false
       val old_renaming = renamingLabels
 
       current_depth += 1
-
       // Real inlining
       n_inl += 1
 
@@ -1368,7 +1658,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       }
       val r2 = MaybeCommentBlock(depth + ": Loop body", stmtModule.translateStmt(body))
       checkingFraming = oldCheckingFraming
-      val remaining = inlineLoop(cond, invs, body)
+
+      val remaining = inlineLoop(sil.WhileInl(w.w, w.id, w.iteration+1)(w.pos, w.info, w.errT))
+
 
       // Restoring...
       current_depth -= 1
@@ -1378,10 +1670,27 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
+  /**
+   * @return True if maxDepth for inlining is reached or if max number of inlined loops or methods, if defined by user,
+   *         is reached  */
   def stopInlining(): Boolean = {
-    current_depth == maxDepth || (verifier.maxInl.isDefined && (n_inl >= verifier.maxInl.get))
+    var temp = (current_depth == maxDepth || (verifier.maxInl.isDefined && (n_inl >= verifier.maxInl.get)))
+    if ((verifier.maxInl.isDefined && (n_inl >= verifier.maxInl.get)))
+      maxInlineReached = true
+    temp
   }
 
+  /**
+   * Used for pre-conditions, post-conditions, and invariants of loops and methods. Aggregates the invariants into a
+   * conjunction
+   *
+   * @param s Sequence of Viper expressions
+   * @param a Position of the sequence s
+   * @param b Info of the sequence s
+   * @param c ErrorTrafo of the sequence s
+   * @return Returns a Viper Expression with position a, info b, and ErrorTrafo c; If s is empty it returns a True
+   *         Boolean Literal; Else it returns the conjunction of all elements of s;
+   */
   def foldStar(s: Seq[ast.Exp], a: ast.Position, b: ast.Info, c: ast.ErrorTrafo): ast.Exp =
   {
     if (s.isEmpty) {
@@ -1394,16 +1703,27 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   var n_label = 0
 
-  def inlineMethod(m: Method, args: Seq[ast.Exp], targets: Seq[ast.LocalVar]): Stmt = {
+  /**
+   *
+   * @param m a method
+   * @param args
+   * @param targets
+   * @return
+   */
+  def inlineMethod(mc: sil.MethodCall, m: Method, args: Seq[ast.Exp], targets: Seq[ast.LocalVar]): Stmt = {
+
+    extendCallstack(mc)
+    var addInfo: String = "At depth: "+ current_depth + "; Stacktrace: "+ callStackToString()
+    mc.inlMsg = Some(addInfo)
 
     if (verifier.printSC)
       println("inlineMethod", current_depth, m.name, "length", length(m.body.get), n_inl)
 
     if (stopInlining) {
+      extendCallstack(mc, true)
       MaybeComment("0: Cut branch (method call)", Assume(FalseLit()))
     }
     else {
-
       val old_inside_initial_method = inside_initial_method
       inside_initial_method = false
 
@@ -1506,6 +1826,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       inside_initial_method = old_inside_initial_method
       renamingLabels = old_renaming
 
+      extendCallstack(mc, true)
+
       Seqn(assignArgs) ++ r1  ++ getBoundedComplete() ++ r2 ++ Seqn(assignRets) ++ getBoundedComplete()
     }
   }
@@ -1514,6 +1836,18 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   // RENAMING
   // ----------------------------------------------------------------
 
+  /** Map from the original name of a local Variable to their renamed declaration    */
+  var currentRenaming: Map[ast.LocalVar, ast.LocalVar] = Map()
+  /** set that contains all local variables that have already been renamed once */
+  var inRenaming: Set[sil.LocalVar] = Set()
+  /** Set with all names already used in the boogie file */
+  var namesAlreadyUsed: Set[sil.LocalVar] = Set()
+
+
+  /**
+   * @param e a Viper expression
+   * @return recursively reads expressions and returns all nested local variables as a set
+   */
   def readVarsExp(e: ast.Exp): Set[ast.LocalVar] = {
     e match {
       case ast.Let(decl, e1, e2) => Set(decl.localVar)
@@ -1564,6 +1898,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
+  /**
+   * @param d a declaration
+   * @return if d is a declaration of a local variable then it returns a sequence that contains the local variable
+   *         of d. Otherwise it will return an empty sequence.
+   */
   def readVarsDecl(d: ast.Declaration): Seq[ast.LocalVar] = {
     d match {
       case decl: ast.LocalVarDecl => Seq(decl.localVar)
@@ -1571,10 +1910,12 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
-  var currentRenaming: Map[ast.LocalVar, ast.LocalVar] = Map()
-  var inRenaming: Set[sil.LocalVar] = Set()
-  var namesAlreadyUsed: Set[sil.LocalVar] = Set()
-
+  /**
+   *
+   * @param s
+   * @param n Interger; default n = 1
+   * @return
+   */
   def newString(s: String, n: Int = 1): String = {
     var definedVars = (mainModule.env.allDefinedVariables()) map (_.name)
     definedVars ++= (inRenaming map (_.name))
@@ -1589,6 +1930,13 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
+  /**
+   * Creates and adds the mapping from x to its renamed counterpart to "currentRenaming" if x was not renamed before.
+   * Otherwise it only returns the currentrenaming(x)
+   *
+   * @param x a local variable
+   * @return returns a local variable that only differs from x by the name of its declaration
+   */
   def renameVar(x: ast.LocalVar): ast.LocalVar = {
     if (!inRenaming.contains(x)) {
       val new_name = newString(x.name)
@@ -1599,6 +1947,13 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     currentRenaming(x)
   }
 
+  /**
+   * renames all nested local variables in the argument exp by applying renameVar(sil.localVar)
+   *
+   * @param exp A Viper expression.
+   * @return returns an expression with the same nested structure as exp but all local variables that might be
+   *         captured are replaced with renamed and instantiated local variables.
+   */
   def renameExp(exp: ast.Exp): ast.Exp = {
     val vars = readVarsExp(exp).toSeq
     val renamedVars = vars map renameVar
@@ -1617,6 +1972,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
+  /**
+   * @param d a Viper declaration
+   * @return if d is a local variable declaration then it returns a new local variable declaration where the local
+   *         variable of d is renamed while type and position are the same. Otherwise it will simply return d.
+   */
   def renameDecl(d: sil.Declaration): sil.Declaration = {
     d match {
       case decl: ast.LocalVarDecl =>
@@ -1657,6 +2017,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       case ast.Goto(_) => s
       case ast.NewStmt(lhs, fields) => ast.NewStmt(renameVar(lhs), fields)(a, b, c)
       case ast.LocalVarDeclStmt(decl) => ast.LocalVarDeclStmt(renameDecl(decl).asInstanceOf[sil.LocalVarDecl])(a, b, c)
+      case ast.WhileInl(_,_,_) =>
+        assert(false) ; s //should not happen
       case _: ast.ExtensionStmt => s // Probably useless
     }
   }

@@ -28,6 +28,37 @@ trait InliningModule extends Module with Component {
   def silNameNotUsed(s: String): String
 
   // ----------------------------------------------------------------
+  // CALLSTACK AND ERROR-MESSAGE GENERATION
+  // ----------------------------------------------------------------
+
+  /** Name of entry method when verifying a program. Either defined by option verifier.entry or default. */
+  var entryMethod: String
+
+  /** keeps track of inlined loops and serves as unique id to distinguish between inlined loops with same position*/
+  var loopEnumerationCounter: Int
+
+  /** increments loopEnumerationCounter by 1 */
+  def incrementLoopEnumCounter(): Unit
+
+  /**
+   * Does not consume the callstack (DefaultInliningModule.callStack) generated during inlining and does
+   * not modify any variables.
+   *
+   * @return returns String of the callstack generated during inlining. If verifier.verboseCallstack.isDefined it will
+   *         use the non-collapsed callstack in the return. Otherwise, it will use the collapsed version of the
+   *         callStack.
+   */
+  def callStackToString() : String
+
+  /**
+   * Does not consume the callstack (DefaultInliningModule.callStack) generated during inlining and does
+   * not modify any variables.
+   *
+   * @return returns String of the non-collapsed callstack generated during inlining
+   */
+  def callStackToStringVerbose(): String
+
+  // ----------------------------------------------------------------
   // MATCH DETERMINISM
   // ----------------------------------------------------------------
 
@@ -99,6 +130,12 @@ trait InliningModule extends Module with Component {
 
   def checkFraming(pre_orig_s: sil.Stmt, orig: ast.Stmt, checkMono: Boolean = false, checkWFM: Boolean = false, modif_vars: Seq[LocalVar] = Seq()): Stmt
 
+  /**
+   * Only checks if the code contains method calls or loops. Does not check soundness.
+   *
+   * @param stmt a Viper statement
+   * @return True if stmt contains a method call of a defined method or a loop
+   */
   def inlinable(stmt: sil.Stmt): Boolean
 
   def alreadyGroupedInlinableStmts(ss: Seq[sil.Stmt]): Boolean
@@ -119,9 +156,9 @@ trait InliningModule extends Module with Component {
 
   def ignoreErrorsWhenBounded(stmt: Stmt): Stmt
 
-  def inlineLoop(cond: ast.Exp, invs: Seq[ast.Exp], body: ast.Seqn): Stmt
+  def inlineLoop(w: sil.WhileInl): Stmt
 
-  def inlineMethod(m: Method, args: Seq[ast.Exp], targets: Seq[ast.LocalVar]): Stmt
+  def inlineMethod(mc: sil.MethodCall, m: Method, args: Seq[ast.Exp], targets: Seq[ast.LocalVar]): Stmt
 
   // ----------------------------------------------------------------
   // RENAMING

@@ -74,15 +74,22 @@ trait Verifier {
    */
   def replaceProgram(prog : sil.Program)
 
+  /**  Defines max depth of inlining methods or loops  */
   def staticInlining: Option[Int]
+
+  def verboseCallstack: Boolean
+  /** Defines max number of inlined loops or methods when inlining   */
   def maxInl: Option[Int]
+  /** Check soundness conditions (mono and framing) for inlining */
   def noCheckSC: Boolean
+  /** Print the code when checking soundness conditions (mono and framing)  */
   def printSC: Boolean
   // def simpleWFM: Boolean
   def closureSC: Boolean
   def modularSC: Boolean
   def pureFunctionsSC: Boolean
   def noSyntacticCheck: Boolean
+  /** specifies a specific method to start from when inlining a program file */
   def entry: Option[String]
   def ignoreAnnotations: Boolean
 }

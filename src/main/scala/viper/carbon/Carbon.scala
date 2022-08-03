@@ -113,6 +113,13 @@ class CarbonConfig(args: Seq[String]) extends SilFrontendConfig(args, "Carbon") 
     noshort = true
   )
 
+  val verboseCallstack = opt[Boolean]("verboseCallstack",
+    descr = "When printing the callstack, the method calls and loop iterations leading up to an error when inlining" +
+      " are not collapsed (default: disabeld)",
+    default = None,
+    noshort = true
+  )
+
   val noCheckSC = opt[Boolean]("noCheckSC",
     descr = "Check soundness condition for inlining (default: enabled)",
     default = None,
