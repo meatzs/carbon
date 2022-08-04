@@ -31,6 +31,9 @@ trait InliningModule extends Module with Component {
   // CALLSTACK AND ERROR-MESSAGE GENERATION
   // ----------------------------------------------------------------
 
+  /** Set of and loops that are supposed to be printed verbose */
+  var verboseSet: Set[Int]
+
   /** Name of entry method when verifying a program. Either defined by option verifier.entry or default. */
   var entryMethod: String
 
