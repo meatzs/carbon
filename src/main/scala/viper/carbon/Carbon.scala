@@ -113,9 +113,10 @@ class CarbonConfig(args: Seq[String]) extends SilFrontendConfig(args, "Carbon") 
     noshort = true
   )
 
-  val verboseCallstack = opt[Boolean]("verboseCallstack",
-    descr = "When printing the callstack, the method calls and loop iterations leading up to an error when inlining" +
-      " are not collapsed (default: disabeld)",
+  val verboseCallstack = opt[String]("verboseCallstack",
+    descr = "When printing the callstack during inlining, the method calls and loop iterations that are defined by the user will not" +
+      " be collapsed. User input \"()\" means none will be collapsed and user input \"(<\"L@\"<line of loop>>,<methodName>)\"" +
+      " means that only defined loops and methods will not be collapsed.  (default: disabeld)",
     default = None,
     noshort = true
   )

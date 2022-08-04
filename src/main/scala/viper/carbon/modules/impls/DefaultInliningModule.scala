@@ -120,6 +120,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   // CALLSTACK AND ERROR-MESSAGE GENERATION
   // ----------------------------------------------------------------
 
+  /** Set of and loops that are supposed to be printed verbose */
+  var verboseSet: Set[Int] = Set()
+
   /** Name of entry method when verifying a program. Either defined by option verifier.entry or default. */
   var entryMethod: String = ""
 
@@ -189,7 +192,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
    *         callStack given by DefaultInliningModule.collapseCallStack().
    */
   def callStackToString() : String = {
-    if (verifier.verboseCallstack) {
+    if (verifier.verboseCallstack.isDefined) {
       return callStackToStringVerbose()
     }
 
@@ -197,8 +200,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     var collapsedCallstack: ListBuffer[(sil.Stmt, Boolean)] = collapseCallstack(callStack)
     for (call <- collapsedCallstack) {
       call match {
-        case (w@sil.WhileInl(_,id,_), true) =>
-          res = "Loop@" + w.pos.asInstanceOf[HasLineColumn].line +"_id"+id + " (fin.)"+ res
+        case (w@sil.WhileInl(_,id,iteration), true) =>
+          res = "Loop@" + w.pos.asInstanceOf[HasLineColumn].line +"_id"+id + "; iter.: " + iteration +" (fin.)"+ res
         case (w@sil.WhileInl(_, id, iteration), false) =>
           res = "Loop@"+ w.pos.asInstanceOf[HasLineColumn].line +"_id"+ id +" iteration: " + iteration + res
         case (mc@sil.MethodCall(name,args,_), true) =>
@@ -219,18 +222,23 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
    * @return returns String of the non-collapsed callstack generated during inlining
    */
   def callStackToStringVerbose(): String = {
+    var copyCallstack = collapseCallstack(callStack, verboseSet.isEmpty)
+
     var res: String = ""
-    for (call <- callStack){
-      if (!call._2) {
-        call._1 match {
-          case w@sil.WhileInl(_, id, iteration) =>
-            res = "Loop@" + w.pos.asInstanceOf[HasLineColumn].line+ "_id" +id+ ": " + /*w.pos +*/ "; iter.: " + iteration + res
-          case mc@sil.MethodCall(name, args, _) =>
+    for (call <- copyCallstack){
+        call match {
+          case (w@sil.WhileInl(_, id, iteration), true) =>
+            res = "Loop@" + w.pos.asInstanceOf[HasLineColumn].line + "_id" + id + "; iter.: " + iteration + " (fin.)" + res
+          case (w@sil.WhileInl(_, id, iteration),false) =>
+            res = "Loop@" + w.pos.asInstanceOf[HasLineColumn].line+ "_id" +id + /*w.pos +*/ "; iter.: " + iteration + res
+          case (mc@sil.MethodCall(name, args, _), true) =>
+            res = name + "@" + mc.pos.asInstanceOf[HasLineColumn].line + "(" + args.toString() + ") (fin.)" + /*mc.pos +*/ res
+          case (mc@sil.MethodCall(name, args, _), false) =>
             res = name + "@"+mc.pos.asInstanceOf[HasLineColumn].line +"(" + args.toString() + ")" + /*mc.pos +*/ res
           case _ =>
         }
-        res = " -> " + res
-      }
+      res = " -> " + res
+
     }
     if (maxInlineReached) {res+= "; maxInline was reached!"}
     entryMethod + res
@@ -248,7 +256,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
    *         methods. Any nested loops or methods of finished executions are filtered. Maintains the order of input
    *         stack.
    */
-  def collapseCallstack(stack: ListBuffer[(sil.Stmt, Boolean)]) : ListBuffer[(sil.Stmt, Boolean)] = {
+  def collapseCallstack(stack: ListBuffer[(sil.Stmt, Boolean)], verbose: Boolean = false) : ListBuffer[(sil.Stmt, Boolean)] = {
     var stackClone = stack.clone()
     var res: ListBuffer[(sil.Stmt, Boolean)] = ListBuffer[(sil.Stmt, Boolean)]()
 
@@ -258,7 +266,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         case (mc@sil.MethodCall(_,_,_), false) =>
         case (w@sil.WhileInl(_,_,1), false) =>
         case (_, _) =>
-          collapseCallstackNest(stackClone)
+          collapseCallstackNest(stackClone, verbose)
       }
       pop(stackClone)
       push(res, s)
@@ -277,43 +285,97 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
    *              execution and start and end are contained in input stack. Assumes that if _1 is of type WhileInl
    *              with id ID and some iteration number it then there exist another element in the
    *              stack of type WhileInl with id==ID and iteration==1.
+   * @param verbose verbose is true if inliningModule.verboseCallstack.isDefined and the user has not defined any loops
+   *                or methods that are not supposed to be collapsed, meaning verboseSet==Set() => collapse nothing
    */
-  def collapseCallstackNest(stack: ListBuffer[(sil.Stmt, Boolean)]) : Unit = {
+  def collapseCallstackNest(stack: ListBuffer[(sil.Stmt, Boolean)], verbose:Boolean) : Unit = {
     assert(stack.nonEmpty)
 
     var s = pop(stack)
-    if (stack.nonEmpty ) {
+
+    if (stack.nonEmpty && !verbose && collapse(s)) {
       var next = top(stack)
 
       s._1 match {
         case sil.WhileInl(_, id, iteration) =>
-          if (iteration>1) {
-            var contin:Boolean = true
-            while (contin && stack.nonEmpty) {
-              next = top(stack)
-              next._1 match {
-                case sil.WhileInl(_, nextID, nextIteration) =>
-                  if (id == nextID && nextIteration == 1) {
-                    contin = false
-                  }
-                case _ =>
+          if (iteration > 1) {
+            if (!containsVerboseSetElem(stack, s)) {
+              var contin: Boolean = true
+              while (contin && stack.nonEmpty) {
+                next = top(stack)
+                next._1 match {
+                  case sil.WhileInl(_, nextID, nextIteration) =>
+                    if (id == nextID && nextIteration == 1) {
+                      contin = false
+                    }
+                  case _ =>
+                }
+                pop(stack)
               }
-              pop(stack)
             }
           }
           else {
             pop(stack)
           }
         case mc@sil.MethodCall(_, _, _) =>
-          while (next._1 != mc) {
+          if (!containsVerboseSetElem(stack, s)) {
+            while (next._1 != mc) {
+              pop(stack)
+              next = top(stack)
+            }
             pop(stack)
-            next=top(stack)
           }
-          pop(stack)
         case _ =>
       }
     }
     push(stack,s)
+  }
+
+  /**
+   * true if the user has not defined the loop or method statement in s._1 to be verbose
+   */
+  def collapse(s: (sil.Stmt, Boolean)) : Boolean = {
+    s._1 match {
+      case sil.MethodCall(methodName, args, targets) =>
+        !verboseSet.contains(verifier.program.findMethod(methodName).pos.asInstanceOf[HasLineColumn].line)
+      case wi@sil.WhileInl(w, id, iteration) =>
+        !verboseSet.contains(wi.pos.asInstanceOf[HasLineColumn].line)
+      case _ => false
+    }
+  }
+
+  /**
+   * @param stack partial callStack
+   * @param top element of stack that was popped of before
+   * @return true if a While loop or MethodCall that is about to be collapsed has a nested a method or loop during
+   *         executions that is contained in VerboseSet and is not supposed to be collapsed
+   */
+  def containsVerboseSetElem(stack: ListBuffer[(sil.Stmt, Boolean)], top: (sil.Stmt,Boolean)) : Boolean = {
+    for (i <- stack) {
+      i._1 match {
+        case sil.WhileInl(_, _, _) =>
+          if (verboseSet.contains(i._1.pos.asInstanceOf[HasLineColumn].line))
+            return true
+        case sil.MethodCall(methodName, _, _) =>
+          if (verboseSet.contains(verifier.program.findMethod(methodName).pos.asInstanceOf[HasLineColumn].line))
+            return true
+        case _ =>
+      }
+      top._1 match {
+        case sil.WhileInl(_, id, _) =>
+          i._1 match {
+            case sil.WhileInl(_, idN, itN) =>
+              if (id == idN && itN == 1)
+                return false
+            case _ =>
+          }
+        case mc@sil.MethodCall(_,_,_) =>
+          if (top._1==mc)
+            return false
+        case _ =>
+      }
+    }
+    false
   }
 
 

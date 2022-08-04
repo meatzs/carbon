@@ -77,7 +77,8 @@ trait Verifier {
   /**  Defines max depth of inlining methods or loops  */
   def staticInlining: Option[Int]
 
-  def verboseCallstack: Boolean
+  /** Defines if some or all methods or loops in the inlining callstack should not be collapsed. */
+  def verboseCallstack: Option[String]
   /** Defines max number of inlined loops or methods when inlining   */
   def maxInl: Option[Int]
   /** Check soundness conditions (mono and framing) for inlining */

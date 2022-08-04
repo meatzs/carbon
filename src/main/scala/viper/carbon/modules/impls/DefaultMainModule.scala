@@ -11,15 +11,16 @@ import viper.silver.ast.utility.Expressions
 import viper.silver.{ast => sil}
 import viper.carbon.boogie._
 import viper.carbon.boogie.Implicits._
+
 import java.text.SimpleDateFormat
 import java.util.Date
-
 import viper.carbon.boogie.CommentedDecl
 import viper.carbon.boogie.Procedure
 import viper.carbon.boogie.Program
 import viper.carbon.verifier.Environment
 import viper.silver.verifier.errors
 import viper.carbon.verifier.Verifier
+import viper.silver.ast.HasLineColumn
 import viper.silver.ast.utility.rewriter.Traverse
 
 import scala.collection.mutable
@@ -135,6 +136,31 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
             case Some(s) =>
               methods = Seq(program.findMethod(s))
               inliningModule.entryMethod = entry.toString
+          }
+          verboseCallstack match {
+            case None =>
+              inliningModule.verboseSet = Set()
+            case Some("()") =>
+              inliningModule.verboseSet = Set()
+            case Some(s) =>
+              var temp = s.substring(1, s.length-1)
+              var sequence: Set[String] = Set()
+              var str: String = ""
+              for (char <- temp)
+                if (!char.equals(',')) str += char
+                else {sequence += str ; str = ""}
+              if (!str.equals("")) sequence+=str
+              for (i <- sequence) {
+                println(i)
+                if (i.startsWith("L@")) {
+                  //case we get a method name
+                  inliningModule.verboseSet += i.substring(2).toDouble.toInt
+                } else {
+                  //case that we get a line number of a loop
+                  inliningModule.verboseSet += program.findMethod(i).pos.asInstanceOf[HasLineColumn].line
+                  println(inliningModule.verboseSet.toString())
+                }
+              }
           }
         }
 
