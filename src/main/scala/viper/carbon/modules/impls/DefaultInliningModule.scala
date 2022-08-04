@@ -144,7 +144,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
    * are used to collapse the callStack for callStackToString().
    */
   private var callStack: mutable.Stack[(sil.Stmt, Boolean)] = mutable.Stack[(sil.Stmt, Boolean)]()
-
+ //hello typing
   /** Gets set to true if n_inl>verifier.maxInl.get and used to print this information in callStackToString() */
   var maxInlineReached: Boolean = false
 
