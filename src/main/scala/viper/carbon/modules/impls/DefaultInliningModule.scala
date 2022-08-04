@@ -12,7 +12,7 @@ import viper.silver.ast.utility.Expressions
 import viper.silver.verifier.errors.SoundnessFailed
 import viper.silver.ast
 
-import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 /**
  * Handels the inlining of programs.
@@ -143,11 +143,24 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
    * (sil.WhileInl(_,id,_),true). Unfinished loops or methods do not have the second==true "bracket". These "brackets"
    * are used to collapse the callStack for callStackToString().
    */
-  private var callStack: mutable.Stack[(sil.Stmt, Boolean)] = mutable.Stack[(sil.Stmt, Boolean)]()
+  private var callStack: ListBuffer[(sil.Stmt, Boolean)] = ListBuffer[(sil.Stmt, Boolean)]()
 
   /** Gets set to true if n_inl>verifier.maxInl.get and used to print this information in callStackToString() */
   var maxInlineReached: Boolean = false
 
+  def push(stack: ListBuffer[(sil.Stmt, Boolean)], t : (sil.Stmt, Boolean)) : Unit = {
+    stack.prepend(t)
+  }
+
+  def top(stack: ListBuffer[(sil.Stmt, Boolean)]) : (sil.Stmt, Boolean) = {
+    stack.head
+  }
+
+  def pop(stack:ListBuffer[(sil.Stmt, Boolean)]) : (sil.Stmt, Boolean) = {
+    var ret = stack.head
+    stack.remove(0)
+    ret
+  }
 
   /**
    * Pushes tuple onto inlining callStack.
@@ -160,9 +173,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     //TODO: simplify if no more changes are made
     s match {
       case wi@sil.WhileInl(_,_,_) =>
-        callStack.push((wi,end))
+        push(callStack,(wi,end))
       case mc@sil.MethodCall(name, args, _) =>
-        callStack.push((mc, end))
+        push(callStack,(mc, end))
       case _ =>
     }
   }
@@ -181,9 +194,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
 
     var res = ""
-    var collapsedCallstack: mutable.Stack[(sil.Stmt, Boolean)] = collapseCallstack(callStack)
-    while (collapsedCallstack.nonEmpty) {
-      var call = collapsedCallstack.pop()
+    var collapsedCallstack: ListBuffer[(sil.Stmt, Boolean)] = collapseCallstack(callStack)
+    for (call <- collapsedCallstack) {
       call match {
         case (w@sil.WhileInl(_,id,_), true) =>
           res = "Loop@" + w.pos.asInstanceOf[HasLineColumn].line +"_id"+id + " (fin.)"+ res
@@ -236,20 +248,20 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
    *         methods. Any nested loops or methods of finished executions are filtered. Maintains the order of input
    *         stack.
    */
-  def collapseCallstack(stack: mutable.Stack[(sil.Stmt, Boolean)]) : mutable.Stack[(sil.Stmt, Boolean)] = {
+  def collapseCallstack(stack: ListBuffer[(sil.Stmt, Boolean)]) : ListBuffer[(sil.Stmt, Boolean)] = {
     var stackClone = stack.clone()
-    var res: mutable.Stack[(sil.Stmt, Boolean)] = mutable.Stack[(sil.Stmt, Boolean)]()
+    var res: ListBuffer[(sil.Stmt, Boolean)] = ListBuffer[(sil.Stmt, Boolean)]()
 
     while (stackClone.nonEmpty) {
-      var s = stackClone.top
+      var s = top(stackClone)
       s match {
         case (mc@sil.MethodCall(_,_,_), false) =>
         case (w@sil.WhileInl(_,_,1), false) =>
         case (_, _) =>
           collapseCallstackNest(stackClone)
       }
-      stackClone.pop()
-      res.push(s)
+      pop(stackClone)
+      push(res, s)
     }
     res.reverse
   }
@@ -266,19 +278,19 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
    *              with id ID and some iteration number it then there exist another element in the
    *              stack of type WhileInl with id==ID and iteration==1.
    */
-  def collapseCallstackNest(stack: mutable.Stack[(sil.Stmt, Boolean)]) : Unit = {
+  def collapseCallstackNest(stack: ListBuffer[(sil.Stmt, Boolean)]) : Unit = {
     assert(stack.nonEmpty)
 
-    var s = stack.pop()
+    var s = pop(stack)
     if (stack.nonEmpty ) {
-      var next = stack.top
+      var next = top(stack)
 
       s._1 match {
         case sil.WhileInl(_, id, iteration) =>
           if (iteration>1) {
             var contin:Boolean = true
             while (contin && stack.nonEmpty) {
-              next = stack.top
+              next = top(stack)
               next._1 match {
                 case sil.WhileInl(_, nextID, nextIteration) =>
                   if (id == nextID && nextIteration == 1) {
@@ -286,22 +298,22 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
                   }
                 case _ =>
               }
-              stack.pop()
+              pop(stack)
             }
           }
           else {
-            stack.pop()
+            pop(stack)
           }
         case mc@sil.MethodCall(_, _, _) =>
           while (next._1 != mc) {
-            stack.pop()
-            next=stack.top
+            pop(stack)
+            next=top(stack)
           }
-          stack.pop()
+          pop(stack)
         case _ =>
       }
     }
-    stack.push(s)
+    push(stack,s)
   }
 
 
@@ -1626,7 +1638,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     if (stopInlining) {
       val cond_neg: sil.Stmt = sil.Inhale(sil.Not(cond)(cond.pos, cond.info, cond.errT))(cond.pos, cond.info, cond.errT)
       val wfm: Stmt = checkFraming(cond_neg, cond_neg, true, true)
-      extendCallstack(callStack.pop()._1, true) //remove top s.t. we do not push the same iteration twice
+      extendCallstack(pop(callStack)._1, true) //remove top s.t. we do not push the same iteration twice
       MaybeCommentBlock("0: Check SC and cut branch (loop)", wfm ++ Assume(guard ==> FalseLit()))
     }
     else {
