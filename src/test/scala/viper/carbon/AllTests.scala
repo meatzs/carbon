@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon
 
@@ -12,15 +12,15 @@ import viper.silver.frontend.Frontend
 import java.nio.file.Path
 
 import viper.silver.logger.SilentLogger
-import viper.silver.reporter.NoopReporter
+import viper.silver.reporter.{NoopReporter, StdIOReporter}
 
 /** All tests for carbon.
 
   */
 class AllTests extends SilSuite {
-   override def testDirectories: Seq[String] = Vector("local", "all", "quantifiedpermissions", "quantifiedpredicates", "quantifiedcombinations", "wands", "examples", "termination"
-//  override def testDirectories: Seq[String] = Vector("wandsAhmed"
-    //, "generated"
+  override def testDirectories: Seq[String] = Vector(
+    "local", "all", "quantifiedpermissions", "quantifiedpredicates", "quantifiedcombinations",
+    "wands", "examples", "termination", "refute"
   )
 
   override def frontend(verifier: Verifier, files: Seq[Path]): Frontend = {
@@ -31,5 +31,5 @@ class AllTests extends SilSuite {
     fe
   }
 
-  lazy val verifiers = List(CarbonVerifier())
+  lazy val verifiers = List(CarbonVerifier(StdIOReporter()))
 }

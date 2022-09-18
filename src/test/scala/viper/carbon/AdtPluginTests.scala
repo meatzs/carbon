@@ -6,22 +6,17 @@
 
 package viper.carbon
 
-import java.nio.file.Path
-
-import org.scalatest.DoNotDiscover
 import viper.silver.frontend.Frontend
 import viper.silver.logger.SilentLogger
 import viper.silver.reporter.{NoopReporter, StdIOReporter}
 import viper.silver.testing.SilSuite
 import viper.silver.verifier.Verifier
 
-/**
-  * Currently, we do not run the graph tests by default. This could be easily changed later by removing the
-  * [[DoNotDiscover]] annotation.
-  */
-@DoNotDiscover
-class GraphTests extends SilSuite {
-  override def testDirectories: Seq[String] = Vector("graphs")
+import java.nio.file.Path
+
+/** All tests for the Adt Plugin. */
+class AdtPluginTests extends SilSuite {
+   override def testDirectories: Seq[String] = Vector("adt")
 
   override def frontend(verifier: Verifier, files: Seq[Path]): Frontend = {
     require(files.length == 1, "tests should consist of exactly one file")
@@ -31,5 +26,13 @@ class GraphTests extends SilSuite {
     fe
   }
 
-  lazy val verifiers = List(CarbonVerifier(StdIOReporter()))
+  val carbon: CarbonVerifier = CarbonVerifier(StdIOReporter())
+
+  lazy val verifiers = List(carbon)
+
+  override def configureVerifiersFromConfigMap(configMap: Map[String, Any]): Unit = {
+    carbon.parseCommandLine(Seq("--plugin", "viper.silver.plugin.standard.adt.AdtPlugin") :+ "dummy-file-to-prevent-cli-parser-from-complaining-about-missing-file-name.silver.vpr")
+  }
+
+
 }
