@@ -90,9 +90,9 @@ class QuantifiedPermModule(val verifier: Verifier)
   private val zeroPMaskName = Identifier("ZeroPMask")
   override val zeroPMask = Const(zeroPMaskName)
   private val noPermName = Identifier("NoPerm")
-  private val noPerm = Const(noPermName)
+  val noPerm: Const = Const(noPermName)
   private val fullPermName = Identifier("FullPerm")
-  private val fullPerm = Const(fullPermName)
+  val fullPerm = Const(fullPermName)
   private val permAddName = Identifier("PermAdd")
   private val permSubName = Identifier("PermSub")
   private val permDivName = Identifier("PermDiv")
@@ -106,7 +106,7 @@ class QuantifiedPermModule(val verifier: Verifier)
   private val resultMask = LocalVarDecl(Identifier("ResultMask"),maskType)
   private val summandMask1 = LocalVarDecl(Identifier("SummandMask1"),maskType)
   private val summandMask2 = LocalVarDecl(Identifier("SummandMask2"),maskType)
-  private val sumMasks = Identifier("sumMask")
+  val sumMasks: Identifier = Identifier("sumMask")
   private val tempMask = LocalVar(Identifier("TempMask"),maskType)
 
   private val qpMaskName = Identifier("QPMask")
@@ -120,6 +120,34 @@ class QuantifiedPermModule(val verifier: Verifier)
   private var inverseFuncs: ListBuffer[Func] = new ListBuffer[Func](); //list of inverse functions used for inhale/exhale qp
   private var rangeFuncs: ListBuffer[Func] = new ListBuffer[Func](); //list of inverse functions used for inhale/exhale qp
   private var triggerFuncs: ListBuffer[Func] = new ListBuffer[Func](); //list of inverse functions used for inhale/exhale qp
+
+  // Check soundness condition
+
+  private val smallMask = LocalVarDecl(Identifier("SmallMask"),maskType)
+  private val bigMask = LocalVarDecl(Identifier("BigMask"),maskType)
+  private val smallerMask = Identifier("SmallerMask")
+
+  private val wfMask = Identifier("wfMask")
+  private val normalMask = LocalVarDecl(Identifier("normalMask"),maskType)
+
+  private def lookup(h: Exp, o: Exp, f: Exp) = MapSelect(h, Seq(o, f))
+  private val heapType = NamedType("HeapType")
+  private val normalHeap: LocalVarDecl = LocalVarDecl(Identifier("normalHeap"), heapType)
+
+  def staticHeap(): Var = {
+    heapModule.currentHeap.head.asInstanceOf[Var]
+  }
+
+  private val equalOnMask = Identifier("EqualOnMask")
+  private val heap1 = LocalVarDecl(Identifier("Heap1"), heapType)
+  private val heap2 = LocalVarDecl(Identifier("Heap2"), heapType)
+
+  private val smallerState = Identifier("SmallerState")
+  private val sumState = Identifier("SumState")
+  private val mask1 = LocalVarDecl(Identifier("Mask1"),maskType)
+  private val mask2 = LocalVarDecl(Identifier("Mask2"),maskType)
+  private val smallHeap = LocalVarDecl(Identifier("SmallHeap"), heapType)
+  private val bigHeap = LocalVarDecl(Identifier("BigHeap"), heapType)
 
   override def preamble = {
     val obj = LocalVarDecl(Identifier("o")(axiomNamespace), refType)
@@ -207,8 +235,9 @@ class QuantifiedPermModule(val verifier: Verifier)
         inverseFuncs.toSeq)
     } ++ {
       MaybeCommentedDecl("Functions used to represent the range of the projection of each QP instance onto its receiver expressions for quantified permissions during inhale and exhale",
+
         rangeFuncs.toSeq)
-    }
+    } ++ inliningModule.getAxioms()
   }
 
   def permType = NamedType(permTypeName)
@@ -738,7 +767,21 @@ class QuantifiedPermModule(val verifier: Verifier)
               CommentBlock("assume permission updates for predicate " + predicate.name, permissionsMap ++
               independentPredicate) ++
               CommentBlock("assume permission updates for independent locations ", independentLocations) ++
-              (mask := qpMask)
+              MaybeComment("Other locations are the same", {
+                if (verifier.staticInlining.isDefined) {
+                  Assume(Forall(Seq(field), Seq(Trigger(currentPermission(translateNull, field.l)), Trigger(currentPermission(qpMask, translateNull, field.l))),
+                    ((getPredicateId(fieldVar) === IntLit(getPredicateId(predname)))
+                      &&
+                      (Forall(translatedLocals, Seq(Trigger(translatedLocation)),
+                        field.l !== translatedLocation)))
+                      ==>
+                      (currentPermission(translateNull, field.l) === currentPermission(qpMask, translateNull, field.l))))
+                }
+                else {
+                  Statements.EmptyStmt
+                }
+              }) ++
+            (mask := qpMask)
 
             vsFresh.foreach(vFresh => env.undefine(vFresh.localVar))
             freshFormalDecls.foreach(x => env.undefine(x.localVar))
@@ -774,7 +817,12 @@ class QuantifiedPermModule(val verifier: Verifier)
   }
 
   override def inhaleExp(e: sil.Exp, error: PartialVerificationError): Stmt = {
-    inhaleAux(e, Assume, error)
+    inliningModule.current_exists match {
+      case None => inhaleAux(e, Assume, error)
+      case Some(ex: Var) =>
+        // println("CATCHING INHALING", e)
+        inhaleAux(e, (exp: Exp) => Assign(ex, BinExp(ex, And, exp)), error)
+    }
   }
 
   override def inhaleWandFt(w: sil.MagicWand): Stmt = {
@@ -1025,8 +1073,14 @@ class QuantifiedPermModule(val verifier: Verifier)
            // val permPositive = Assume(Forall(translatedLocalVarDecl, tr1, translatedCond ==> permissionPositiveInternal(translatedPerms,None,true)))
            //check that given the condition, the permission held should be non-negative
 
-         val permPositive = Assert(Forall(translatedLocalVarDecl, tr1, translatedCond ==> permissionPositiveInternal(translatedPerms, None, true)),
-             error.dueTo(reasons.NegativePermission(perms)))
+         val permPositive = {
+           inliningModule.current_exists match {
+             case None => Assert(Forall(translatedLocalVarDecl, tr1, translatedCond ==> permissionPositiveInternal(translatedPerms, None, true)),
+              error.dueTo(reasons.NegativePermission(perms)))
+             case Some(ex) => Assert(ex && (Forall(translatedLocals, tr1, translatedCond ==> permissionPositiveInternal(translatedPerms, None, true))),
+               error.dueTo(reasons.NegativePermission(perms)))
+           }
+         }
 
           //Define Permission to all locations of field f for locations where condition applies: add permission defined
            val condTrueLocations =
@@ -1183,9 +1237,14 @@ class QuantifiedPermModule(val verifier: Verifier)
            // permissions non-negative
            // val permPositive = Assume(Forall(translatedLocals, tr1, translatedCond ==> permissionPositiveInternal(translatedPerms,None,true)))
            //check that given the condition, the permission held should be non-negative
-           val permPositive = Assert(Forall(translatedLocals, tr1, translatedCond ==> permissionPositiveInternal(translatedPerms,None,true)),
-             error.dueTo(reasons.NegativePermission(perms)))
-
+           val permPositive = {
+             inliningModule.current_exists match {
+               case None => Assert(Forall(translatedLocals, tr1, translatedCond ==> permissionPositiveInternal(translatedPerms, None, true)),
+                   error.dueTo(reasons.NegativePermission(perms)))
+               case Some(ex) => Assert(ex && (Forall(translatedLocals, tr1, translatedCond ==> permissionPositiveInternal(translatedPerms,None,true))),
+                  error.dueTo(reasons.NegativePermission(perms)))
+             }
+           }
 
          //assumptions for predicates that gain permission
            val permissionsMap = Assume(
@@ -1263,7 +1322,22 @@ class QuantifiedPermModule(val verifier: Verifier)
              CommentBlock("Define updated permissions", permissionsMap) ++
              CommentBlock("Define independent locations", (independentLocations ++
              independentPredicate)) ++
-             (mask := qpMask)
+             MaybeComment("Other locations are the same", {
+               if (verifier.staticInlining.isDefined) {
+                 Assume(Forall(Seq(field), Seq(Trigger(currentPermission(translateNull, field.l)), Trigger(currentPermission(qpMask, translateNull, field.l))),
+                   ((getPredicateId(fieldVar) === IntLit(getPredicateId(predname)))
+                     &&
+                     (Forall(translatedLocals, Seq(Trigger(translatedLocation)),
+                       field.l !== translatedLocation)))
+                     ==>
+                     (currentPermission(translateNull, field.l) === currentPermission(qpMask, translateNull, field.l))))
+               }
+               else {
+                 Statements.EmptyStmt
+               }
+
+             }) ++
+           (mask := qpMask)
 
            vsFresh.foreach(vFresh => env.undefine(vFresh.localVar))
            v2s.foreach(v2 => env.undefine(v2.localVar))
@@ -1825,4 +1899,5 @@ class QuantifiedPermModule(val verifier: Verifier)
     }
 
   }
+
 }

@@ -52,6 +52,7 @@ case class CarbonVerifier(override val reporter: Reporter,
   val typeModule = new DefaultTypeModule(this)
   val exhaleModule = new DefaultExhaleModule(this)
   val inhaleModule = new DefaultInhaleModule(this)
+  val inliningModule = new DefaultInliningModule(this)
   val heapModule = new DefaultHeapModule(this)
   val funcPredModule = new DefaultFuncPredModule(this)
   val permModule = new QuantifiedPermModule(this)
@@ -227,4 +228,18 @@ case class CarbonVerifier(override val reporter: Reporter,
   }
 
   def replaceProgram(prog : Program) = {this.program = prog}
+
+  def staticInlining = if (config != null) {config.staticInlining.toOption} else None
+  def verboseCallstack = if (config != null) {config.verboseCallstack.toOption} else None
+  def maxInl = if (config != null) {config.maxInl.toOption} else None
+  def noCheckSC: Boolean = if (config != null) {config.noCheckSC.toOption.getOrElse(false)} else {false}
+  def noSyntacticCheck: Boolean = if (config != null) {config.noSyntacticCheck.toOption.getOrElse(false)} else {false}
+  def printSC: Boolean = if (config != null) {config.printSC.toOption.getOrElse(false)} else {false}
+  def closureSC: Boolean = if (config != null) {config.closureSC.toOption.getOrElse(false)} else {false}
+  def modularSC: Boolean = if (config != null) {config.modularSC.toOption.getOrElse(false)} else {false}
+  def pureFunctionsSC: Boolean = if (config != null) {config.pureFunctionsSC.toOption.getOrElse(false)} else {false}
+  // def simpleWFM: Boolean = if (config != null) {config.simpleWFM.toOption.getOrElse(false)} else {false}
+  def entry = if (config != null) {config.entry.toOption} else None
+  def ignoreAnnotations: Boolean = if (config != null) {config.ignoreAnnotations.toOption.getOrElse(false)} else {false}
+
 }

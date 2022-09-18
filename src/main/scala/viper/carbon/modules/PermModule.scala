@@ -142,4 +142,8 @@ trait PermModule extends Module with CarbonStateComponent {
   // removes permission to w#ft (footprint of the magic wand) (See Heap module for w#ft description)
   def exhaleWandFt(w: sil.MagicWand): Stmt
 
+  val noPerm: Const
+  val fullPerm: Const
+  val sumMasks: Identifier
+
 }

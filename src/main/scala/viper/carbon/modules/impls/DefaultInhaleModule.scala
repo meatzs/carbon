@@ -36,7 +36,6 @@ class DefaultInhaleModule(val verifier: Verifier) extends InhaleModule with Stat
       stateModule.replaceState(statesStackForPackageStmt(0).asInstanceOf[StateRep].state)
     }
 
-
     val stmt =
         (exps map (e => inhaleConnective(e._1.whenInhaling, e._2, addDefinednessChecks = addDefinednessChecks, statesStackForPackageStmt, insidePackageStmt = insidePackageStmt))) ++
           assumeGoodState
@@ -147,7 +146,11 @@ class DefaultInhaleModule(val verifier: Verifier) extends InhaleModule with Stat
 
   override def inhaleExp(e: sil.Exp, error: PartialVerificationError): Stmt = {
     if (e.isPure) {
-      Assume(translateExp(e))
+      inliningModule.current_exists match {
+        case None => Assume(translateExp(e))
+        case Some(ex: LocalVar) => Assign(ex, ex && translateExp(e))
+      }
+
     } else {
       Nil
     }

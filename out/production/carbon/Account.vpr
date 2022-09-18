@@ -1,0 +1,76 @@
+define ERROR (0)
+
+field balance: Int
+
+predicate valid(r: Ref, b: Int) {
+    acc(r.balance) && r.balance == b
+}
+
+method Account() returns (r: Ref)
+    //requires true
+    //ensures valid(r, 0)
+{
+    inhale acc(r.balance) && r.balance == 0
+    // Models creation
+    fold valid(r, 0)
+}
+
+method getBalance(this: Ref, b: Int) returns (r: Int)
+    //requires valid(this, b)
+    //ensures valid(this, b) && r == b
+{
+
+    var f: Perm := perm(valid(this, b))
+    unfold acc(valid(this, b), f)
+    r := this.balance
+    fold valid(this, b)
+}
+
+method deposit(this: Ref, amount: Int, b: Int)
+    //requires valid(this, b)
+    //ensures valid(this, b + amount)
+{
+    var f: Perm := perm(valid(this, b))
+    unfold acc(valid(this, b), f)
+    this.balance := this.balance + amount
+    if (ERROR == 1)
+    {
+        fold valid(this, b)
+    }
+    else {
+        fold valid(this, b + amount)
+    }
+}
+
+method transferTo(this: Ref, target: Ref, amount: Int, b: Int, bt: Int)
+    //requires valid(this, b) && valid(target, bt)
+    //ensures valid(this, b - amount) && valid(target, bt + amount)
+{
+    deposit(this, -amount, b)
+    deposit(target, amount, bt)
+}
+
+method main()
+{
+    var a: Ref
+    a := Account()
+    deposit(a, 1000, 0)
+
+    var b: Ref
+    b := Account()
+    deposit(b, 2000, 0)
+
+    transferTo(a, b, 500, 1000, 2000)
+    var ba: Int
+    ba := getBalance(a, 500)
+
+    var bb: Int
+    bb := getBalance(b, 2500)
+
+    if (ERROR == 2){
+        assert ba == 500 && bb == 500
+    }
+    else {
+        assert ba == 500 && bb == 2500
+    }
+}

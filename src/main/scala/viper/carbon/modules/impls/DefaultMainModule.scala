@@ -11,15 +11,16 @@ import viper.silver.ast.utility.Expressions
 import viper.silver.{ast => sil}
 import viper.carbon.boogie._
 import viper.carbon.boogie.Implicits._
+
 import java.text.SimpleDateFormat
 import java.util.Date
-
 import viper.carbon.boogie.CommentedDecl
 import viper.carbon.boogie.Procedure
 import viper.carbon.boogie.Program
 import viper.carbon.verifier.Environment
 import viper.silver.verifier.{TypecheckerWarning, errors}
 import viper.carbon.verifier.Verifier
+import viper.silver.ast.HasLineColumn
 import viper.silver.ast.utility.rewriter.Traverse
 import viper.silver.reporter.{Reporter, WarningsDuringTypechecking}
 
@@ -52,7 +53,18 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
 
   override def translate(p: sil.Program, reporter: Reporter): (Program, Map[String, Map[String, String]]) = {
 
-    verifier.replaceProgram(
+    def replaceInhExhWithTrue(e: sil.Exp) : sil.Exp = {
+      e.transform(
+        {
+          case inhExh: sil.InhaleExhaleExp => sil.TrueLit()(inhExh.pos, inhExh.info, inhExh.errT)
+        }
+      )
+    }
+
+    def replaceInhExhWithTrueSeq(es: Seq[sil.Exp]) : Seq[sil.Exp] =
+      es.map(replaceInhExhWithTrue).filter(e => !e.equals(sil.TrueLit()()))
+
+    val progTriggersWithoutInhExhSpec =
       p.transform(
         {
           case f: sil.Forall => {
@@ -69,13 +81,58 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
             }
             res
           }
+          case m: sil.Method =>
+            /**
+              * For all potentially inlined methods except the entry method:
+              * Replace inhale-exhale assertions in specifications with "true", since taking them into account
+              * for inlining does not work in the standard approach.
+              * Specifications for abstract methods are left unchanged (since they cannot be inlined).
+              * Once this has been done, we "maximize" the sequences
+              */
+            if (staticInlining.isDefined && !ignoreAnnotations && m.body.isDefined && entry.fold(true)(entryName => !m.name.equals(entryName))) {
+              m.copy(
+                pres = replaceInhExhWithTrueSeq(m.pres),
+                posts = replaceInhExhWithTrueSeq(m.posts)
+              )(m.pos, m.info, m.errT)
+            } else {
+              m
+            }
+          case w: sil.While =>
+            if(staticInlining.isDefined && !ignoreAnnotations) {
+              w.copy(invs = replaceInhExhWithTrueSeq(w.invs))(w.pos, w.info, w.errT)
+            } else {
+              w
+            }
         },
         Traverse.TopDown)
-    )
 
     val backendFuncs = new mutable.HashSet[sil.BackendFunc]()
-    p.visit{
+    p.visit {
       case sf: sil.BackendFuncApp => backendFuncs.add(sf.backendFunc)
+    }
+
+    /* we replace the program already here even though we may replace it again later, since the annotation refers to the
+     * program via the verifier
+     */
+    verifier.replaceProgram(progTriggersWithoutInhExhSpec)
+
+    if (staticInlining.isDefined && !ignoreAnnotations) {
+      verifier.replaceProgram(
+        progTriggersWithoutInhExhSpec.transform(
+          {
+            case m: sil.Method =>
+              if (m.body.isDefined) {
+                if (entry.fold(true)(entryName => !m.name.equals(entryName)))
+                  inliningModule.annotateMethod(m.copy(
+                    body = Some(inliningModule.flattenStmt(m.body.get).asInstanceOf[sil.Seqn])
+                  )(m.pos, m.info, m.errT))
+                else m.copy(body = Some(inliningModule.flattenStmt(inliningModule.annotateStmt(m.body.get)).asInstanceOf[sil.Seqn]))(m.pos, m.info, m.errT)
+              } else {
+                m
+              }
+          },
+          Traverse.TopDown)
+      )
     }
 
     // We record the Boogie names of all Viper variables in this map.
@@ -83,8 +140,45 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
     var nameMaps : Map[String, mutable.HashMap[String, String]] = null
 
     val output = verifier.program match {
-      case sil.Program(domains, fields, functions, predicates, methods, extensions) =>
+      case sil.Program(domains, fields, functions, predicates, old_methods, extensions) =>
         // translate all members
+        var methods = old_methods
+
+        if (staticInlining.isDefined) {
+          entry match {
+            case None =>
+              methods = Seq(methods.head)
+              inliningModule.entryMethod = methods.head.name
+            case Some(s) =>
+              methods = Seq(program.findMethod(s))
+              inliningModule.entryMethod = entry.toString
+          }
+          verboseCallstack match {
+            case None =>
+              inliningModule.verboseSet = Set()
+            case Some("()") =>
+              inliningModule.verboseSet = Set()
+            case Some(s) =>
+              var temp = s.substring(1, s.length-1)
+              var sequence: Set[String] = Set()
+              var str: String = ""
+              for (char <- temp)
+                if (!char.equals(',')) str += char
+                else {sequence += str ; str = ""}
+              if (!str.equals("")) sequence+=str
+              for (i <- sequence) {
+                println(i)
+                if (i.startsWith("L@")) {
+                  //case we get a method name
+                  inliningModule.verboseSet += i.substring(2).toDouble.toInt
+                } else {
+                  //case that we get a line number of a loop
+                  inliningModule.verboseSet += program.findMethod(i).pos.asInstanceOf[HasLineColumn].line
+                  println(inliningModule.verboseSet.toString())
+                }
+              }
+          }
+        }
 
         // important to convert Seq to List to force the methods to be translated, otherwise it's possible that
         // evaluation happens lazily, which can lead to incorrect behaviour (evaluation order is important here)
@@ -120,6 +214,10 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
         Program(header, preambles ++ members)
     }
 
+    if (staticInlining.isDefined && printSC) {
+      println("Number of blocks (syntactic, not): " + inliningModule.n_syntactic.toString + ", " + inliningModule.n_syntactic_not.toString)
+    }
+
     (output.optimize.asInstanceOf[Program], nameMaps.map(e => e._1 -> e._2.toMap))
   }
 
@@ -150,7 +248,7 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
                 MaybeCommentBlock("Assumptions about method arguments", paramAssumptions),
                 inhalePre,
                 MaybeCommentBlock(initOldStateComment, initOld),
-                checkPost, body, exhalePost))
+                checkPost, inliningModule.ignoreErrorsWhenBounded(body), inliningModule.ignoreErrorsWhenBounded(exhalePost)))
         CommentedDecl(s"Translation of method $name", proc)
     }
 
@@ -169,6 +267,7 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
     val (stmt, state) = stateModule.freshTempState("Post")
 
     val reset = stateModule.resetBoogieState
+
 
     // note that the order here matters - onlyExhalePosts should be computed with respect to the reset state
     val onlyExhalePosts: Seq[Stmt] = inhaleModule.inhaleExhaleSpecWithDefinednessCheck(

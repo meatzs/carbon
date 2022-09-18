@@ -1,0 +1,716 @@
+//:: IgnoreFile(/silicon/issue/364/)
+
+// This is a version of the main example from "Tackling Real-Life Relaxed
+// Concurrency with FSL++", by Doko and Vafeiadis.
+// The example is based on the "ARC" reference counting library for Rust.
+// In this version, we modify the original code by making all atomic 
+// accesses synchronise for reads and writes. This makes the verification 
+// simpler, and removes the need for fence instructions in the code.
+// The resulting example is a simplified version of that in ARCStronger, 
+// whose source code is shown in the appendix of our submission (Fig. 16)
+
+// PART 1: translation of code
+
+// ARC(a, b, g) := acc(a,rd) && acc(g,rd) && RMWAcq(b, Q0) && Rel(b,Q0) && Init(b) && realRef(a) && realRef(b) && ghostRef(g) 
+// Q0(v) := v>=0 && acc(ghost, 1 - v*rd) && (v >= 1 ==> acc(data, 1 - v*rd)) 
+
+
+method new_method(v : Int) returns (data: Ref, count: Ref, ghost: Ref)
+  requires true
+  ensures ARC(data,count,ghost) && data.val == v
+{
+// data := alloc_na()
+  allocNonAtomic(data) 
+// ghost := alloc_ghost()
+  allocGhost(ghost) 
+  
+// count := alloc_RMW(Q0)
+  allocAtomic(count, 0, true)
+
+// [data]_NA := v
+  assert acc(data.init)
+  data.val := v
+  data.init := true
+  
+// [count]_rel := 1
+  releaseWrite(count,1)  // simplification with respect to original code (was relaxed write)
+}
+
+method read(data:Ref, count:Ref, ghost:Ref) returns (v: Int)
+  requires ARC(data,count,ghost)
+  ensures ARC(data,count,ghost) && data.val == v
+{
+// v := [data]_NA
+  v := data.val
+}
+
+method drop(data:Ref, count: Ref, ghost:Ref)
+  requires ARC(data,count,ghost)
+  ensures true
+{
+  var t : Int
+// t := fetch_and_decrement(count)_relacq
+  fetchUpdate(count, t, t-1, true, true)  // simplification with respect to original code (was release CAS - acq/rel here)
+  
+  if(t == 1) { 
+    // FENCEAcq - not needed for this version
+    // deallocate data - modelled as giving up the (full) permission to the location
+    // free(data)
+    exhale acc(data.val)
+  }
+}
+
+method clone(data:Ref, count: Ref, ghost:Ref)
+  requires ARC(data,count,ghost)
+  ensures ARC(data,count,ghost) && ARC(data,count,ghost)
+  {
+    var t: Int
+// t := fetch_and_decrement(count)_acq
+    fetchUpdate(count, t, t+1, true, false) // simplification of real code (was relaxed, here acquire)
+  }
+
+method clone_simple(data:Ref, count: Ref, ghost:Ref)
+requires ARC(data,count,ghost)
+ensures ARC(data,count,ghost) && ARC(data,count,ghost)
+{
+  var t: Int
+// t := fetch_and_decrement(count)_acq
+  fetchUpdate(count, t, t+1, true, true) // simplification of real code (was relaxed, here acquire, release)
+}
+
+//soundness condition holds
+method new_drop() {
+  var data: Ref
+  var count: Ref
+  var ghost: Ref
+
+  data, count, ghost := new_method(0);
+  drop(data, count, ghost)
+}
+
+method new_exhale_drop() {
+    var data: Ref
+  var count: Ref
+  var ghost: Ref
+  data, count, ghost := new_method(0);
+  exhale acc(data.val, wildcard)
+  //we expect a fundamental error here
+  drop(data, count, ghost);
+}
+
+//soundness condition holds
+method new_drop_read() {
+  var data: Ref
+  var count: Ref
+  var ghost: Ref
+  var v: Int
+
+  data, count, ghost := new_method(0);
+  drop(data, count, ghost)
+  //expect fundamental error here
+  v := read(data, count, ghost)
+}
+
+//soundness condition holds
+method new_drop_drop() {
+  var data: Ref
+  var count: Ref
+  var ghost: Ref
+  data, count, ghost := new_method(0);
+  drop(data, count, ghost);
+  //we expect a fundamental error here 
+  drop(data, count, ghost);
+}
+
+//soundness condition does not hold, due to relaxed write in clone
+method new_clone() {
+  var data: Ref
+  var count: Ref
+  var ghost: Ref
+  data, count, ghost := new_method(0);
+  clone(data, count, ghost)
+}
+
+//soundness condition holds
+method new_clone_simple_drop_loop() {
+  var data: Ref
+  var count: Ref
+  var ghost: Ref
+
+  var i: Int := 0
+  var n: Int
+  assume n > 0
+
+  data, count, ghost := new_method(0)
+  while (i < n)
+  {
+    clone_simple(data, count, ghost)
+    i := i + 1
+  }
+  while (i >= 0)
+  {
+    drop(data, count, ghost)
+    i := i - 1
+  }
+}
+
+//soundness condition holds
+method new_clone_simple_drop_loop_error() {
+  var data: Ref
+  var count: Ref
+  var ghost: Ref
+
+  var i: Int := 0
+  var n: Int
+
+  data, count, ghost := new_method(0)
+  while (i < n)
+  {
+    clone_simple(data, count, ghost)
+    i := i + 1
+  }
+  while (i >= 0)
+  {
+    drop(data, count, ghost)
+    i := i - 1
+  }
+
+  //we expect a fundamental error here
+  drop(data, count, ghost)
+}
+
+
+// PART 2: invariant definitions + example-specific background definitions
+
+// Q0(v) := v>=0 && acc(ghost, 1 - v*rd) && (v >= 1 ==> acc(data, 1 - v*rd)) 
+define INV0TempOrMaybeUp(v,sync) v >= 0 && ghostRef(ghost) && acc(maybeUp(ghost,!sync).val, write - rds(v) - min(write - rds(v),perm(temp(ghost).val))) && acc(temp(ghost).val, min(write - rds(v),perm(temp(ghost).val))) && (v >= 1 ==> realRef(data) && acc(maybeUp(data,!sync).val, write - rds(v) - min(write - rds(v),perm(temp(data).val))) && acc(temp(data).val, min(write - rds(v),perm(temp(data).val))))
+define INV0Temp(v) v >= 0 && ghostRef(ghost) && acc(temp(ghost).val, write - rds(v)) && (v >= 1 ==> realRef(data) && acc(temp(data).val, write - rds(v)))
+define INV0MaybeUp(v,sync) v >= 0 && ghostRef(ghost) && acc(maybeUp(ghost,!sync).val, write - rds(v)) && (v >= 1 ==> realRef(data) && acc(maybeUp(data,!sync).val, write - rds(v))) 
+define INV0MaybeDown(v,sync) v >= 0 && ghostRef(ghost) && acc(maybeDown(ghost,!sync).val, write - rds(v)) && (v >= 1 ==> realRef(data) && acc(maybeDown(data,!sync).val, write - rds(v)))
+
+// ARC(a, b, g) := acc(a,rd) && acc(g,rd) && RMWAcq(b, Q0) && Rel(b,Q0) && Init(b) && realRef(a) && realRef(b) && ghostRef(g) 
+define ARC(a, b, g) realRef(a) && realRef(b) && ghostRef(g) && acc(a.val,rd()) && acc(g.val,rd()) && RMWAcq(b, 0) && Rel(b,0) && Init(b)
+
+
+
+// counting permissions
+domain reads {
+function rd() : Perm
+
+function rds(i: Int) : Perm
+
+// Note: this axiom allows constraining a "rd" amount to be arbitrarily small, depending on the terms used to instantiate the axiom. 
+// (terms of the form rds(i) will cause an instantiation). The axiom in the current form depends on this triggering for soundness.
+// In particular, instantiating the axiom with an expression in terms of rd() itself (such as 1/ rd + 1) would lead to unsoundness. However,
+// we only instantiate the axiom with integer values from the program, which are never expressed in terms of "rd".
+// An alternative formulation which would not depend on triggering for soundness, would be to make the notion of a machine integer value
+// an explicit concept in the axiomatisation, and to guard the axiom body with the condition that i is such an integer; this could be done routinely,
+// but the extra clutter involved would be better generated by a front-end, rather than encoded by hand, as for these examples.
+axiom bounds { forall i : Int :: {rds(i)} rds(0) == none && (i >= 0 ==> rds(i) < write) }
+axiom rdPositive { rd() > none }
+axiom addition {forall i:Int, j:Int :: {rds(i),rds(j)} i+1 == j ==> rds(i) + rd() == rds(j) }
+}
+
+
+
+
+define INV1Temp(v) true // not used for this example
+define INV1TempOrMaybeUp(v,sync) true // not used for this example
+define INV1MaybeUp(v,sync) true // not used for this example
+define INV1MaybeDown(v,sync) true  // not used for this example
+define INV2Temp(v) true // not used for this example
+define INV2TempOrMaybeUp(v,sync) true // not used for this example
+define INV2MaybeUp(v,sync) true // not used for this example
+define INV2MaybeDown(v,sync) true  // not used for this example
+
+
+
+
+
+// Part 3: standard background definitions (common for all examples)
+define min(a,b) (a < b ? a : b)
+
+method havocedInt() returns (x:Int)
+method havocedBool() returns (x:Bool)
+method havocedRefSet() returns (x:Set[Ref])
+
+field val : Int
+field init: Bool // value is used for nonatomics, only permissions are used for atomics
+field rel: Int
+field acq: Bool // use true to indicate RMWAcq, false to indicate normal Acq
+
+define realRef(x) !is_ghost(x) && heap(x) == 0
+define ghostRef(x) is_ghost(x) && heap(x) == 0
+ 
+define SomeRel(x) acc(x.rel, wildcard)
+define SomeAcq(x) acc(x.acq, wildcard) && x.acq == true
+define SomeRMWAcq(x) acc(x.acq, wildcard) && x.acq == false
+define SomeAcqOrRMWAcq(x) acc(x.acq, wildcard)
+
+// these shorthands work if the parameter to the Acq is representable by a single indexed assertion 
+// (otherwise we have to expand by hand to e.g. SomeAcq(x) && AcqConjunct(x,i1) && AcqConjunct(x,i2) ...)
+define Acq(x, idx) SomeAcq(x) && AcqConjunct(x, idx) && 
+// here, we take care to (re-)initialise the value of valsRead *only* if we didn't already hold a copy of this conjunct (i.e., we hold exactly one (1/1) now) 
+// A Viper inhale-exhale assertion [A1,A2] has the meaning that A1 is used when inhaling (where the care here must be taken), and A2 when exhaling
+[perm(AcqConjunct(x, idx)) == 1/1 ==> valsRead(x,idx) == Set[Int](),  valsRead(x,idx) == Set[Int]()]
+ 
+define Rel(x, idx) SomeRel(x) && x.rel == idx
+define RMWAcq(x, idx) SomeRMWAcq(x) && acc(AcqConjunct(x, idx), wildcard)
+ 
+predicate AcqConjunct(x: Ref, idx: Int)
+function AcqConjunctTrigger(x: Ref, idx: Int) : Bool { true } // used for triggering quantifiers regarding AcqConjunct predicates (since Viper doesn't support predicate instances as triggers, directly)
+function valsRead(x: Ref, index:Int) : Set[Int]
+  requires AcqConjunct(x,index)
+
+define hasAcqConjunct(x,idx,isRMW) (isRMW ? perm(AcqConjunct(x,idx)) > none : perm(AcqConjunct(x,idx)) >= write) && AcqConjunctTrigger(x,idx)
+
+define Init(x) acc(x.init, wildcard) 
+define Uninit(x) acc(x.init) && acc(x.val) && !x.init
+define PointsTo(x,v) acc(x.init) && acc(x.val) && x.init && x.val == v
+
+
+domain parallelHeaps {
+  function up(x: Ref) : Ref 
+  function down(x: Ref) : Ref
+  function up_inv(x: Ref) : Ref
+  function down_inv(x: Ref) : Ref
+ 
+  function temp(x: Ref) : Ref
+  function temp_inv(x: Ref) : Ref
+
+  function heap(x: Ref) : Int
+  function is_ghost(x:Ref) : Bool
+   
+  axiom inv_up { forall r:Ref :: {up(r)} up_inv(up(r)) == r && (is_ghost(r) ? up(r) == r : heap(r)==0 ==> heap(up(r)) == 1) }
+  axiom inv_up_inv { forall r:Ref :: {up_inv(r)} up(up_inv(r)) == r && (is_ghost(r) ? up_inv(r) == r : heap(r)==1 ==> heap(up_inv(r)) == 0) }
+  axiom inv_down { forall r:Ref :: {down(r)} down_inv(down(r)) == r  && (is_ghost(r) ? down(r) == r : heap(r)==0 ==> heap(down(r)) == -1) }
+  axiom inv_down_inv { forall r:Ref :: {down_inv(r)} down(down_inv(r)) == r && (is_ghost(r) ? down_inv(r) == r : heap(r)==-1 ==> heap(down_inv(r)) == 0) }
+   
+  axiom inv_temp { forall r:Ref :: {temp(r)} temp_inv(temp(r)) == r  && (is_ghost(r) ? temp(r) == r : heap(r)==0 ==> heap(temp(r)) == -3) }
+  axiom inv_temp_inv { forall r:Ref :: {temp_inv(r)} temp(temp_inv(r)) == r && (is_ghost(r) ? temp_inv(r) == r : heap(r)==-3 ==> heap(temp_inv(r)) == 0) }
+} 
+
+
+
+define allocAtomic(x, idx, isRMW) {
+  x := new() 
+  assume realRef(x)
+  inhale SomeRel(x) && x.rel == idx && (isRMW ? SomeRMWAcq(x) && acc(AcqConjunct(x,idx),wildcard) : SomeAcq(x) && AcqConjunct(x,idx) && valsRead(x,idx) == Set[Int]())
+}
+
+ 
+define relaxedWrite(x,v) {
+  atomicWrite(x,v,false)
+}
+
+define releaseWrite(x,v) {
+  atomicWrite(x,v,true)
+}
+
+define atomicWrite(x, v, sync) {
+  assert SomeRel(x)
+  atomicWriteExhale(x, v, sync)
+  inhale Init(x)
+}
+
+define waitOnRelaxedRead(x,v) {
+  waitOnAtomicRead(x,v,false)
+}
+
+define waitOnAcquireRead(x,v) {
+  waitOnAtomicRead(x,v,true)
+}
+
+define waitOnAtomicRead(x,v,sync) {
+  var tmp: Int // used as temporary variable for atomic reads
+  var intSet : Set[Int]
+  waitOnAtomicReadWithVars(x,v,sync,tmp,intSet)
+}
+
+define waitOnAtomicReadWithVars(x,v,sync,tmpInt,tmpIntSet) {
+  atomicReadWithVar(x,tmpInt,sync,tmpIntSet)
+
+  if(tmpInt == v) { 
+    // all *subsequent* reads of the same value v will not change anything - only the *last* read (which breaks out of the loop) makes a change to what we hold (and the invariant)
+    atomicReadWithVar(x,tmpInt,sync,tmpIntSet) // assign the *last* value read
+    assume tmpInt != v
+  }
+}
+
+define waitOnCAS(x,v1,v2, readSync, writeSync) {
+  var tmpInt : Int
+  waitOnCASWithVars(x,v1,v2, readSync, writeSync, tmpInt)
+}
+
+define waitOnCASWithVars(x,v1,v2, readSync, writeSync, tmpInt) 
+ {  
+  // all failing CAS operations will not affect what we hold; they can be skipped, here!
+  CAS(x, v1, v2, tmpInt, readSync, writeSync) // model the *last* CAS, which succeeds, breaking out of the loop
+  assume tmpInt == v1 // the last CAS succeeds
+}
+
+define atomicRead(x, tmp, sync) {
+  var tmpSetAtomicRead : Set[Int]
+  atomicReadWithVar(x, tmp, sync, tmpSetAtomicRead)
+}
+
+define atomicReadWithVar(x, tmp, sync, tmpSet) {
+  assert Init(x) && SomeAcqOrRMWAcq(x)
+  tmp := havocedInt()
+  if(x.acq) { // we have the usual Acq permission
+    atomicReadInhaleWithVar(x, tmp, sync, false, tmpSet) 
+  } //else { // attempting atomic read with only RMWAcq permission
+  //  CASFailedRead(x,tmp)
+  //}
+}
+
+define relaxedRead(x, tmp) {
+  var tmpSet : Set[Int]
+  relaxedReadWithVar(x, tmp, tmpSet)
+}
+
+define relaxedReadWithVar(x, tmp, tmpSet) {
+  atomicReadWithVar(x, tmp, false, tmpSet)
+}
+
+// Could add macro for general loops
+
+
+define allocNonAtomic(x) {
+  x := new() 
+  assume realRef(x)
+  inhale Uninit(x)
+}
+
+define allocGhost(x) {
+  x := new() 
+  assume ghostRef(x)
+  inhale Uninit(x)
+}
+
+define CAS(x, v1, v2, tmp, readSync, writeSync) {
+  var tmpIntSet : Set[Int]
+  var tmpRefSet : Set[Ref]
+  CASWithVar(x, v1, v2, tmp, readSync, writeSync, tmpIntSet, tmpRefSet)
+}
+
+define CASWithVar(x, v1, v2, tmp, readSync, writeSync, tmpIntSet, tmpRefSet) {
+  CASGeneralised(x, tmp, tmp==v1, v2, readSync, writeSync, tmpIntSet, tmpRefSet)
+}
+
+define CASGeneralised(x, tmp, condition, newVal, readSync, writeSync, tmpIntSet, tmpRefSet) {
+  assert Init(x) && SomeRMWAcq(x)
+  tmp := havocedInt()
+  if(condition) {
+    if(readSync && writeSync) { // can use RSL rule
+      atomicReadInhaleWithVar(x, tmp, readSync, true, tmpIntSet)
+      atomicWrite(x, newVal, writeSync)
+    } else {
+      CASReadInhaleToTempHeapWithVar(x,tmp,tmpIntSet)
+      atomicWriteExhaleGeneralised(x, newVal, writeSync, true)
+      moveTempHeap(tmpRefSet,readSync)
+    }
+  } //else {
+    //CASFailedRead(x,tmp)
+  //}
+}
+
+
+define fetchUpdate(x, tmp, newVal, readSync, writeSync) { 
+  var tmpIntSet : Set[Int]
+  var tmpRefSet : Set[Ref]
+  fetchUpdateWithVar(x, tmp, newVal, readSync, writeSync, tmpIntSet, tmpRefSet)
+}
+
+// we model a fetchUpdate as a CAS which can never fail (there is no condition on the value read)
+define fetchUpdateWithVar(x, tmp, newVal, readSync, writeSync, tmpIntSet, tmpRefSet) { 
+   CASGeneralised(x, tmp, true, newVal, readSync, writeSync, tmpIntSet, tmpRefSet)
+}
+
+// note: this macro always picks the same variable names, so doesn't work multiple times in the same scope (since we don't have local variable scopes). Use the macro below if this is problematic (and declare the variables outside)
+define FENCEAcq() {
+   var refSet : Set[Ref]
+   FENCEAcqWithVars(refSet)
+}
+
+
+
+define maybeDown(x, goDown) (goDown ? down(x) : x)
+define maybeUp(x, goUp) (goUp ? up(x) : x)
+
+define atomicWriteExhale(x, v, sync) {
+  atomicWriteExhaleGeneralised(x,v,sync,false)
+}
+
+define rewriteAcqConjuncts(x,isRMW,oldAcqSet,newAcqSet) {
+  var tmpBool : Bool
+  var tmpInt : Int
+  rewriteAcqConjunctsWithVar(x,isRMW,oldAcqSet,newAcqSet,tmpBool,tmpInt)
+}
+
+
+// The following definitions need to be expanded to cover at least enough indices for the invariant numbering (but are otherwise independent of the example):
+
+define FENCEAcqWithVars(refSet) {
+
+ // move all locations r to which permission to "init" is held from "down" heap to normal heap
+  refSet := havocedRefSet()
+  assume forall r: Ref :: {r in refSet} r in refSet ==> heap(r) == 0 && !is_ghost(r) && perm(down(r).init) > none
+  assume forall r: Ref :: {down(r).init} perm(down(r).init) > none && !is_ghost(r) ==> r in refSet   
+  inhale forall r: Ref :: {r in refSet} r in refSet ==> acc(r.init, perm(down(r).init))  
+  assume forall r: Ref :: {r in refSet}{down(r)} r in refSet ==> r.init == down(r).init
+  exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(down(r).init, perm(down(r).init))
+
+   refSet := havocedRefSet()
+// move all locations r to which permission to "vals" is held from "down" heap to normal heap
+  assume forall r: Ref :: {r in refSet} r in refSet ==> heap(r) == 0 && !is_ghost(r) && perm(down(r).val) > none
+  assume forall r: Ref :: {down(r).val} perm(down(r).val) > none && !is_ghost(r) ==> r in refSet
+  inhale forall r: Ref :: {r in refSet} r in refSet ==> acc(r.val, perm(down(r).val))  
+  assume forall r: Ref :: {r in refSet}{down(r)} r in refSet ==> r.val == down(r).val
+  exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(down(r).val, perm(down(r).val))
+
+   refSet := havocedRefSet()
+// move all locations r to which permission to "rel" is held from "down" heap to normal heap
+  assume forall r: Ref :: {r in refSet} r in refSet ==> heap(r) == 0 && !is_ghost(r) && perm(down(r).rel) > none
+  assume forall r: Ref :: {down(r).rel} perm(down(r).rel) > none && !is_ghost(r) ==> r in refSet
+  inhale forall r: Ref :: {r in refSet} r in refSet ==> acc(r.rel, perm(down(r).rel))  
+  assume forall r: Ref :: {r in refSet}{down(r)} r in refSet ==> r.rel == down(r).rel
+  exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(down(r).rel, perm(down(r).rel))
+
+   refSet := havocedRefSet()
+// move all locations r to which permission to "acq" is held from "down" heap to normal heap
+  assume forall r: Ref :: {r in refSet} r in refSet ==> heap(r) == 0 && !is_ghost(r) && perm(down(r).acq) > none
+  assume forall r: Ref :: {down(r).acq} perm(down(r).acq) > none && !is_ghost(r) ==> r in refSet
+  inhale forall r: Ref :: {r in refSet} r in refSet ==> acc(r.acq, perm(down(r).acq))  
+  assume forall r: Ref :: {r in refSet}{down(r)} r in refSet ==> r.acq == down(r).acq
+  exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(down(r).acq, perm(down(r).acq))
+
+
+// UNROLL per indexed invariant (0,1, ...) and for both RelDisjunct and AcqConjunct...
+   refSet := havocedRefSet()
+// move all locations r to which permission to "AcqConjunct(r,0)" is held from "down" heap to normal heap
+  assume forall r: Ref :: {r in refSet} r in refSet ==> heap(r) == 0 && !is_ghost(r) && perm(AcqConjunct(down(r),0)) > none
+  assume forall r: Ref :: {down(r)} perm(AcqConjunct(down(r),0)) > none && !is_ghost(r) ==> r in refSet
+  inhale forall r: Ref :: {r in refSet} {down(r)} r in refSet ==> acc(AcqConjunct(r,0), perm(AcqConjunct(down(r),0)))  
+  assume forall r: Ref :: {r in refSet} {down(r)} r in refSet ==> valsRead(r,0) == valsRead(down(r),0)
+  exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(AcqConjunct(down(r),0), perm(AcqConjunct(down(r),0)))
+
+   refSet := havocedRefSet()
+// move all locations r to which permission to "AcqConjunct(r,1)" is held from "down" heap to normal heap
+  assume forall r: Ref :: {r in refSet} r in refSet ==> heap(r) == 0 && !is_ghost(r) && perm(AcqConjunct(down(r),1)) > none
+  assume forall r: Ref :: {down(r)} perm(AcqConjunct(down(r),1)) > none && !is_ghost(r) ==> r in refSet
+  inhale forall r: Ref :: {r in refSet} {down(r)} r in refSet ==> acc(AcqConjunct(r,1), perm(AcqConjunct(down(r),1)))  
+  assume forall r: Ref :: {r in refSet} {down(r)} r in refSet ==> valsRead(r,1) == valsRead(down(r),1)
+  exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(AcqConjunct(down(r),1), perm(AcqConjunct(down(r),1)))
+
+   refSet := havocedRefSet()
+// move all locations r to which permission to "AcqConjunct(r,2)" is held from "down" heap to normal heap
+  assume forall r: Ref :: {r in refSet} r in refSet ==> heap(r) == 0 && !is_ghost(r) && perm(AcqConjunct(down(r),2)) > none
+  assume forall r: Ref :: {down(r)} perm(AcqConjunct(down(r),2)) > none && !is_ghost(r) ==> r in refSet
+  inhale forall r: Ref :: {r in refSet} {down(r)} r in refSet ==> acc(AcqConjunct(r,2), perm(AcqConjunct(down(r),2)))  
+  assume forall r: Ref :: {r in refSet} {down(r)} r in refSet ==> valsRead(r,2) == valsRead(down(r),2)
+  exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(AcqConjunct(down(r),2), perm(AcqConjunct(down(r),2)))
+
+}  
+
+define moveTempHeap(refSet, readSync) {
+ // move all locations r to which permission to "init" is held from "temp" heap to normal heap
+  refSet := havocedRefSet()
+  assume forall r: Ref :: {r in refSet} r in refSet ==> heap(r) == 0 && !is_ghost(r) && perm(temp(r).init) > none
+  assume forall r: Ref :: {temp(r).init} perm(temp(r).init) > none && !is_ghost(r) ==> r in refSet   
+  inhale forall r: Ref :: {r in refSet} r in refSet ==> acc(maybeDown(r,!readSync).init, perm(temp(r).init))  
+  assume forall r: Ref :: {r in refSet}{temp(r)} r in refSet ==> maybeDown(r,!readSync).init == temp(r).init
+  exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(temp(r).init, perm(temp(r).init))
+
+   refSet := havocedRefSet()
+// move all locations r to which permission to "vals" is held from "temp" heap to normal heap
+  assume forall r: Ref :: {r in refSet} r in refSet ==> heap(r) == 0 && !is_ghost(r) && perm(temp(r).val) > none
+  assume forall r: Ref :: {temp(r)} perm(temp(r).val) > none && !is_ghost(r) ==> r in refSet
+  inhale forall r: Ref :: {r in refSet} r in refSet ==> acc(maybeDown(r,!readSync).val, perm(temp(r).val))  
+  assume forall r: Ref :: {r in refSet}{temp(r)} r in refSet ==> maybeDown(r,!readSync).val == temp(r).val
+  exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(temp(r).val, perm(temp(r).val)) 
+
+   refSet := havocedRefSet()
+// move all locations r to which permission to "rel" is held from "temp" heap to normal heap
+  assume forall r: Ref :: {r in refSet} r in refSet ==> heap(r) == 0 && !is_ghost(r) && perm(temp(r).rel) > none
+  assume forall r: Ref :: {temp(r).rel} perm(temp(r).rel) > none && !is_ghost(r) ==> r in refSet
+  inhale forall r: Ref :: {r in refSet} r in refSet ==> acc(maybeDown(r,!readSync).rel, perm(temp(r).rel))  
+  assume forall r: Ref :: {r in refSet}{temp(r)} r in refSet ==> maybeDown(r,!readSync).rel == temp(r).rel
+  exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(temp(r).rel, perm(temp(r).rel))
+
+   refSet := havocedRefSet()
+// move all locations r to which permission to "acq" is held from "temp" heap to normal heap
+  assume forall r: Ref :: {r in refSet} r in refSet ==> heap(r) == 0 && !is_ghost(r) && perm(temp(r).acq) > none
+  assume forall r: Ref :: {temp(r).acq} perm(temp(r).acq) > none && !is_ghost(r) ==> r in refSet
+  inhale forall r: Ref :: {r in refSet} r in refSet ==> acc(maybeDown(r,!readSync).acq, perm(temp(r).acq))  
+  assume forall r: Ref :: {r in refSet}{temp(r)} r in refSet ==> maybeDown(r,!readSync).acq == temp(r).acq
+  exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(temp(r).acq, perm(temp(r).acq))
+
+// UNROLL per indexed invariant (0,1, ...) for AcqConjunct...
+
+   refSet := havocedRefSet()
+// move all locations r to which permission to "AcqConjunct(r,0)" is held from "temp" heap to normal heap
+  assume forall r: Ref :: {r in refSet} r in refSet ==> heap(r) == 0 && !is_ghost(r) && perm(AcqConjunct(temp(r),0)) > none
+  assume forall r: Ref :: {temp(r)} perm(AcqConjunct(temp(r),0)) > none && !is_ghost(r) ==> r in refSet
+  inhale forall r: Ref :: {r in refSet} r in refSet ==> acc(AcqConjunct(maybeDown(r,!readSync),0), perm(AcqConjunct(temp(r),0)))  
+  assume forall r: Ref :: {r in refSet} {down(r)} r in refSet ==> valsRead(maybeDown(r,!readSync),0) == valsRead(temp(r),0)
+  exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(AcqConjunct(temp(r),0), perm(AcqConjunct(temp(r),0)))
+
+   refSet := havocedRefSet()
+// move all locations r to which permission to "AcqConjunct(r,1)" is held from "temp" heap to normal heap
+  assume forall r: Ref :: {r in refSet} r in refSet ==> heap(r) == 0 && !is_ghost(r) && perm(AcqConjunct(temp(r),1)) > none
+  assume forall r: Ref :: {temp(r)} perm(AcqConjunct(temp(r),1)) > none && !is_ghost(r) ==> r in refSet
+  inhale forall r: Ref :: {r in refSet} r in refSet ==> acc(AcqConjunct(maybeDown(r,!readSync),1), perm(AcqConjunct(temp(r),1)))  
+  assume forall r: Ref :: {r in refSet} {down(r)} r in refSet ==> valsRead(maybeDown(r,!readSync),1) == valsRead(temp(r),1)
+  exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(AcqConjunct(temp(r),1), perm(AcqConjunct(temp(r),1)))
+
+   refSet := havocedRefSet()
+// move all locations r to which permission to "AcqConjunct(r,2)" is held from "temp" heap to normal heap
+  assume forall r: Ref :: {r in refSet} r in refSet ==> heap(r) == 0 && !is_ghost(r) && perm(AcqConjunct(temp(r),2)) > none
+  assume forall r: Ref :: {temp(r)} perm(AcqConjunct(temp(r),2)) > none && !is_ghost(r) ==> r in refSet
+  inhale forall r: Ref :: {r in refSet} r in refSet ==> acc(AcqConjunct(maybeDown(r,!readSync),2), perm(AcqConjunct(temp(r),2)))  
+  assume forall r: Ref :: {r in refSet} {down(r)} r in refSet ==> valsRead(maybeDown(r,!readSync),2) == valsRead(temp(r),2)
+  exhale forall r: Ref :: {r in refSet} r in refSet ==> acc(AcqConjunct(temp(r),2), perm(AcqConjunct(temp(r),2)))
+
+}  
+
+
+define rewriteAcqConjunctsWithVar(x,isRMW,oldAcqSet,newAcqSet,tmpBool,tmpInt)
+{
+  assert SomeAcq(x)
+  tmpBool := havocedBool()
+  if(tmpBool) { // check rewriting is justified
+    // remove all permissions from current state
+    exhale forall r: Ref :: r != null ==> acc(r.init, perm(r.init))
+    exhale forall r: Ref :: r != null ==> acc(r.val, perm(r.val))
+    exhale forall r: Ref :: r != null ==> acc(r.rel, perm(r.rel))
+    exhale forall r: Ref :: r != null ==> acc(r.acq, perm(r.acq))
+    //exhale forall r: Ref :: r != null ==> acc(AcqConjunct(r,0), (perm(AcqConjunct(r,0)) > none ? perm(AcqConjunct(r,0)) : none))
+    //exhale forall r: Ref :: r != null ==> acc(AcqConjunct(r,1), perm(AcqConjunct(r,1)))
+    //exhale forall r: Ref :: r != null ==> acc(AcqConjunct(r,2), perm(AcqConjunct(r,2)))   
+    tmpInt := havocedInt()
+    // UNROLL per numbered invariant
+    if(0 in oldAcqSet) {
+      inhale INV0MaybeDown(tmpInt,true)
+    }
+    if(1 in oldAcqSet) {
+      inhale INV1MaybeDown(tmpInt,true)
+    }
+    if(2 in oldAcqSet) {
+      inhale INV2MaybeDown(tmpInt,true)
+    }
+
+    // UNROLL per numbered invariant
+    if(0 in newAcqSet) {
+      exhale INV0MaybeDown(tmpInt,true)
+    }
+    if(1 in newAcqSet) {
+      exhale INV1MaybeDown(tmpInt,true)
+    }
+    if(2 in newAcqSet) {
+      exhale INV2MaybeDown(tmpInt,true)
+    }
+    assume false // kill this branch - we've generated sufficient checks to ensure that the rewriting is OK
+  }
+
+  if(isRMW) {
+    exhale forall i:Int :: i in oldAcqSet ==> acc(AcqConjunct(x,i),perm(AcqConjunct(x,i)))
+    inhale forall i:Int :: i in newAcqSet ==> acc(AcqConjunct(x,i),wildcard)
+  } else {
+    exhale forall i:Int :: i in oldAcqSet ==> AcqConjunct(x,i) && valsRead(x,i) == Set[Int]()
+    inhale forall i:Int :: i in newAcqSet ==> AcqConjunct(x,i) && valsRead(x,i) == Set[Int]()
+  }
+  
+}
+
+
+
+
+// These definitions need to be expanded to cover at least enough indices for the invariant numbering (but are otherwise independent of the example):
+
+
+define allocAtomicIndexSet(x, RelInv, AcqInvSet, isRMW) {
+  x := new() 
+  assume realRef(x)
+  inhale Rel(x, RelInv) && (isRMW ? SomeRMWAcq(x) : SomeAcq(x))
+  // UNROLL per numbered invariant
+  if (0 in AcqInvSet) {
+    inhale isRMW ? acc(AcqConjunct(x,0),wildcard) : AcqConjunct(x,0) && valsRead(x,0) == Set[Int]()
+  }
+  if (1 in AcqInvSet) {
+    inhale isRMW ? acc(AcqConjunct(x,1),wildcard) : AcqConjunct(x,1) && valsRead(x,1) == Set[Int]()
+  }
+  if (2 in AcqInvSet) {
+    inhale isRMW ? acc(AcqConjunct(x,2),wildcard) : AcqConjunct(x,2) && valsRead(x,2) == Set[Int]()
+  }
+} 
+
+define atomicWriteExhaleGeneralised(x, v, sync, useTempHeap) {
+  // UNROLL per numbered invariant
+  if(x.rel == 0) {
+    if(useTempHeap) {
+      exhale INV0TempOrMaybeUp(v,sync)
+    } else {
+      exhale INV0MaybeUp(v,sync)
+    }
+  } elseif(x.rel == 1) {
+    if(useTempHeap) {
+      exhale INV1TempOrMaybeUp(v,sync)
+    } else {
+      exhale INV1MaybeUp(v,sync)
+    }
+  } elseif(x.rel == 2) {
+    if(useTempHeap) {
+      exhale INV2TempOrMaybeUp(v,sync)
+    } else {
+      exhale INV2MaybeUp(v,sync)
+    }
+  } else {
+    assert false // this cannot happen - no Rel invariant was held!
+  }
+}
+
+ 
+define atomicReadInhaleWithVar(x, v, sync, isRMW, tmpSet) {
+  // UNROLL per numbered invariant
+  if(hasAcqConjunct(x,0,isRMW) && (isRMW || !(v in valsRead(x,0)))) {
+    if(!isRMW) { 
+      tmpSet := valsRead(x,0)
+      exhale AcqConjunct(x,0)
+      assert perm(AcqConjunct(x,0)) == none // we don't support multiple copies of same AcqConjunct, yet
+      inhale AcqConjunct(x,0) && valsRead(x,0) == tmpSet union Set(v)
+    }
+    inhale INV0MaybeDown(v,sync)
+  }  
+  if(hasAcqConjunct(x,1,isRMW) && (isRMW || !(v in valsRead(x,1)))) {
+    if(!isRMW) { 
+      tmpSet := valsRead(x,1)
+      exhale AcqConjunct(x,1)
+      assert perm(AcqConjunct(x,1)) == none // we don't support multiple copies of same AcqConjunct, yet
+      inhale AcqConjunct(x,1) && valsRead(x,1) == tmpSet union Set(v)
+    }
+    inhale INV1MaybeDown(v,sync)
+  }  
+  if(hasAcqConjunct(x,2,isRMW) && (isRMW || !(v in valsRead(x,2)))) {
+    if(!isRMW) { 
+      tmpSet := valsRead(x,2)
+      exhale AcqConjunct(x,2)
+      assert perm(AcqConjunct(x,2)) == none // we don't support multiple copies of same AcqConjunct, yet
+      inhale AcqConjunct(x,2) && valsRead(x,2) == tmpSet union Set(v)
+    }
+    inhale INV2MaybeDown(v,sync)
+  }  
+}
+
+define CASReadInhaleToTempHeapWithVar(x,v,tmpSet) {
+  // UNROLL per numbered invariant
+  if(hasAcqConjunct(x,0,true)) {
+    inhale INV0Temp(v)
+  }
+  if(hasAcqConjunct(x,1,true)) {
+    inhale INV1Temp(v)
+  }
+  if(hasAcqConjunct(x,2,true)) {
+    inhale INV2Temp(v)
+  }
+}

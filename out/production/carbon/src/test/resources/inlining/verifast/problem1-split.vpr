@@ -1,0 +1,127 @@
+domain IArray {
+  function slot(a: IArray, i: Int): Ref
+  function len(a: IArray): Int
+  function first(r: Ref): IArray
+  function second(r: Ref): Int
+
+  axiom all_diff {
+    forall a: IArray, i: Int :: { slot(a,i) }
+      first(slot(a,i)) == a && second(slot(a,i)) == i
+  }
+
+  axiom len_nonneg {
+    forall a: IArray :: { len(a) }
+      len(a) >= 0
+  }
+}
+
+field val: Int
+
+predicate ints(a: IArray, i: Int, count: Int) {
+    count > 0 ==> acc(slot(a, i).val) && ints(a, i + 1, count - 1)
+}
+
+predicate access(a: IArray, i: Int, j: Int) {
+    forall k: Int :: i <= k && k < j ==> acc(slot(a, k).val)
+}
+
+method ints_to_access(a: IArray, i: Int, count: Int)
+    requires acc(ints(a, i, count), wildcard)
+    ensures acc(access(a, i, i + count), wildcard)
+
+method access_to_ints(a: IArray, i: Int, j: Int)
+    requires acc(access(a, i, j), wildcard)
+    ensures acc(ints(a, i, j - i), wildcard)
+
+method access_to_ints_f(a: IArray, i: Int, j: Int, f: Perm)
+    requires acc(access(a, i, j), f)
+    ensures acc(ints(a, i, j - i), f)
+
+// lemma void ints_split_exact(real f, int *a, int N, int l)
+method ints_split_exact(f: Perm, a: IArray, N: Int, l: Int)
+    //requires [f]a[0..N] |-> ?vs &*& 0 <= l &*& l <= N;
+    requires acc(access(a, 0, N), f) && 0 <= l && l <= N
+    //ensures [f]a[0..l] |-> take(l, vs) &*& [f]a[l..N] |-> drop(l, vs);
+    ensures acc(access(a, 0, l), f) && acc(access(a, l, N), f)
+
+// lemma void ints_join_exact(int *a, int m)
+method ints_join_exact(a: IArray, m: Int, n: Int, f: Perm)
+    // requires [?f]a[0..m] |-> ?vs1 &*& [f]ints(a + m, ?n, ?vs2);
+    requires acc(access(a, 0, m), f) && acc(ints(a, m, n), f)
+    // ensures [f]a[0..m + n] |-> append(vs1, vs2);
+    ensures acc(access(a, 0, m + n), f)
+
+method access_next(a: IArray, x: Int, n: Int)
+    requires acc(access(a, x, n), wildcard)
+    ensures acc(access(a, x + 1, n), wildcard)
+
+// int lcp(int *a, int N, int x, int y)
+method lcp(a: IArray, N: Int, x: Int, y: Int, f: Perm) returns (l: Int)
+    //@ requires [?f]a[0..N] |-> ?elems &*& 0 <= x &*& x < N &*& 0 <= y &*& y < N;
+    requires acc(access(a, 0, N), f) && 0 <= x && x < N && 0 <= y && y < N
+    requires f > none
+    //@ ensures [f]a[0..N] |-> elems &*& result == lcp_(drop(x, elems), drop(y, elems));
+    ensures acc(access(a, 0, N), f / 2)
+{
+    
+    //@ ints_split_exact(f/2, a, N, x);
+    ints_split_exact(f/2, a, N, x)
+
+    //@ ints_split_exact(f/2, a, N, y);
+    ints_split_exact(f/2, a, N, y)
+
+    // int l = 0;
+    l := 0
+
+    // for (;;)
+    var b: Bool := true
+    while (b)
+        /*@
+        requires
+            [f/2]a[x + l..N] |-> ?xs &*& [f/2]a[y + l..N] |-> ?ys &*& 0 <= l &*& l <= N;
+        @*/
+        invariant l == 0 && b ==> acc(access(a, x, N), f/4) && acc(access(a, y, N), f/4)
+        invariant l > 0 ==> acc(access(a, x + l, N), wildcard) && acc(access(a, y + l, N), wildcard)
+        invariant 0 <= l && l <= N
+        /*@
+        ensures 
+            [f/2]a[x + old_l..N] |-> xs &*& [f/2]a[y + old_l..N] |-> ys &*&
+            l - old_l == lcp_(xs, ys);
+        @*/
+        //@ decreases N - l;
+    {
+        //@ open [_]ints(a + x + l, _, _);
+        access_to_ints(a, x + l, N)
+        unfold acc(ints(a, x + l, N - x - l), wildcard)
+        // assume N - x - l > 0
+
+        //@ open [_]ints(a + y + l, _, _);
+        access_to_ints(a, y + l, N)
+        unfold acc(ints(a, y + l, N - y - l), wildcard)
+        // assume N - y - l > 0
+
+
+        // if (!(x + l < N && y + l < N && a[x + l] == a[y + l])) {
+        if (!(x + l < N && y + l < N && slot(a, x + l).val == slot(a, y + l).val)) {
+            //break;
+            b := false
+        }
+        else {
+            //l++;
+            l := l + 1
+
+            access_next(a, x + l - 1, N)
+            access_next(a, y + l - 1, N)
+        }
+    }
+
+    //@ ints_join_exact(a, x);
+    access_to_ints_f(a, x, N, f/4)
+    ints_join_exact(a, x, N - x, f/4)
+
+    //@ ints_join_exact(a, y);
+    access_to_ints_f(a, y, N, f/4)
+    ints_join_exact(a, y, N - y, f/4)
+
+    // return l;
+}
