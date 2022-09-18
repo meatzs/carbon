@@ -25,6 +25,7 @@ trait Verifier {
   val expModule: ExpModule
   val typeModule: TypeModule
   val exhaleModule: ExhaleModule
+  val inliningModule: InliningModule
   val inhaleModule: InhaleModule
   val funcPredModule: FuncPredModule
   val permModule: PermModule
@@ -78,4 +79,23 @@ trait Verifier {
 
   def assumeInjectivityOnInhale: Boolean
 
+  /**  Defines max depth of inlining methods or loops  */
+  def staticInlining: Option[Int]
+
+  /** Defines if some or all methods or loops in the inlining callstack should not be collapsed. */
+  def verboseCallstack: Option[String]
+  /** Defines max number of inlined loops or methods when inlining   */
+  def maxInl: Option[Int]
+  /** Check soundness conditions (mono and framing) for inlining */
+  def noCheckSC: Boolean
+  /** Print the code when checking soundness conditions (mono and framing)  */
+  def printSC: Boolean
+  // def simpleWFM: Boolean
+  def closureSC: Boolean
+  def modularSC: Boolean
+  def pureFunctionsSC: Boolean
+  def noSyntacticCheck: Boolean
+  /** specifies a specific method to start from when inlining a program file */
+  def entry: Option[String]
+  def ignoreAnnotations: Boolean
 }

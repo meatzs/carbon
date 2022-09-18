@@ -1,0 +1,1121 @@
+domain PyType {
+  
+  function extends_(sub: PyType, super: PyType): Bool
+  
+  function issubtype(sub: PyType, super: PyType): Bool
+  
+  function isnotsubtype(sub: PyType, super: PyType): Bool
+  
+  function tuple_args(t: PyType): Seq[PyType]
+  
+  function typeof(obj: Ref): PyType
+  
+  function get_basic(t: PyType): PyType
+  
+  function union_type_1(arg_1: PyType): PyType
+  
+  function union_type_2(arg_1: PyType, arg_2: PyType): PyType
+  
+  function union_type_3(arg_1: PyType, arg_2: PyType, arg_3: PyType): PyType
+  
+  function union_type_4(arg_1: PyType, arg_2: PyType, arg_3: PyType, arg_4: PyType): PyType
+  
+  unique function object(): PyType
+  
+  unique function list_basic(): PyType
+  
+  function list(arg0: PyType): PyType
+  
+  function list_arg(typ: PyType, index: Int): PyType
+  
+  unique function set_basic(): PyType
+  
+  function set(arg0: PyType): PyType
+  
+  function set_arg(typ: PyType, index: Int): PyType
+  
+  unique function dict_basic(): PyType
+  
+  function dict(arg0: PyType, arg1: PyType): PyType
+  
+  function dict_arg(typ: PyType, index: Int): PyType
+  
+  unique function int(): PyType
+  
+  unique function float(): PyType
+  
+  unique function bool(): PyType
+  
+  unique function NoneType(): PyType
+  
+  unique function Exception(): PyType
+  
+  unique function traceback(): PyType
+  
+  unique function str(): PyType
+  
+  unique function bytes(): PyType
+  
+  unique function tuple_basic(): PyType
+  
+  function tuple(args: Seq[PyType]): PyType
+  
+  function tuple_arg(typ: PyType, index: Int): PyType
+  
+  unique function PSeq_basic(): PyType
+  
+  function PSeq(arg0: PyType): PyType
+  
+  function PSeq_arg(typ: PyType, index: Int): PyType
+  
+  unique function PSet_basic(): PyType
+  
+  function PSet(arg0: PyType): PyType
+  
+  function PSet_arg(typ: PyType, index: Int): PyType
+  
+  unique function PMultiset_basic(): PyType
+  
+  function PMultiset(arg0: PyType): PyType
+  
+  function PMultiset_arg(typ: PyType, index: Int): PyType
+  
+  unique function slice(): PyType
+  
+  unique function range(): PyType
+  
+  unique function Iterator_basic(): PyType
+  
+  function Iterator(arg0: PyType): PyType
+  
+  function Iterator_arg(typ: PyType, index: Int): PyType
+  
+  unique function Thread_0(): PyType
+  
+  unique function LevelType(): PyType
+  
+  unique function type(): PyType
+  
+  unique function Place(): PyType
+  
+  unique function __prim__Seq_type(): PyType
+  
+  unique function Cell(): PyType
+  
+  unique function ReCell(): PyType
+  
+  axiom issubtype_transitivity {
+    (forall sub: PyType, middle: PyType, super: PyType :: { issubtype(sub, middle),issubtype(middle, super) } issubtype(sub, middle) && issubtype(middle, super) ==> issubtype(sub, super))
+  }
+  
+  axiom issubtype_reflexivity {
+    (forall type_: PyType :: { issubtype(type_, type_) } issubtype(type_, type_))
+  }
+  
+  axiom extends_implies_subtype {
+    (forall sub: PyType, sub2: PyType :: { extends_(sub, sub2) } extends_(sub, sub2) ==> issubtype(sub, sub2))
+  }
+  
+  axiom null_nonetype {
+    (forall r: Ref :: { typeof(r) } issubtype(typeof(r), NoneType()) == (r == null))
+  }
+  
+  axiom issubtype_object {
+    (forall type_: PyType :: { issubtype(type_, object()) } issubtype(type_, object()))
+  }
+  
+  axiom issubtype_exclusion {
+    (forall sub: PyType, sub2: PyType, super: PyType :: { extends_(sub, super),extends_(sub2, super) } extends_(sub, super) && extends_(sub2, super) && sub != sub2 ==> isnotsubtype(sub, sub2) && isnotsubtype(sub2, sub))
+  }
+  
+  axiom issubtype_exclusion_2 {
+    (forall sub: PyType, super: PyType :: { issubtype(sub, super) } { issubtype(super, sub) } issubtype(sub, super) && sub != super ==> !issubtype(super, sub))
+  }
+  
+  axiom issubtype_exclusion_propagation {
+    (forall sub: PyType, middle: PyType, super: PyType :: { issubtype(sub, middle),isnotsubtype(middle, super) } issubtype(sub, middle) && isnotsubtype(middle, super) ==> !issubtype(sub, super))
+  }
+  
+  axiom tuple_arg_def {
+    (forall seq: Seq[PyType], i: Int, Z: PyType :: { tuple(seq),tuple_arg(Z, i) } issubtype(Z, tuple(seq)) ==> issubtype(tuple_arg(Z, i), seq[i]))
+  }
+  
+  axiom tuple_args_def {
+    (forall seq: Seq[PyType], Z: PyType :: { issubtype(Z, tuple(seq)) } issubtype(Z, tuple(seq)) ==> |tuple_args(Z)| == |seq|)
+  }
+  
+  axiom tuple_self_subtype {
+    (forall seq1: Seq[PyType], seq2: Seq[PyType] :: seq1 != seq2 && |seq1| == |seq2| && (forall i: Int :: i >= 0 && i < |seq1| ==> issubtype(seq1[i], seq2[i])) ==> issubtype(tuple(seq1), tuple(seq2)))
+  }
+  
+  axiom union_subtype_1 {
+    (forall arg_1: PyType, X: PyType :: { issubtype(X, union_type_1(arg_1)) } issubtype(X, union_type_1(arg_1)) == (false || issubtype(X, arg_1)))
+  }
+  
+  axiom union_subtype_2 {
+    (forall arg_1: PyType, arg_2: PyType, X: PyType :: { issubtype(X, union_type_2(arg_1, arg_2)) } issubtype(X, union_type_2(arg_1, arg_2)) == (false || issubtype(X, arg_1) || issubtype(X, arg_2)))
+  }
+  
+  axiom union_subtype_3 {
+    (forall arg_1: PyType, arg_2: PyType, arg_3: PyType, X: PyType :: { issubtype(X, union_type_3(arg_1, arg_2, arg_3)) } issubtype(X, union_type_3(arg_1, arg_2, arg_3)) == (false || issubtype(X, arg_1) || issubtype(X, arg_2) || issubtype(X, arg_3)))
+  }
+  
+  axiom union_subtype_4 {
+    (forall arg_1: PyType, arg_2: PyType, arg_3: PyType, arg_4: PyType, X: PyType :: { issubtype(X, union_type_4(arg_1, arg_2, arg_3, arg_4)) } issubtype(X, union_type_4(arg_1, arg_2, arg_3, arg_4)) == (false || issubtype(X, arg_1) || issubtype(X, arg_2) || issubtype(X, arg_3) || issubtype(X, arg_4)))
+  }
+  
+  axiom subtype_union_1 {
+    (forall arg_1: PyType, X: PyType :: { issubtype(union_type_1(arg_1), X) } issubtype(union_type_1(arg_1), X) == (true && issubtype(arg_1, X)))
+  }
+  
+  axiom subtype_union_2 {
+    (forall arg_1: PyType, arg_2: PyType, X: PyType :: { issubtype(union_type_2(arg_1, arg_2), X) } issubtype(union_type_2(arg_1, arg_2), X) == (true && issubtype(arg_1, X) && issubtype(arg_2, X)))
+  }
+  
+  axiom subtype_union_3 {
+    (forall arg_1: PyType, arg_2: PyType, arg_3: PyType, X: PyType :: { issubtype(union_type_3(arg_1, arg_2, arg_3), X) } issubtype(union_type_3(arg_1, arg_2, arg_3), X) == (true && issubtype(arg_1, X) && issubtype(arg_2, X) && issubtype(arg_3, X)))
+  }
+  
+  axiom subtype_union_4 {
+    (forall arg_1: PyType, arg_2: PyType, arg_3: PyType, arg_4: PyType, X: PyType :: { issubtype(union_type_4(arg_1, arg_2, arg_3, arg_4), X) } issubtype(union_type_4(arg_1, arg_2, arg_3, arg_4), X) == (true && issubtype(arg_1, X) && issubtype(arg_2, X) && issubtype(arg_3, X) && issubtype(arg_4, X)))
+  }
+  
+  axiom subtype_list {
+    (forall var0: PyType :: { list(var0) } extends_(list(var0), object()) && get_basic(list(var0)) == list_basic())
+  }
+  
+  axiom list_args0 {
+    (forall Z: PyType, arg0: PyType :: issubtype(Z, list(arg0)) ==> list_arg(Z, 0) == arg0)
+  }
+  
+  axiom subtype_set {
+    (forall var0: PyType :: { set(var0) } extends_(set(var0), object()) && get_basic(set(var0)) == set_basic())
+  }
+  
+  axiom set_args0 {
+    (forall Z: PyType, arg0: PyType :: issubtype(Z, set(arg0)) ==> set_arg(Z, 0) == arg0)
+  }
+  
+  axiom subtype_dict {
+    (forall var0: PyType, var1: PyType :: { dict(var0, var1) } extends_(dict(var0, var1), object()) && get_basic(dict(var0, var1)) == dict_basic())
+  }
+  
+  axiom dict_args0 {
+    (forall Z: PyType, arg0: PyType, arg1: PyType :: issubtype(Z, dict(arg0, arg1)) ==> dict_arg(Z, 0) == arg0)
+  }
+  
+  axiom dict_args1 {
+    (forall Z: PyType, arg0: PyType, arg1: PyType :: issubtype(Z, dict(arg0, arg1)) ==> dict_arg(Z, 1) == arg1)
+  }
+  
+  axiom subtype_int {
+    extends_(int(), float()) && get_basic(int()) == int()
+  }
+  
+  axiom subtype_float {
+    extends_(float(), object()) && get_basic(float()) == float()
+  }
+  
+  axiom subtype_bool {
+    extends_(bool(), int()) && get_basic(bool()) == bool()
+  }
+  
+  axiom subtype_NoneType {
+    extends_(NoneType(), object()) && get_basic(NoneType()) == NoneType()
+  }
+  
+  axiom subtype_Exception {
+    extends_(Exception(), object()) && get_basic(Exception()) == Exception()
+  }
+  
+  axiom subtype_traceback {
+    extends_(traceback(), object()) && get_basic(traceback()) == traceback()
+  }
+  
+  axiom subtype_str {
+    extends_(str(), object()) && get_basic(str()) == str()
+  }
+  
+  axiom subtype_bytes {
+    extends_(bytes(), object()) && get_basic(bytes()) == bytes()
+  }
+  
+  axiom subtype_tuple {
+    (forall args: Seq[PyType] :: { tuple(args) } ((forall e: PyType :: (e in args) ==> e == object()) ==> extends_(tuple(args), object())) && get_basic(tuple(args)) == tuple_basic())
+  }
+  
+  axiom subtype_PSeq {
+    (forall var0: PyType :: { PSeq(var0) } extends_(PSeq(var0), object()) && get_basic(PSeq(var0)) == PSeq_basic())
+  }
+  
+  axiom PSeq_args0 {
+    (forall Z: PyType, arg0: PyType :: issubtype(Z, PSeq(arg0)) ==> PSeq_arg(Z, 0) == arg0)
+  }
+  
+  axiom subtype_PSet {
+    (forall var0: PyType :: { PSet(var0) } extends_(PSet(var0), object()) && get_basic(PSet(var0)) == PSet_basic())
+  }
+  
+  axiom PSet_args0 {
+    (forall Z: PyType, arg0: PyType :: issubtype(Z, PSet(arg0)) ==> PSet_arg(Z, 0) == arg0)
+  }
+  
+  axiom subtype_PMultiset {
+    (forall var0: PyType :: { PMultiset(var0) } extends_(PMultiset(var0), object()) && get_basic(PMultiset(var0)) == PMultiset_basic())
+  }
+  
+  axiom PMultiset_args0 {
+    (forall Z: PyType, arg0: PyType :: issubtype(Z, PMultiset(arg0)) ==> PMultiset_arg(Z, 0) == arg0)
+  }
+  
+  axiom subtype_slice {
+    extends_(slice(), object()) && get_basic(slice()) == slice()
+  }
+  
+  axiom subtype_range {
+    extends_(range(), object()) && get_basic(range()) == range()
+  }
+  
+  axiom subtype_Iterator {
+    (forall var0: PyType :: { Iterator(var0) } extends_(Iterator(var0), object()) && get_basic(Iterator(var0)) == Iterator_basic())
+  }
+  
+  axiom Iterator_args0 {
+    (forall Z: PyType, arg0: PyType :: issubtype(Z, Iterator(arg0)) ==> Iterator_arg(Z, 0) == arg0)
+  }
+  
+  axiom subtype_Thread_0 {
+    extends_(Thread_0(), object()) && get_basic(Thread_0()) == Thread_0()
+  }
+  
+  axiom subtype_LevelType {
+    extends_(LevelType(), object()) && get_basic(LevelType()) == LevelType()
+  }
+  
+  axiom subtype_type {
+    extends_(type(), object()) && get_basic(type()) == type()
+  }
+  
+  axiom subtype_Place {
+    extends_(Place(), object()) && get_basic(Place()) == Place()
+  }
+  
+  axiom subtype___prim__Seq_type {
+    extends_(__prim__Seq_type(), object()) && get_basic(__prim__Seq_type()) == __prim__Seq_type()
+  }
+  
+  axiom subtype_Cell {
+    extends_(Cell(), object()) && get_basic(Cell()) == Cell()
+  }
+  
+  axiom subtype_ReCell {
+    extends_(ReCell(), Cell()) && get_basic(ReCell()) == ReCell()
+  }
+}
+
+domain Thread {
+  
+  function getMethod(t: Ref): ThreadingID
+  
+  function getArg(t: Ref, i: Int): Ref
+  
+  function getOld(t: Ref, i: Int): Ref
+}
+
+domain Function {
+  
+  unique function get_contents(): Function
+  
+  unique function get_last(): Function
+}
+
+domain ThreadingID {
+  
+  unique function print_threading(): ThreadingID
+  
+  unique function __init___threading(): ThreadingID
+  
+  unique function append_threading(): ThreadingID
+  
+  unique function extend_threading(): ThreadingID
+  
+  unique function reverse_threading(): ThreadingID
+  
+  unique function __setitem___threading(): ThreadingID
+  
+  unique function __iter___threading(): ThreadingID
+  
+  unique function __getitem_slice___threading(): ThreadingID
+  
+  unique function __add___threading(): ThreadingID
+  
+  unique function __mul___threading(): ThreadingID
+  
+  unique function __init___threading_0(): ThreadingID
+  
+  unique function add_threading(): ThreadingID
+  
+  unique function remove_threading(): ThreadingID
+  
+  unique function clear_threading(): ThreadingID
+  
+  unique function __iter___threading_0(): ThreadingID
+  
+  unique function __init___threading_1(): ThreadingID
+  
+  unique function keys_threading(): ThreadingID
+  
+  unique function __setitem___threading_0(): ThreadingID
+  
+  unique function __iter___threading_1(): ThreadingID
+  
+  unique function values_threading(): ThreadingID
+  
+  unique function split_threading(): ThreadingID
+  
+  unique function __iter___threading_2(): ThreadingID
+  
+  unique function __next___threading(): ThreadingID
+  
+  unique function __del___threading(): ThreadingID
+  
+  unique function cell_client_1_threading(): ThreadingID
+  
+  unique function cell_client_2_threading(): ThreadingID
+  
+  unique function recell_client_1_threading(): ThreadingID
+  
+  unique function recell_client_2_threading(): ThreadingID
+  
+  unique function loop_client_threading(): ThreadingID
+  
+  unique function __init___threading_2(): ThreadingID
+  
+  unique function set_threading(): ThreadingID
+  
+  unique function __init___threading_3(): ThreadingID
+  
+  unique function set_threading_0(): ThreadingID
+  
+  unique function undo_threading(): ThreadingID
+}
+
+domain SIFDomain[T] {
+  
+  function Low(x: T): Bool
+  
+  axiom low_true {
+    (forall x: T :: { Low(x) } Low(x))
+  }
+}
+
+domain Measure$ {
+  
+  function Measure$create(guard: Bool, key: Ref, value: Int): Measure$
+  
+  function Measure$guard(m: Measure$): Bool
+  
+  function Measure$key(m: Measure$): Ref
+  
+  function Measure$value(m: Measure$): Int
+  
+  axiom Measure$A0 {
+    (forall g: Bool, k: Ref, v: Int :: { Measure$guard(Measure$create(g, k, v)) } Measure$guard(Measure$create(g, k, v)) == g)
+  }
+  
+  axiom Measure$A1 {
+    (forall g: Bool, k: Ref, v: Int :: { Measure$key(Measure$create(g, k, v)) } Measure$key(Measure$create(g, k, v)) == k)
+  }
+  
+  axiom Measure$A2 {
+    (forall g: Bool, k: Ref, v: Int :: { Measure$value(Measure$create(g, k, v)) } Measure$value(Measure$create(g, k, v)) == v)
+  }
+}
+
+domain _Name {
+  
+  function _combine(n1: _Name, n2: _Name): _Name
+  
+  function _single(n: Int): _Name
+  
+  function _get_combined_prefix(n: _Name): _Name
+  
+  function _get_combined_name(n: _Name): _Name
+  
+  function _get_value(n: _Name): Int
+  
+  function _is_single(n: _Name): Bool
+  
+  axiom all_single_or_combined {
+    (forall n: _Name :: n == _single(_get_value(n)) || n == _combine(_get_combined_prefix(n), _get_combined_name(n)))
+  }
+  
+  axiom single_is_single {
+    (forall i: Int :: { _single(i) } _is_single(_single(i)))
+  }
+  
+  axiom combined_is_not_single {
+    (forall n1: _Name, n2: _Name :: { _combine(n1, n2) } !_is_single(_combine(n1, n2)))
+  }
+  
+  axiom decompose_single {
+    (forall i: Int :: { _single(i) } _get_value(_single(i)) == i)
+  }
+  
+  axiom decompose_combined_prefix {
+    (forall n1: _Name, n2: _Name :: { _combine(n1, n2) } _get_combined_prefix(_combine(n1, n2)) == n1)
+  }
+  
+  axiom decompose_combined_name {
+    (forall n1: _Name, n2: _Name :: { _combine(n1, n2) } _get_combined_name(_combine(n1, n2)) == n2)
+  }
+}
+
+field _val: Ref
+
+field __container: Ref
+
+field __iter_index: Int
+
+field __previous: Seq[Ref]
+
+field list_acc: Seq[Ref]
+
+field set_acc: Set[Ref]
+
+field dict_acc: Set[Ref]
+
+field dict_acc2: Ref
+
+field Measure$acc: Seq[Ref]
+
+field MustReleaseBounded: Int
+
+field MustReleaseUnbounded: Int
+
+field Cell_cnts: Ref
+
+field ReCell_bak: Ref
+
+function _isDefined(id: Int): Bool
+
+
+function _checkDefined(val: Ref, id: Int): Ref
+  requires _isDefined(id)
+{
+  val
+}
+
+function Cell_get_contents(self: Ref): Ref
+  requires issubtype(typeof(self), Cell())
+  requires self != null
+  requires acc(Cell_val(self), write)
+  ensures issubtype(typeof(result), object())
+{
+  (unfolding acc(Cell_val(self), write) in self.Cell_cnts)
+}
+
+function ReCell_get_last(self_3: Ref): Ref
+  requires issubtype(typeof(self_3), ReCell())
+  requires self_3 != null
+  requires acc(Cell_val(self_3), write)
+  ensures issubtype(typeof(result), object())
+{
+  (unfolding acc(Cell_val(self_3), write) in self_3.ReCell_bak)
+}
+
+function __file__(): Ref
+
+
+function __name__(): Ref
+
+
+function object___bool__(self: Ref): Bool
+  ensures self == null ==> !result
+  ensures self != null ==> (let t == (typeof(self)) in !issubtype(t, list(list_arg(t, 0))) && (!issubtype(t, set(set_arg(t, 0))) && !issubtype(t, dict(dict_arg(t, 0), dict_arg(t, 1)))) ==> result)
+
+
+function __prim__int___box__(prim: Int): Ref
+  ensures typeof(result) == int()
+  ensures int___unbox__(result) == prim
+
+
+function int___unbox__(box: Ref): Int
+  requires issubtype(typeof(box), int())
+  ensures !issubtype(typeof(box), bool()) ==> __prim__int___box__(result) == box
+  ensures issubtype(typeof(box), bool()) ==> __prim__bool___box__(result != 0) == box
+
+
+function __prim__bool___box__(prim: Bool): Ref
+  ensures typeof(result) == bool()
+  ensures bool___unbox__(result) == prim
+  ensures int___unbox__(result) == (prim ? 1 : 0)
+
+
+function bool___unbox__(box: Ref): Bool
+  requires issubtype(typeof(box), bool())
+  ensures __prim__bool___box__(result) == box
+
+
+function int___eq__(self: Ref, other: Ref): Bool
+  requires issubtype(typeof(self), int())
+  requires issubtype(typeof(other), int())
+{
+  int___unbox__(self) == int___unbox__(other)
+}
+
+function int___gt__(self: Int, other: Int): Bool
+{
+  self > other
+}
+
+function int___add__(self: Int, other: Int): Int
+{
+  self + other
+}
+
+function object___eq__(self: Ref, other: Ref): Bool
+  ensures self == other ==> result
+  ensures (self == null) != (other == null) ==> !result
+
+
+function Level(r: Ref): Perm
+
+
+function Measure$check(map: Seq[Measure$], key: Ref, value: Int): Bool
+{
+  (forall m: Measure$ :: { (m in map) } (m in map) ==> Measure$guard(m) && Measure$key(m) == key ==> Measure$value(m) > value)
+}
+
+function range___create__(start: Int, stop: Int, ctr: Int): Ref
+  requires stop >= start
+  ensures range___val__(result) == [start..stop)
+  ensures range___start__(result) == start
+  ensures range___stop__(result) == stop
+  ensures typeof(result) == range()
+
+
+function range___val__(self: Ref): Seq[Int]
+
+
+function range___start__(self: Ref): Int
+
+
+function range___stop__(self: Ref): Int
+
+
+function range___len__(self: Ref): Int
+  requires issubtype(typeof(self), range())
+  ensures result == |range___val__(self)|
+
+
+function range___sil_seq__(self: Ref): Seq[Ref]
+  requires issubtype(typeof(self), range())
+  ensures |result| == range___len__(self)
+  ensures (forall i: Int :: { result[i] } i >= 0 && i < |range___val__(self)| ==> result[i] == __prim__int___box__(range___val__(self)[i]))
+  ensures (forall i: Ref :: { (i in result) } (i in result) == (typeof(i) == int() && (int___unbox__(i) in range___val__(self))))
+
+
+function str___len__(self: Ref): Int
+  ensures result >= 0
+
+
+function str___val__(self: Ref): Int
+
+
+function str___create__(len: Int, value: Int): Ref
+  ensures str___len__(result) == len
+  ensures str___val__(result) == value
+  ensures typeof(result) == str()
+
+
+function str___eq__(self: Ref, other: Ref): Bool
+  requires issubtype(typeof(self), str())
+  ensures (str___val__(self) == str___val__(other)) == result
+  ensures result ==> str___len__(self) == str___len__(other)
+
+
+predicate MustTerminate(r: Ref) 
+
+predicate MustInvokeBounded(r: Ref) 
+
+predicate MustInvokeUnbounded(r: Ref) 
+
+predicate _MaySet(rec: Ref, id: Int) 
+
+predicate Cell_val(self_2: Ref) {
+  true && issubtype(typeof(self_2), Cell()) && ((issubtype(typeof(self_2), Cell()) ==> acc(self_2.Cell_cnts, write) && issubtype(typeof(self_2.Cell_cnts), object())) && (issubtype(typeof(self_2), ReCell()) ==> acc(self_2.ReCell_bak, write) && issubtype(typeof(self_2.ReCell_bak), object())))
+}
+
+method cell_client_1(_cthread_165: Ref, _caller_measures_165: Seq[Measure$], _residue_165: Perm) returns (_current_wait_level_165: Perm)
+  requires _cthread_165 != null
+  requires issubtype(typeof(_cthread_165), Thread_0())
+  requires [true, perm(MustTerminate(_cthread_165)) == none && ((forperm _r_1: Ref [MustInvokeBounded(_r_1)] :: false) && ((forperm _r_1: Ref [MustInvokeUnbounded(_r_1)] :: false) && ((forperm _r_1: Ref [_r_1.MustReleaseBounded] :: false) && (forperm _r_1: Ref [_r_1.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r: Ref [_r.MustReleaseBounded] :: Level(_r) <= _current_wait_level_165) && ((forperm _r: Ref [_r.MustReleaseUnbounded] :: Level(_r) <= _current_wait_level_165) && _residue_165 <= _current_wait_level_165), true]
+  ensures [true, (forperm _r_0: Ref [MustInvokeBounded(_r_0)] :: false) && ((forperm _r_0: Ref [MustInvokeUnbounded(_r_0)] :: false) && ((forperm _r_0: Ref [_r_0.MustReleaseBounded] :: false) && (forperm _r_0: Ref [_r_0.MustReleaseUnbounded] :: false)))]
+{
+  var _err: Ref
+  var c: Ref
+  var Cell_res: Ref
+  var _cwl_165: Perm
+  var _method_measures_165: Seq[Measure$]
+  _method_measures_165 := Seq[Measure$]()
+  _err := null
+  Cell_res := new()
+  inhale typeof(Cell_res) == Cell()
+  inhale acc(_MaySet(Cell_res, 6598673433786062636095137091), write)
+  _cwl_165 := Cell___init__(_cthread_165, _method_measures_165, _residue_165, Cell_res, __prim__int___box__(4))
+  c := Cell_res
+  inhale _isDefined(99)
+  assert object___eq__(Cell_get_contents(_checkDefined(c, 99)), __prim__int___box__(4))
+  _cwl_165 := Cell_set(_cthread_165, _method_measures_165, _residue_165, _checkDefined(c, 99), __prim__bool___box__(true))
+  assert object___bool__(Cell_get_contents(_checkDefined(c, 99)))
+
+  /** Exhaling postcondition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  exhale [(forperm _r: Ref [_r.MustReleaseBounded] :: Level(_r) <= _current_wait_level_165) && ((forperm _r: Ref [_r.MustReleaseUnbounded] :: Level(_r) <= _current_wait_level_165) && _residue_165 <= _current_wait_level_165), true]
+  exhale [true, (forperm _r_0: Ref [MustInvokeBounded(_r_0)] :: false) && ((forperm _r_0: Ref [MustInvokeUnbounded(_r_0)] :: false) && ((forperm _r_0: Ref [_r_0.MustReleaseBounded] :: false) && (forperm _r_0: Ref [_r_0.MustReleaseUnbounded] :: false)))]
+}
+
+method cell_client_2(_cthread_166: Ref, _caller_measures_166: Seq[Measure$], _residue_166: Perm) returns (_current_wait_level_166: Perm)
+  requires _cthread_166 != null
+  requires issubtype(typeof(_cthread_166), Thread_0())
+  requires [true, perm(MustTerminate(_cthread_166)) == none && ((forperm _r_4: Ref [MustInvokeBounded(_r_4)] :: false) && ((forperm _r_4: Ref [MustInvokeUnbounded(_r_4)] :: false) && ((forperm _r_4: Ref [_r_4.MustReleaseBounded] :: false) && (forperm _r_4: Ref [_r_4.MustReleaseUnbounded] :: false))))]
+  //ensures [(forperm _r_2: Ref [_r_2.MustReleaseBounded] :: Level(_r_2) <= _current_wait_level_166) && ((forperm _r_2: Ref [_r_2.MustReleaseUnbounded] :: Level(_r_2) <= _current_wait_level_166) && _residue_166 <= _current_wait_level_166), true]
+  //ensures [true, (forperm _r_3: Ref [MustInvokeBounded(_r_3)] :: false) && ((forperm _r_3: Ref [MustInvokeUnbounded(_r_3)] :: false) && ((forperm _r_3: Ref [_r_3.MustReleaseBounded] :: false) && (forperm _r_3: Ref [_r_3.MustReleaseUnbounded] :: false)))]
+{
+  var _err: Ref
+  var c_0: Ref
+  var Cell_res_0: Ref
+  var _cwl_166: Perm
+  var _method_measures_166: Seq[Measure$]
+  _method_measures_166 := Seq[Measure$]()
+  _err := null
+  Cell_res_0 := new()
+  inhale typeof(Cell_res_0) == Cell()
+  inhale acc(_MaySet(Cell_res_0, 6598673433786062636095137091), write)
+  _cwl_166 := Cell___init__(_cthread_166, _method_measures_166, _residue_166, Cell_res_0, __prim__int___box__(5))
+  c_0 := Cell_res_0
+  inhale _isDefined(3170147)
+  _cwl_166 := Cell_set(_cthread_166, _method_measures_166, _residue_166, _checkDefined(c_0, 3170147), __prim__int___box__(4))
+  assert object___eq__(Cell_get_contents(_checkDefined(c_0, 3170147)), __prim__int___box__(5))
+  
+  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  exhale [(forperm _r_2: Ref [_r_2.MustReleaseBounded] :: Level(_r_2) <= _current_wait_level_166) && ((forperm _r_2: Ref [_r_2.MustReleaseUnbounded] :: Level(_r_2) <= _current_wait_level_166) && _residue_166 <= _current_wait_level_166), true]
+  exhale [true, (forperm _r_3: Ref [MustInvokeBounded(_r_3)] :: false) && ((forperm _r_3: Ref [MustInvokeUnbounded(_r_3)] :: false) && ((forperm _r_3: Ref [_r_3.MustReleaseBounded] :: false) && (forperm _r_3: Ref [_r_3.MustReleaseUnbounded] :: false)))]
+}
+
+method recell_client_1(_cthread_167: Ref, _caller_measures_167: Seq[Measure$], _residue_167: Perm) returns (_current_wait_level_167: Perm)
+  requires _cthread_167 != null
+  requires issubtype(typeof(_cthread_167), Thread_0())
+  requires [true, perm(MustTerminate(_cthread_167)) == none && ((forperm _r_7: Ref [MustInvokeBounded(_r_7)] :: false) && ((forperm _r_7: Ref [MustInvokeUnbounded(_r_7)] :: false) && ((forperm _r_7: Ref [_r_7.MustReleaseBounded] :: false) && (forperm _r_7: Ref [_r_7.MustReleaseUnbounded] :: false))))]
+//  ensures [(forperm _r_5: Ref [_r_5.MustReleaseBounded] :: Level(_r_5) <= _current_wait_level_167) && ((forperm _r_5: Ref [_r_5.MustReleaseUnbounded] :: Level(_r_5) <= _current_wait_level_167) && _residue_167 <= _current_wait_level_167), true]
+//  ensures [true, (forperm _r_6: Ref [MustInvokeBounded(_r_6)] :: false) && ((forperm _r_6: Ref [MustInvokeUnbounded(_r_6)] :: false) && ((forperm _r_6: Ref [_r_6.MustReleaseBounded] :: false) && (forperm _r_6: Ref [_r_6.MustReleaseUnbounded] :: false)))]
+{
+  var _err: Ref
+  var c_1: Ref
+  var y: Ref
+  var ReCell_res: Ref
+  var _cwl_167: Perm
+  var _method_measures_167: Seq[Measure$]
+  _method_measures_167 := Seq[Measure$]()
+  _err := null
+  ReCell_res := new()
+  inhale typeof(ReCell_res) == ReCell()
+  inhale acc(_MaySet(ReCell_res, 3250777547626209307305141586), write)
+  inhale acc(_MaySet(ReCell_res, 6598673433786062636095137091), write)
+  _cwl_167 := ReCell___init__(_cthread_167, _method_measures_167, _residue_167, ReCell_res, __prim__int___box__(25))
+  c_1 := ReCell_res
+  inhale _isDefined(3235683)
+  assert object___eq__(Cell_get_contents(_checkDefined(c_1, 3235683)), __prim__int___box__(25))
+  _cwl_167 := ReCell_set(_cthread_167, _method_measures_167, _residue_167, _checkDefined(c_1, 3235683), __prim__int___box__(35))
+  y := Cell_get_contents(_checkDefined(c_1, 3235683))
+  inhale _isDefined(121)
+  assert object___eq__(_checkDefined(y, 121), __prim__int___box__(35))
+  _cwl_167 := ReCell_undo(_cthread_167, _method_measures_167, _residue_167, _checkDefined(c_1, 3235683))
+  assert object___eq__(Cell_get_contents(_checkDefined(c_1, 3235683)), __prim__int___box__(25))
+  
+  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  exhale [(forperm _r_5: Ref [_r_5.MustReleaseBounded] :: Level(_r_5) <= _current_wait_level_167) && ((forperm _r_5: Ref [_r_5.MustReleaseUnbounded] :: Level(_r_5) <= _current_wait_level_167) && _residue_167 <= _current_wait_level_167), true]
+  exhale [true, (forperm _r_6: Ref [MustInvokeBounded(_r_6)] :: false) && ((forperm _r_6: Ref [MustInvokeUnbounded(_r_6)] :: false) && ((forperm _r_6: Ref [_r_6.MustReleaseBounded] :: false) && (forperm _r_6: Ref [_r_6.MustReleaseUnbounded] :: false)))]
+}
+
+method recell_client_2(_cthread_168: Ref, _caller_measures_168: Seq[Measure$], _residue_168: Perm) returns (_current_wait_level_168: Perm)
+  requires _cthread_168 != null
+  requires issubtype(typeof(_cthread_168), Thread_0())
+  requires [true, perm(MustTerminate(_cthread_168)) == none && ((forperm _r_10: Ref [MustInvokeBounded(_r_10)] :: false) && ((forperm _r_10: Ref [MustInvokeUnbounded(_r_10)] :: false) && ((forperm _r_10: Ref [_r_10.MustReleaseBounded] :: false) && (forperm _r_10: Ref [_r_10.MustReleaseUnbounded] :: false))))]
+//  ensures [(forperm _r_8: Ref [_r_8.MustReleaseBounded] :: Level(_r_8) <= _current_wait_level_168) && ((forperm _r_8: Ref [_r_8.MustReleaseUnbounded] :: Level(_r_8) <= _current_wait_level_168) && _residue_168 <= _current_wait_level_168), true]
+//  ensures [true, (forperm _r_9: Ref [MustInvokeBounded(_r_9)] :: false) && ((forperm _r_9: Ref [MustInvokeUnbounded(_r_9)] :: false) && ((forperm _r_9: Ref [_r_9.MustReleaseBounded] :: false) && (forperm _r_9: Ref [_r_9.MustReleaseUnbounded] :: false)))]
+{
+  var _err: Ref
+  var c_2: Ref
+  var y_0: Ref
+  var ReCell_res_0: Ref
+  var _cwl_168: Perm
+  var _method_measures_168: Seq[Measure$]
+  _method_measures_168 := Seq[Measure$]()
+  _err := null
+  ReCell_res_0 := new()
+  inhale typeof(ReCell_res_0) == ReCell()
+  inhale acc(_MaySet(ReCell_res_0, 3250777547626209307305141586), write)
+  inhale acc(_MaySet(ReCell_res_0, 6598673433786062636095137091), write)
+  _cwl_168 := ReCell___init__(_cthread_168, _method_measures_168, _residue_168, ReCell_res_0, __prim__int___box__(25))
+  c_2 := ReCell_res_0
+  inhale _isDefined(3301219)
+  assert object___eq__(Cell_get_contents(_checkDefined(c_2, 3301219)), __prim__int___box__(25))
+  _cwl_168 := ReCell_set(_cthread_168, _method_measures_168, _residue_168, _checkDefined(c_2, 3301219), __prim__int___box__(35))
+  y_0 := Cell_get_contents(_checkDefined(c_2, 3301219))
+  inhale _isDefined(3170169)
+  assert object___eq__(_checkDefined(y_0, 3170169), __prim__int___box__(35))
+  _cwl_168 := ReCell_undo(_cthread_168, _method_measures_168, _residue_168, _checkDefined(c_2, 3301219))
+  assert object___eq__(Cell_get_contents(_checkDefined(c_2, 3301219)), __prim__int___box__(35))
+  
+  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  exhale [(forperm _r_8: Ref [_r_8.MustReleaseBounded] :: Level(_r_8) <= _current_wait_level_168) && ((forperm _r_8: Ref [_r_8.MustReleaseUnbounded] :: Level(_r_8) <= _current_wait_level_168) && _residue_168 <= _current_wait_level_168), true]
+  exhale [true, (forperm _r_9: Ref [MustInvokeBounded(_r_9)] :: false) && ((forperm _r_9: Ref [MustInvokeUnbounded(_r_9)] :: false) && ((forperm _r_9: Ref [_r_9.MustReleaseBounded] :: false) && (forperm _r_9: Ref [_r_9.MustReleaseUnbounded] :: false)))]
+}
+
+method loop_client(_cthread_169: Ref, _caller_measures_169: Seq[Measure$], _residue_169: Perm, n_3: Ref) returns (_current_wait_level_169: Perm)
+  requires _cthread_169 != null
+  requires issubtype(typeof(_cthread_169), Thread_0())
+  requires issubtype(typeof(n_3), int())
+  requires int___gt__(int___unbox__(n_3), 0)
+  requires [true, perm(MustTerminate(_cthread_169)) == none && ((forperm _r_15: Ref [MustInvokeBounded(_r_15)] :: false) && ((forperm _r_15: Ref [MustInvokeUnbounded(_r_15)] :: false) && ((forperm _r_15: Ref [_r_15.MustReleaseBounded] :: false) && (forperm _r_15: Ref [_r_15.MustReleaseUnbounded] :: false))))]
+//  ensures [(forperm _r_13: Ref [_r_13.MustReleaseBounded] :: Level(_r_13) <= _current_wait_level_169) && ((forperm _r_13: Ref [_r_13.MustReleaseUnbounded] :: Level(_r_13) <= _current_wait_level_169) && _residue_169 <= _current_wait_level_169), true]
+//  ensures [true, (forperm _r_14: Ref [MustInvokeBounded(_r_14)] :: false) && ((forperm _r_14: Ref [MustInvokeUnbounded(_r_14)] :: false) && ((forperm _r_14: Ref [_r_14.MustReleaseBounded] :: false) && (forperm _r_14: Ref [_r_14.MustReleaseUnbounded] :: false)))]
+{
+  var _err: Ref
+  var c_3: Ref
+  var i: Ref
+  var n_4: Ref
+  var Cell_res_1: Ref
+  var iterable: Ref
+  var iter: Ref
+  var loop_target: Ref
+  var iter_err: Ref
+  var seqtmp: Seq[Ref]
+  var _loop_measures: Seq[Measure$]
+  var _loop_check_before: Bool
+  var _loop_termination_flag: Bool
+  var _loop_original_must_terminate: Perm
+  var _residue_170: Perm
+  var _cwl_169: Perm
+  var _method_measures_169: Seq[Measure$]
+  _method_measures_169 := Seq[Measure$]()
+  _err := null
+  n_4 := n_3
+  Cell_res_1 := new()
+  inhale typeof(Cell_res_1) == Cell()
+  inhale acc(_MaySet(Cell_res_1, 6598673433786062636095137091), write)
+  _cwl_169 := Cell___init__(_cthread_169, _method_measures_169, _residue_169, Cell_res_1, __prim__int___box__(35))
+  c_3 := Cell_res_1
+  inhale _isDefined(3366755)
+  iterable := range___create__(0, int___unbox__(n_4), 0)
+  _cwl_169, iter := range___iter__(_cthread_169, _method_measures_169, _residue_169, iterable)
+  _cwl_169, loop_target, iter_err := Iterator___next__(_cthread_169, _method_measures_169, _residue_169, iter)
+  if (iter_err == null) {
+    i := loop_target
+    inhale _isDefined(105)
+  }
+  seqtmp := range___sil_seq__(iterable)
+  // Save current MustTerminate amount.
+  _loop_original_must_terminate := perm(MustTerminate(_cthread_169))
+  // Save loop termination promise.
+  _loop_termination_flag := false
+  // We are before loop.
+  _loop_check_before := true
+  while (iter_err == null)
+    invariant [(forperm _r_11: Ref [_r_11.MustReleaseBounded] :: Level(_r_11) <= _residue_170) && ((forperm _r_11: Ref [_r_11.MustReleaseUnbounded] :: Level(_r_11) <= _residue_170) && _residue_169 <= _residue_170), true]
+    invariant acc(iter.list_acc, 1 / 20)
+    invariant iter.list_acc == range___sil_seq__(iterable)
+    invariant seqtmp == range___sil_seq__(iterable)
+    invariant acc(iter.__iter_index, write)
+    invariant acc(iter.__previous, write)
+    invariant iter_err == null ==> iter.__iter_index - 1 == |iter.__previous|
+    invariant iter_err != null ==> iter.__iter_index == |iter.__previous|
+    invariant iter_err == null ==> |iter.list_acc| > 0
+    invariant iter.__iter_index >= 0 && iter.__iter_index <= |iter.list_acc|
+    invariant |iter.list_acc| > 0 ==> iter.__iter_index > 0
+    invariant |iter.list_acc| > 0 ==> loop_target == iter.list_acc[iter.__iter_index - 1]
+    invariant |iter.list_acc| > 0 ==> (loop_target in iter.list_acc)
+    invariant iter_err == null ==> iter.__previous == iter.list_acc[..iter.__iter_index - 1]
+    invariant |iter.list_acc| > 0 ==> issubtype(typeof(loop_target), int())
+    invariant |iter.list_acc| > 0 ==> i == loop_target && _isDefined(105)
+    invariant iter_err != null ==> iter.__previous == iter.list_acc
+    invariant |iter.list_acc| == 0 ==> iter_err != null
+    invariant true
+    invariant [true, _loop_check_before ==> _loop_termination_flag || (!(iter_err == null) || perm(MustTerminate(_cthread_169)) == none && ((forperm _r_12: Ref [MustInvokeBounded(_r_12)] :: false) && ((forperm _r_12: Ref [MustInvokeUnbounded(_r_12)] :: false) && ((forperm _r_12: Ref [_r_12.MustReleaseBounded] :: false) && (forperm _r_12: Ref [_r_12.MustReleaseUnbounded] :: false)))))]
+    invariant [true, !_loop_check_before ==> (forperm _r_12: Ref [MustInvokeBounded(_r_12)] :: false) && ((forperm _r_12: Ref [MustInvokeUnbounded(_r_12)] :: false) && ((forperm _r_12: Ref [_r_12.MustReleaseBounded] :: false) && (forperm _r_12: Ref [_r_12.MustReleaseUnbounded] :: false)))] 
+  {
+    _loop_measures := Seq[Measure$]()
+    _cwl_169 := Cell_set(_cthread_169, _method_measures_169, _residue_170, _checkDefined(c_3, 3366755), _checkDefined(i, 105))
+    if (int___eq__(_checkDefined(i, 105), __prim__int___box__(2))) {
+      assert object___eq__(Cell_get_contents(_checkDefined(c_3, 3366755)), __prim__int___box__(int___add__(int___unbox__(_checkDefined(i, 105)), 1)))
+    } else {
+      assert object___eq__(Cell_get_contents(_checkDefined(c_3, 3366755)), _checkDefined(i, 105))
+    }
+    
+    _cwl_169, loop_target, iter_err := Iterator___next__(_cthread_169, _method_measures_169, _residue_169, iter)
+    if (iter_err == null) {
+      i := loop_target
+      inhale _isDefined(105)
+    }
+    // We are after loop body.
+    _loop_check_before := false
+    // Check if loop continues to terminate.
+    assert _loop_termination_flag ==> !(iter_err == null)
+  }
+  // Reset MustTerminate amount to original level.
+  exhale perm(MustTerminate(_cthread_169)) > none ==> acc(MustTerminate(_cthread_169), perm(MustTerminate(_cthread_169)) - _loop_original_must_terminate)
+  _cwl_169 := Iterator___del__(_cthread_169, _method_measures_169, _residue_170, iter)
+  
+  /** Exhaling loop condition explicitly (since tool does not take postcondition of initial method into account for SC) */
+  exhale [(forperm _r_13: Ref [_r_13.MustReleaseBounded] :: Level(_r_13) <= _current_wait_level_169) && ((forperm _r_13: Ref [_r_13.MustReleaseUnbounded] :: Level(_r_13) <= _current_wait_level_169) && _residue_169 <= _current_wait_level_169), true]
+  exhale [true, (forperm _r_14: Ref [MustInvokeBounded(_r_14)] :: false) && ((forperm _r_14: Ref [MustInvokeUnbounded(_r_14)] :: false) && ((forperm _r_14: Ref [_r_14.MustReleaseBounded] :: false) && (forperm _r_14: Ref [_r_14.MustReleaseUnbounded] :: false)))]
+}
+
+method Cell___init__(_cthread_157: Ref, _caller_measures_157: Seq[Measure$], _residue_157: Perm, self_0: Ref, n: Ref) returns (_current_wait_level_157: Perm)
+  requires _cthread_157 != null
+  requires issubtype(typeof(_cthread_157), Thread_0())
+  requires self_0 != null
+  requires acc(_MaySet(self_0, 6598673433786062636095137091), write)
+  requires issubtype(typeof(self_0), Cell())
+  requires issubtype(typeof(n), object())
+  requires self_0 != null
+  requires [true, perm(MustTerminate(_cthread_157)) == none && ((forperm _r_18: Ref [MustInvokeBounded(_r_18)] :: false) && ((forperm _r_18: Ref [MustInvokeUnbounded(_r_18)] :: false) && ((forperm _r_18: Ref [_r_18.MustReleaseBounded] :: false) && (forperm _r_18: Ref [_r_18.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_16: Ref [_r_16.MustReleaseBounded] :: Level(_r_16) <= _current_wait_level_157) && ((forperm _r_16: Ref [_r_16.MustReleaseUnbounded] :: Level(_r_16) <= _current_wait_level_157) && _residue_157 <= _current_wait_level_157), true]
+  ensures acc(Cell_val(self_0), write) && Cell_get_contents(self_0) == n
+  ensures [true, (forperm _r_17: Ref [MustInvokeBounded(_r_17)] :: false) && ((forperm _r_17: Ref [MustInvokeUnbounded(_r_17)] :: false) && ((forperm _r_17: Ref [_r_17.MustReleaseBounded] :: false) && (forperm _r_17: Ref [_r_17.MustReleaseUnbounded] :: false)))]
+{
+  var _err: Ref
+  var self_8: Ref
+  var n_5: Ref
+  var _cwl_157: Perm
+  var _method_measures_157: Seq[Measure$]
+  _method_measures_157 := Seq[Measure$]()
+  inhale typeof(self_0) == Cell()
+  _err := null
+  self_8 := self_0
+  n_5 := n
+  if (perm(_MaySet(self_8, 6598673433786062636095137091)) > none) {
+    exhale acc(_MaySet(self_8, 6598673433786062636095137091), write)
+    inhale acc(self_8.Cell_cnts, write)
+  }
+  self_8.Cell_cnts := n_5
+  fold acc(Cell_val(self_8), write)
+  
+}
+
+method Cell_set(_cthread_158: Ref, _caller_measures_158: Seq[Measure$], _residue_158: Perm, self_1: Ref, n_0: Ref) returns (_current_wait_level_158: Perm)
+  requires _cthread_158 != null
+  requires issubtype(typeof(_cthread_158), Thread_0())
+  requires issubtype(typeof(self_1), Cell())
+  requires issubtype(typeof(n_0), object())
+  requires self_1 != null
+  requires acc(Cell_val(self_1), write)
+  requires [true, perm(MustTerminate(_cthread_158)) == none && ((forperm _r_21: Ref [MustInvokeBounded(_r_21)] :: false) && ((forperm _r_21: Ref [MustInvokeUnbounded(_r_21)] :: false) && ((forperm _r_21: Ref [_r_21.MustReleaseBounded] :: false) && (forperm _r_21: Ref [_r_21.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_19: Ref [_r_19.MustReleaseBounded] :: Level(_r_19) <= _current_wait_level_158) && ((forperm _r_19: Ref [_r_19.MustReleaseUnbounded] :: Level(_r_19) <= _current_wait_level_158) && _residue_158 <= _current_wait_level_158), true]
+  ensures acc(Cell_val(self_1), write) && Cell_get_contents(self_1) == n_0
+  ensures [true, (forperm _r_20: Ref [MustInvokeBounded(_r_20)] :: false) && ((forperm _r_20: Ref [MustInvokeUnbounded(_r_20)] :: false) && ((forperm _r_20: Ref [_r_20.MustReleaseBounded] :: false) && (forperm _r_20: Ref [_r_20.MustReleaseUnbounded] :: false)))]
+{
+  var _err: Ref
+  var self_9: Ref
+  var n_6: Ref
+  var _cwl_158: Perm
+  var _method_measures_158: Seq[Measure$]
+  _method_measures_158 := Seq[Measure$]()
+  inhale typeof(self_1) == Cell()
+  _err := null
+  self_9 := self_1
+  n_6 := n_0
+  unfold acc(Cell_val(self_9), write)
+  if (perm(_MaySet(self_9, 6598673433786062636095137091)) > none) {
+    exhale acc(_MaySet(self_9, 6598673433786062636095137091), write)
+    inhale acc(self_9.Cell_cnts, write)
+  }
+  self_9.Cell_cnts := n_6
+  fold acc(Cell_val(self_9), write)
+  
+}
+
+method ReCell___init__(_cthread_161: Ref, _caller_measures_161: Seq[Measure$], _residue_161: Perm, self_4: Ref, n_1: Ref) returns (_current_wait_level_161: Perm)
+  requires _cthread_161 != null
+  requires issubtype(typeof(_cthread_161), Thread_0())
+  requires self_4 != null
+  requires acc(_MaySet(self_4, 3250777547626209307305141586), write)
+  requires acc(_MaySet(self_4, 6598673433786062636095137091), write)
+  requires issubtype(typeof(self_4), ReCell())
+  requires issubtype(typeof(n_1), object())
+  requires self_4 != null
+  requires [true, perm(MustTerminate(_cthread_161)) == none && ((forperm _r_24: Ref [MustInvokeBounded(_r_24)] :: false) && ((forperm _r_24: Ref [MustInvokeUnbounded(_r_24)] :: false) && ((forperm _r_24: Ref [_r_24.MustReleaseBounded] :: false) && (forperm _r_24: Ref [_r_24.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_22: Ref [_r_22.MustReleaseBounded] :: Level(_r_22) <= _current_wait_level_161) && ((forperm _r_22: Ref [_r_22.MustReleaseUnbounded] :: Level(_r_22) <= _current_wait_level_161) && _residue_161 <= _current_wait_level_161), true]
+  ensures acc(Cell_val(self_4), write) && Cell_get_contents(self_4) == n_1
+  ensures [true, (forperm _r_23: Ref [MustInvokeBounded(_r_23)] :: false) && ((forperm _r_23: Ref [MustInvokeUnbounded(_r_23)] :: false) && ((forperm _r_23: Ref [_r_23.MustReleaseBounded] :: false) && (forperm _r_23: Ref [_r_23.MustReleaseUnbounded] :: false)))]
+{
+  var _err: Ref
+  var self_10: Ref
+  var n_7: Ref
+  var arg: Ref
+  var arg_13: Ref
+  var error: Ref
+  var self_8_0: Ref
+  var n_5_0: Ref
+  var _cwl_161: Perm
+  var _method_measures_161: Seq[Measure$]
+  _method_measures_161 := Seq[Measure$]()
+  inhale typeof(self_4) == ReCell()
+  _err := null
+  self_10 := self_4
+  n_7 := n_1
+  if (perm(_MaySet(self_10, 3250777547626209307305141586)) > none) {
+    exhale acc(_MaySet(self_10, 3250777547626209307305141586), write)
+    inhale acc(self_10.ReCell_bak, write)
+  }
+  self_10.ReCell_bak := null
+  arg := self_4
+  arg_13 := n_7
+  if (perm(_MaySet(arg, 6598673433786062636095137091)) > none) {
+    exhale acc(_MaySet(arg, 6598673433786062636095137091), write)
+    inhale acc(arg.Cell_cnts, write)
+  }
+  arg.Cell_cnts := arg_13
+  
+  fold acc(Cell_val(self_10), write)
+  
+}
+
+method ReCell_set(_cthread_162: Ref, _caller_measures_162: Seq[Measure$], _residue_162: Perm, self_5: Ref, n_2: Ref) returns (_current_wait_level_162: Perm)
+  requires _cthread_162 != null
+  requires issubtype(typeof(_cthread_162), Thread_0())
+  requires issubtype(typeof(self_5), ReCell())
+  requires issubtype(typeof(n_2), object())
+  requires self_5 != null
+  requires acc(Cell_val(self_5), write)
+  requires [true, perm(MustTerminate(_cthread_162)) == none && ((forperm _r_27: Ref [MustInvokeBounded(_r_27)] :: false) && ((forperm _r_27: Ref [MustInvokeUnbounded(_r_27)] :: false) && ((forperm _r_27: Ref [_r_27.MustReleaseBounded] :: false) && (forperm _r_27: Ref [_r_27.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_25: Ref [_r_25.MustReleaseBounded] :: Level(_r_25) <= _current_wait_level_162) && ((forperm _r_25: Ref [_r_25.MustReleaseUnbounded] :: Level(_r_25) <= _current_wait_level_162) && _residue_162 <= _current_wait_level_162), true]
+  ensures acc(Cell_val(self_5), write) && (Cell_get_contents(self_5) == n_2 && ReCell_get_last(self_5) == old(Cell_get_contents(self_5)))
+  ensures [true, (forperm _r_26: Ref [MustInvokeBounded(_r_26)] :: false) && ((forperm _r_26: Ref [MustInvokeUnbounded(_r_26)] :: false) && ((forperm _r_26: Ref [_r_26.MustReleaseBounded] :: false) && (forperm _r_26: Ref [_r_26.MustReleaseUnbounded] :: false)))]
+{
+  var _err: Ref
+  var self_11: Ref
+  var n_8: Ref
+  var _cwl_162: Perm
+  var _method_measures_162: Seq[Measure$]
+  _method_measures_162 := Seq[Measure$]()
+  inhale typeof(self_5) == ReCell()
+  _err := null
+  self_11 := self_5
+  n_8 := n_2
+  unfold acc(Cell_val(self_11), write)
+  if (perm(_MaySet(self_11, 3250777547626209307305141586)) > none) {
+    exhale acc(_MaySet(self_11, 3250777547626209307305141586), write)
+    inhale acc(self_11.ReCell_bak, write)
+  }
+  self_11.ReCell_bak := self_11.Cell_cnts
+  if (perm(_MaySet(self_11, 6598673433786062636095137091)) > none) {
+    exhale acc(_MaySet(self_11, 6598673433786062636095137091), write)
+    inhale acc(self_11.Cell_cnts, write)
+  }
+  self_11.Cell_cnts := n_8
+  fold acc(Cell_val(self_11), write)
+  
+}
+
+method ReCell_set_override_check(_cthread_158: Ref, _caller_measures_158: Seq[Measure$], _residue_158: Perm, self_1: Ref, n_0: Ref) returns (_current_wait_level_158: Perm)
+  requires _cthread_158 != null
+  requires issubtype(typeof(_cthread_158), Thread_0())
+  requires self_1 != null
+  requires issubtype(typeof(self_1), Cell())
+  requires issubtype(typeof(n_0), object())
+  requires self_1 != null
+  requires acc(Cell_val(self_1), write)
+  requires [true, perm(MustTerminate(_cthread_158)) == none && ((forperm _r_30: Ref [MustInvokeBounded(_r_30)] :: false) && ((forperm _r_30: Ref [MustInvokeUnbounded(_r_30)] :: false) && ((forperm _r_30: Ref [_r_30.MustReleaseBounded] :: false) && (forperm _r_30: Ref [_r_30.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_28: Ref [_r_28.MustReleaseBounded] :: Level(_r_28) <= _current_wait_level_158) && ((forperm _r_28: Ref [_r_28.MustReleaseUnbounded] :: Level(_r_28) <= _current_wait_level_158) && _residue_158 <= _current_wait_level_158), true]
+  ensures acc(Cell_val(self_1), write) && Cell_get_contents(self_1) == n_0
+  ensures [true, (forperm _r_29: Ref [MustInvokeBounded(_r_29)] :: false) && ((forperm _r_29: Ref [MustInvokeUnbounded(_r_29)] :: false) && ((forperm _r_29: Ref [_r_29.MustReleaseBounded] :: false) && (forperm _r_29: Ref [_r_29.MustReleaseUnbounded] :: false)))]
+{
+  var _cwl_158: Perm
+  var _method_measures_158: Seq[Measure$]
+  _method_measures_158 := Seq[Measure$]()
+  inhale issubtype(typeof(self_1), ReCell())
+  _cwl_158 := ReCell_set(_cthread_158, _method_measures_158, _residue_158, self_1, n_0)
+}
+
+method ReCell_undo(_cthread_163: Ref, _caller_measures_163: Seq[Measure$], _residue_163: Perm, self_6: Ref) returns (_current_wait_level_163: Perm)
+  requires _cthread_163 != null
+  requires issubtype(typeof(_cthread_163), Thread_0())
+  requires issubtype(typeof(self_6), ReCell())
+  requires self_6 != null
+  requires acc(Cell_val(self_6), write)
+  requires [true, perm(MustTerminate(_cthread_163)) == none && ((forperm _r_33: Ref [MustInvokeBounded(_r_33)] :: false) && ((forperm _r_33: Ref [MustInvokeUnbounded(_r_33)] :: false) && ((forperm _r_33: Ref [_r_33.MustReleaseBounded] :: false) && (forperm _r_33: Ref [_r_33.MustReleaseUnbounded] :: false))))]
+  ensures [(forperm _r_31: Ref [_r_31.MustReleaseBounded] :: Level(_r_31) <= _current_wait_level_163) && ((forperm _r_31: Ref [_r_31.MustReleaseUnbounded] :: Level(_r_31) <= _current_wait_level_163) && _residue_163 <= _current_wait_level_163), true]
+  ensures acc(Cell_val(self_6), write) && Cell_get_contents(self_6) == old(ReCell_get_last(self_6))
+  ensures [true, (forperm _r_32: Ref [MustInvokeBounded(_r_32)] :: false) && ((forperm _r_32: Ref [MustInvokeUnbounded(_r_32)] :: false) && ((forperm _r_32: Ref [_r_32.MustReleaseBounded] :: false) && (forperm _r_32: Ref [_r_32.MustReleaseUnbounded] :: false)))]
+{
+  var _err: Ref
+  var self_12: Ref
+  var _cwl_163: Perm
+  var _method_measures_163: Seq[Measure$]
+  _method_measures_163 := Seq[Measure$]()
+  inhale typeof(self_6) == ReCell()
+  _err := null
+  self_12 := self_6
+  unfold acc(Cell_val(self_12), write)
+  if (perm(_MaySet(self_12, 6598673433786062636095137091)) > none) {
+    exhale acc(_MaySet(self_12, 6598673433786062636095137091), write)
+    inhale acc(self_12.Cell_cnts, write)
+  }
+  self_12.Cell_cnts := self_12.ReCell_bak
+  fold acc(Cell_val(self_12), write)
+  
+}
+
+method Iterator___next__(_cthread_149: Ref, _caller_measures_149: Seq[Measure$], _residue_149: Perm, self: Ref) returns (_current_wait_level_149: Perm, _res: Ref, _err: Ref)
+  requires _cthread_149 != null
+  requires Measure$check(_caller_measures_149, _cthread_149, 1)
+  requires issubtype(typeof(_cthread_149), Thread_0())
+  requires acc(self.list_acc, 1 / 40)
+  requires acc(self.__iter_index, write)
+  requires acc(self.__previous, write)
+  requires [true, Measure$check(_caller_measures_149, _cthread_149, 1)]
+  ensures [(forperm _r_37: Ref [_r_37.MustReleaseBounded] :: Level(_r_37) <= _current_wait_level_149) && ((forperm _r_37: Ref [_r_37.MustReleaseUnbounded] :: Level(_r_37) <= _current_wait_level_149) && _residue_149 <= _current_wait_level_149), true]
+  ensures acc(self.list_acc, 1 / 40) && self.list_acc == old(self.list_acc)
+  ensures acc(self.__iter_index, write)
+  ensures self.__iter_index <= |self.list_acc| + 1
+  ensures old(self.__iter_index == |self.list_acc|) == (_err != null)
+  ensures acc(self.__previous, write)
+  ensures _err == null ==> self.__iter_index == old(self.__iter_index) + 1
+  ensures _err == null ==> self.__iter_index > 0
+  ensures _err == null ==> self.__previous == self.list_acc[..self.__iter_index - 1]
+  ensures |self.list_acc| > 0 ==> self.__iter_index > 0
+  ensures _err != null ==> self.__previous == self.list_acc
+  ensures _err != null ==> self.__iter_index == |self.list_acc|
+  ensures |self.list_acc| > 0 ==> _res == self.list_acc[self.__iter_index - 1] && (_res in self.list_acc)
+  ensures |self.list_acc| > 0 ==> issubtype(typeof(_res), Iterator_arg(typeof(self), 0))
+  ensures (forall r: Ref :: { (r in self.__previous) } (r in self.__previous) == ((r in old(self.__previous)) || (self.__iter_index > 1 && (r == self.list_acc[self.__iter_index - 2] && _err == null) || self.__iter_index > 0 && (_err != null && r == self.list_acc[self.__iter_index - 1]))))
+
+method Iterator___del__(_cthread_150: Ref, _caller_measures_150: Seq[Measure$], _residue_150: Perm, self: Ref) returns (_current_wait_level_150: Perm)
+  requires _cthread_150 != null
+  requires Measure$check(_caller_measures_150, _cthread_150, 1)
+  requires issubtype(typeof(_cthread_150), Thread_0())
+  requires acc(self.list_acc, 1 / 20)
+  requires acc(self.__container, 1 / 20)
+  requires [true, Measure$check(_caller_measures_150, _cthread_150, 1)]
+  ensures [(forperm _r_39: Ref [_r_39.MustReleaseBounded] :: Level(_r_39) <= _current_wait_level_150) && ((forperm _r_39: Ref [_r_39.MustReleaseUnbounded] :: Level(_r_39) <= _current_wait_level_150) && _residue_150 <= _current_wait_level_150), true]
+  ensures acc(self.__container, 1 / 20)
+  ensures issubtype(typeof(self.__container), list(list_arg(typeof(self.__container), 0))) ==> acc(self.__container.list_acc, 1 / 20)
+  ensures issubtype(typeof(self.__container), dict(dict_arg(typeof(self.__container), 0), dict_arg(typeof(self.__container), 1))) ==> acc(self.__container.dict_acc, 1 / 20) && acc(self.__container.dict_acc2, 1 / 20)
+  ensures issubtype(typeof(self.__container), set(set_arg(typeof(self.__container), 0))) ==> acc(self.__container.set_acc, 1 / 20)
+
+method range___iter__(_cthread_148: Ref, _caller_measures_148: Seq[Measure$], _residue_148: Perm, self: Ref) returns (_current_wait_level_148: Perm, _res: Ref)
+  requires _cthread_148 != null
+  requires Measure$check(_caller_measures_148, _cthread_148, 1)
+  requires issubtype(typeof(_cthread_148), Thread_0())
+  requires issubtype(typeof(self), range())
+  requires [true, Measure$check(_caller_measures_148, _cthread_148, 1)]
+  ensures [(forperm _r_41: Ref [_r_41.MustReleaseBounded] :: Level(_r_41) <= _current_wait_level_148) && ((forperm _r_41: Ref [_r_41.MustReleaseUnbounded] :: Level(_r_41) <= _current_wait_level_148) && _residue_148 <= _current_wait_level_148), true]
+  ensures _res != self
+  ensures acc(_res.list_acc, 1 / 20)
+  ensures _res.list_acc == range___sil_seq__(self)
+  ensures acc(_res.__container, write) && _res.__container == self
+  ensures acc(_res.__iter_index, write) && _res.__iter_index == 0
+  ensures acc(_res.__previous, write) && _res.__previous == Seq[Ref]()

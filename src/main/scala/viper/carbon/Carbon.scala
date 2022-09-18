@@ -92,5 +92,81 @@ class CarbonConfig(args: Seq[String]) extends SilFrontendConfig(args, "Carbon") 
     noshort = true
   )
 
+  val staticInlining = opt[Int]("SI",
+    descr = "Static inlining up to a depth (default: disabled)",
+    default = None,
+    noshort = true
+  )
+
+  val maxInl = opt[Int]("maxInl",
+    descr = "Maximum number of method calls or loop iterations inlined (default: unlimited)",
+    default = None,
+    noshort = true
+  )
+
+  val entry = opt[String]("entry",
+    descr = "Entry point for static inlining (default: first method)",
+    default = None,
+    noshort = true
+  )
+
+  val verboseCallstack = opt[String]("verboseCallstack",
+    descr = "When printing the callstack during inlining, the method calls and loop iterations that are defined by the user will not" +
+      " be collapsed. User input \"()\" means none will be collapsed and user input \"(<\"L@\"<line of loop>>,<methodName>)\"" +
+      " means that only defined loops and methods will not be collapsed.  (default: disabeld)",
+    default = None,
+    noshort = true
+  )
+
+  val noCheckSC = opt[Boolean]("noCheckSC",
+    descr = "Check soundness condition for inlining (default: enabled)",
+    default = None,
+    noshort = true
+  )
+
+  val printSC = opt[Boolean]("printSC",
+    descr = "Print the code when checking mono and framing (default: disabled)",
+    default = None,
+    noshort = true
+  )
+
+  val closureSC = opt[Boolean]("closureSC",
+    descr = "Computes the soundness condition with closure for sequences of statements (default: disabled)",
+    default = None,
+    noshort = true
+  )
+
+  val pureFunctionsSC = opt[Boolean]("noFunPreSC",
+    descr = "Deactivates a feature that helps checking the consistency of function preconditions in the structural soundness check (default: feature activated)",
+    default = None,
+    noshort = true
+  )
+
+  val modularSC = opt[Boolean]("modularSC",
+    descr = "Uses a modular conservative approximation for the soundness condition (default: disabled)",
+    default = None,
+    noshort = true
+  )
+
+  /*
+  val simpleWFM = opt[Boolean]("simpleWFM",
+    descr = "Computes a simpler (bounded) WFM, but potentially unsound (default: disabled)",
+    default = None,
+    noshort = true
+  )
+   */
+
+  val noSyntacticCheck = opt[Boolean]("disableSyntacticSC",
+    descr = "Disable syntactic check to speed up checking soundness condition for inlining (default: enabled)",
+    default = None,
+    noshort = true
+  )
+
+  val ignoreAnnotations = opt[Boolean]("ignoreAnnotations",
+    descr = "Disable syntactic check to speed up checking soundness condition for inlining (default: enabled)",
+    default = None,
+    noshort = true
+  )
+
   verify()
 }

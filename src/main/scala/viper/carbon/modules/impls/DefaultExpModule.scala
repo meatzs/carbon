@@ -13,7 +13,7 @@ import viper.carbon.verifier.Verifier
 import viper.silver.verifier.{PartialVerificationError, reasons}
 import viper.carbon.boogie.Implicits._
 import viper.carbon.modules.components.DefinednessComponent
-import viper.silver.ast.{LocationAccess, MagicWand, PredicateAccess, Ref}
+import viper.silver.ast.{LocalVarAssign, LocationAccess, MagicWand, PredicateAccess, Ref}
 import viper.silver.ast.utility.Expressions
 
 /**
@@ -84,7 +84,8 @@ class DefaultExpModule(val verifier: Verifier) extends ExpModule with Definednes
         stateModule.replaceState(prevState)
         res
       case sil.LabelledOld(exp, oldLabel) =>
-        var findLabel = oldLabel
+        //var findLabel = oldLabel
+        var findLabel = if (oldLabel == "lhs") "lhs" else inliningModule.getLabel(oldLabel)
         if(findLabel.equals("lhs"))
           findLabel = findLabel+wandModule.getActiveLhs()
         val prevState = stateModule.state
@@ -431,7 +432,7 @@ class DefaultExpModule(val verifier: Verifier) extends ExpModule with Definednes
             stateModule.replaceState(prevState)
             res
           case sil.LabelledOld(_, oldLabel) =>
-            var findLabel = oldLabel
+            var findLabel = if (oldLabel == "lhs") "lhs" else inliningModule.getLabel(oldLabel)
             if(findLabel.equals("lhs"))
               findLabel = "lhs"+wandModule.getActiveLhs()
             val prevState = stateModule.state
