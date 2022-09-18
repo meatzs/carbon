@@ -487,18 +487,4 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
     } else Nil
   }
 
-
-  override def simplePartialCheckDefinednessBefore(e: sil.Exp, error: PartialVerificationError, makeChecks: Boolean): Stmt = {
-    if(makeChecks) {
-      e match {
-        case labelOld@sil.LabelledOld(_, labelName) =>
-          labelBooleanGuards.get(labelName) match {
-            case Some(labelGuardDecl) =>
-              Assert(labelGuardDecl.l, error.dueTo(reasons.LabelledStateNotReached(labelOld)))
-            case None => Nil
-          }
-        case _ => Nil
-      }
-    } else Nil
-  }
 }
