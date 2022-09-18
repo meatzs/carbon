@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon.modules
 
@@ -16,6 +16,11 @@ import viper.silver.ast.{LocationAccess, MagicWand}
  * the heap encoding.
  */
 trait HeapModule extends Module with CarbonStateComponent {
+
+  /**
+    * The type used for heaps
+    */
+  def heapType: Type
 
   /**
    * The type used for references.
@@ -172,4 +177,8 @@ trait HeapModule extends Module with CarbonStateComponent {
 
   // adds permission to field e to the secondary mask of the wand
   def addPermissionToWMask(wMask: Exp, e: sil.Exp): Stmt
+
+  // If expression evaluates to true then resultHeap is the sum of of heap1, where mask1 is defined,
+  // and heap2, where mask2 is defined.
+  def sumHeap(resultHeap: Exp, heap1: Exp, mask1: Exp, heap2: Exp, mask2: Exp): Exp
 }

@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon.modules.impls
 
@@ -109,7 +109,7 @@ DefaultWandModule(val verifier: Verifier) extends WandModule with StmtComponent 
   }
 
   override def preamble = wandToShapes.values.collect({
-    case fun@Func(name,args,typ) =>
+    case fun@Func(name,args,typ,_) =>
       val vars = args.map(decl => decl.l)
       val f0 = FuncApp(name,vars,typ)
       val f1 = FuncApp(heapModule.wandMaskIdentifier(name), vars, heapModule.predicateMaskFieldTypeOfWand(name.name)) // w#sm (wands secondary mask)
@@ -145,7 +145,7 @@ DefaultWandModule(val verifier: Verifier) extends WandModule with StmtComponent 
     val shape:WandShape = wandToShapes(wand.structure(mainModule.verifier.program))
 
     shape match {
-      case Func(name, _, typ) => FuncApp(name, arguments.map(arg => expModule.translateExp(arg)), typ)
+      case Func(name, _, typ,_) => FuncApp(name, arguments.map(arg => expModule.translateExp(arg)), typ)
     }
   }
 
@@ -160,7 +160,7 @@ DefaultWandModule(val verifier: Verifier) extends WandModule with StmtComponent 
     val shape:WandShape = wandToShapes(wand.structure(mainModule.verifier.program))
 
     shape match {
-      case Func(name, _, typ) =>
+      case Func(name, _, typ,_) =>
         if(ftsm == 0){
           FuncApp(heapModule.wandFtIdentifier(name), arguments.map(arg => expModule.translateExp(arg)), typ)
         }else if(ftsm == 1){
@@ -193,7 +193,7 @@ DefaultWandModule(val verifier: Verifier) extends WandModule with StmtComponent 
     UNIONState = OPS
     nestingDepth += 1
     val inhaleLeft = MaybeComment("Inhaling left hand side of current wand into hypothetical state",
-      exchangeAssumesWithBoolean(expModule.checkDefinednessOfSpecAndInhale(wand.left, mainError, hypState::Nil, true), hypState.boolVar))
+      exchangeAssumesWithBoolean(inhaleModule.inhaleWithDefinednessCheck(wand.left, mainError, hypState::Nil, true), hypState.boolVar))
 
     val defineLhsState = stmtModule.translateStmt(sil.Label("lhs"+lhsID, Nil)(wand.pos, wand.info), hypState::Nil, hypState.boolVar, true)
     activeWandsStack = activeWandsStack:+lhsID
@@ -216,7 +216,7 @@ DefaultWandModule(val verifier: Verifier) extends WandModule with StmtComponent 
             val oldOps = OPS
 
             currentWand = w
-            val addWand = inhaleModule.inhale(w, statesStack, inWand)
+            val addWand = inhaleModule.inhale(Seq((w, error)), addDefinednessChecks = false, statesStack, inWand)
 
             val currentState = stateModule.state
 
@@ -660,7 +660,7 @@ case class PackageSetup(hypState: StateRep, usedState: StateRep, initStmt: Stmt)
   }
 
 
-  override def start() {
+  override def start(): Unit = {
     stmtModule.register(this, before = Seq(verifier.heapModule,verifier.permModule, verifier.stmtModule)) // checks for field assignment should be made before the assignment itself
     expModule.register(this)
   }
@@ -692,7 +692,7 @@ case class PackageSetup(hypState: StateRep, usedState: StateRep, initStmt: Stmt)
       (if(inWand) exchangeAssumesWithBoolean(stateModule.assumeGoodState, OPS.boolVar) else stateModule.assumeGoodState) ++
       CommentBlock("check if LHS holds and remove permissions ", exhaleModule.exhale((w.left, error), false, insidePackageStmt = inWand, statesStackForPackageStmt = statesStack)) ++
       (if(inWand) exchangeAssumesWithBoolean(stateModule.assumeGoodState, OPS.boolVar) else stateModule.assumeGoodState) ++
-      CommentBlock("inhale the RHS of the wand",inhaleModule.inhale(w.right, statesStackForPackageStmt = statesStack, insidePackageStmt = inWand)) ++
+      CommentBlock("inhale the RHS of the wand",inhaleModule.inhale(Seq((w.right, error)), addDefinednessChecks = false, statesStackForPackageStmt = statesStack, insidePackageStmt = inWand)) ++
       heapModule.beginExhale ++ heapModule.endExhale ++
       (if(inWand) exchangeAssumesWithBoolean(stateModule.assumeGoodState, OPS.boolVar) else stateModule.assumeGoodState)
     //GP: using beginExhale, endExhale works now, but isn't intuitive, maybe should duplicate code to avoid this breaking
@@ -745,7 +745,7 @@ case class PackageSetup(hypState: StateRep, usedState: StateRep, initStmt: Stmt)
           Nil
         }
         (before _, after _)
-      case _ => (() => simplePartialCheckDefinedness(e, error, makeChecks), () => Nil)
+      case _ => (() => simplePartialCheckDefinednessBefore(e, error, makeChecks), () => simplePartialCheckDefinednessAfter(e, error, makeChecks))
     }
   }
 

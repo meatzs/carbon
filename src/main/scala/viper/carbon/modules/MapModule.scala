@@ -7,14 +7,13 @@
 package viper.carbon.modules
 
 import viper.silver.{ast => sil}
-import viper.carbon.boogie.{Type, Decl, Exp}
+import viper.carbon.boogie.{Type, Exp}
 
 /**
- * A module for translating Viper domains.
-
- */
-trait DomainModule extends Module {
-  def translateDomain(exp: sil.Domain): Seq[Decl]
-  def translateDomainFuncApp(fa: sil.DomainFuncApp): Exp
-  def translateDomainTyp(typ: sil.DomainType): Type
+  * A module for translating maps.
+  */
+trait MapModule extends Module {
+  def isUsed() : Boolean
+  def translateMapExp(exp : sil.Exp) : Exp
+  def translateMapType(mapType : sil.MapType) : Type
 }

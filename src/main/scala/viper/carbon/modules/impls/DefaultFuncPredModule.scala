@@ -2,29 +2,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon.modules.impls
 
-import viper.carbon.boogie.Bool
-import viper.carbon.boogie.CondExp
-import viper.carbon.boogie.Exp
-import viper.carbon.boogie.FalseLit
-import viper.carbon.boogie.Forall
-import viper.carbon.boogie.If
-import viper.carbon.boogie.Int
-import viper.carbon.boogie.IntLit
-import viper.carbon.boogie.LocalVar
-import viper.carbon.boogie.LocalVarDecl
-import viper.carbon.boogie.Stmt
-import viper.carbon.boogie.Trigger
-import viper.carbon.boogie.TypeVar
+import viper.carbon.boogie.{Bool, CondExp, Exp, FalseLit, Forall, If, Int, IntLit, LocalVar, LocalVarDecl, MaybeCommentBlock, Stmt, Trigger, TypeVar, _}
 import viper.carbon.modules._
 import viper.silver.ast.{FuncApp => silverFuncApp}
 import viper.silver.ast.utility.Expressions.{contains, whenExhaling, whenInhaling}
 import viper.silver.ast.{NoPerm, PermGtCmp, PredicateAccess, PredicateAccessPredicate, Unfolding}
 import viper.silver.{ast => sil}
-import viper.carbon.boogie._
 import viper.carbon.verifier.{Environment, Verifier}
 import viper.carbon.boogie.Implicits._
 import viper.silver.ast.utility._
@@ -172,7 +159,7 @@ with DefinednessComponent with ExhaleComponent with InhaleComponent {
       }, size = 1)
   }
 
-  override def start() {
+  override def start(): Unit = {
     expModule.register(this)
     inhaleModule.register(this, before = Seq(verifier.inhaleModule)) // this is because of inhaleExp definition, which tries to add extra information from executing the unfolding first
     exhaleModule.register(this, before = Seq(verifier.exhaleModule)) // this is because of exhaleExp definition, which tries to add extra information from executing the unfolding first
@@ -280,10 +267,9 @@ with DefinednessComponent with ExhaleComponent with InhaleComponent {
       val collectDefinedPredicates = (p: sil.Node) =>
         p.shallowCollect {
           case pacc: PredicateAccess => Some(predicateTrigger(heap map (_.l), pacc))
-          case quantified: sil.QuantifiedExp => None
+          case _: sil.QuantifiedExp => None
           //we might be able to support the Let case, but it's not clear if this is desired
-          case let: sil.Let => None
-          case forperm: sil.ForPerm => None
+          case _: sil.Let => None
         }
       (f.pres.flatMap(p => collectDefinedPredicates(p))).flatten
     } else {
@@ -336,7 +322,8 @@ with DefinednessComponent with ExhaleComponent with InhaleComponent {
 
           } else Some(FuncApp(Identifier(recf.name + limitedPostfix), recargs map (_.transform(transformer)), t))
 
-      case fa@Forall(vs,ts,e,tvs) => Some(Forall(vs,ts,e.transform(transformer),tvs)) // avoid recursing into the triggers of nested foralls (which will typically get translated via another call to this anyway)
+      case Forall(vs,ts,e,tvs) => Some(Forall(vs,ts,e.transform(transformer),tvs)) // avoid recursing into the triggers of nested foralls (which will typically get translated via another call to this anyway)
+      case Exists(vs,ts,e) => Some(Exists(vs,ts,e.transform(transformer))) // avoid recursing into the triggers of nested exists (which will typically get translated via another call to this anyway)
     }
   val res = exp transform transformer
     res
@@ -504,7 +491,7 @@ with DefinednessComponent with ExhaleComponent with InhaleComponent {
       case Nil => emptyFrame
       case pre +: Nil => computeFrameHelper(pre,renaming,functionName,args)
       case p +: ps => combineFrames(computeFrameHelper(p,renaming,functionName,args), computeFrame(ps,renaming,functionName,args)._1) // we don't need to return the list, since this is updated statefully
-    }, qpCondFuncs)
+    }, qpCondFuncs.toSeq)
   }
   private def combineFrames(a: Exp, b: Exp) = {
     if (a.equals(emptyFrame)) b else
@@ -623,16 +610,35 @@ with DefinednessComponent with ExhaleComponent with InhaleComponent {
     definednessChecks
   }
 
+  /** check that body of predicate is self-framing */
+  private def checkPredicateDefinedness(p: sil.Predicate) : Option[Procedure] = {
+    if(p.isAbstract) {
+      return None
+    }
+
+    val args = p.formalArgs map translateLocalVarDecl
+    val init : Stmt = MaybeCommentBlock("Initializing the state",
+      stateModule.initBoogieState ++ assumeAllFunctionDefinitions ++ (p.formalArgs map (a => allAssumptionsAboutValue(a.typ,mainModule.translateLocalVarDecl(a),true)))
+    )
+
+    val predicateBody = p.body.get
+    val procedureBody =
+      MaybeCommentBlock("Check definedness of predicate body of " + p.name, init ++ inhaleWithDefinednessCheck(predicateBody, errors.PredicateNotWellformed(p)))
+    val predicateCheck = Procedure(Identifier(p.name  + "#definedness"), args, Seq(), procedureBody)
+
+    Some(predicateCheck)
+  }
+
   private def checkFunctionPostconditionDefinedness(f: sil.Function): Stmt with Product with Serializable = {
     if (contains[sil.InhaleExhaleExp](f.posts)) {
       // Postcondition contains InhaleExhale expression.
       // Need to check inhale and exhale parts separately.
       val onlyInhalePosts: Seq[Stmt] = f.posts map (e => {
-        checkDefinednessOfSpecAndInhale(whenInhaling(e), errors.ContractNotWellformed(e))
+        inhaleWithDefinednessCheck(whenInhaling(e), errors.ContractNotWellformed(e))
       })
       val onlyExhalePosts: Seq[Stmt] = if (f.isAbstract) {
         f.posts map (e => {
-          checkDefinednessOfSpecAndInhale( // inhale since we are not checking, but want short-circuiting
+          inhaleWithDefinednessCheck( // inhale since we are not checking, but want short-circuiting
             whenExhaling(e),
             errors.ContractNotWellformed(e))
         })
@@ -665,7 +671,7 @@ with DefinednessComponent with ExhaleComponent with InhaleComponent {
       // Postcondition does not contain InhaleExhale expression.
       if (f.isAbstract) {
         val posts: Seq[Stmt] = f.posts map (e => {
-          checkDefinednessOfSpecAndInhale(e, errors.ContractNotWellformed(e)) // inhale since we are not checking, but want short-circuiting
+          inhaleWithDefinednessCheck(e, errors.ContractNotWellformed(e)) // inhale since we are not checking, but want short-circuiting
         })
         MaybeCommentBlock("Checking definedness of postcondition (no body)", posts)
       }
@@ -685,12 +691,12 @@ with DefinednessComponent with ExhaleComponent with InhaleComponent {
     if (contains[sil.InhaleExhaleExp](f.pres)) {
       // Precondition contains InhaleExhale expression.
       // Need to check inhale and exhale parts separately.
-      val onlyExhalePres: Seq[Stmt] = checkDefinednessOfExhaleSpecAndInhale(
+      val onlyExhalePres: Seq[Stmt] = inhaleExhaleSpecWithDefinednessCheck(
         f.pres,
         (e) => {
           errors.ContractNotWellformed(e)
         })
-      val onlyInhalePres: Seq[Stmt] = checkDefinednessOfInhaleSpecAndInhale(
+      val onlyInhalePres: Seq[Stmt] = inhaleInhaleSpecWithDefinednessCheck(
         f.pres,
         (e) => {
           errors.ContractNotWellformed(e)
@@ -703,7 +709,7 @@ with DefinednessComponent with ExhaleComponent with InhaleComponent {
       )
     }
     else {
-      val pres: Seq[Stmt] = checkDefinednessOfInhaleSpecAndInhale(
+      val pres: Seq[Stmt] = inhaleInhaleSpecWithDefinednessCheck(
         f.pres,
         (e) => {
           errors.ContractNotWellformed(e)
@@ -746,7 +752,7 @@ with DefinednessComponent with ExhaleComponent with InhaleComponent {
           })} else () => Nil
         )
       }
-      case _ => (() => simplePartialCheckDefinedness(e, error, makeChecks), () => Nil)
+      case _ => (() => simplePartialCheckDefinednessBefore(e, error, makeChecks), () => simplePartialCheckDefinednessAfter(e, error, makeChecks))
     }
   }
 
@@ -791,7 +797,9 @@ with DefinednessComponent with ExhaleComponent with InhaleComponent {
     val res = MaybeCommentedDecl(s"Translation of predicate ${p.name}",
       predicateGhostFieldDecl(p)) ++
     Axiom(Forall(heapModule.staticStateContributions(true, true) ++ translatedArgs, Seq(Trigger(trigger)), anystate)) ++
-      (if (p.isAbstract) Nil else translateCondAxioms("predicate "+p.name, p.formalArgs, framingFunctionsToDeclare))
+      (if (p.isAbstract) Nil else
+        translateCondAxioms("predicate "+p.name, p.formalArgs, framingFunctionsToDeclare))  ++
+      checkPredicateDefinedness(p)
 
     val usedNames = env.currentNameMapping
 
@@ -829,7 +837,7 @@ with DefinednessComponent with ExhaleComponent with InhaleComponent {
     foldInfo = acc
     val stmt = exhale(Seq((Permissions.multiplyExpByPerm(acc.loc.predicateBody(verifier.program, env.allDefinedNames(program)).get,acc.perm), error)), havocHeap = false,
       statesStackForPackageStmt = statesStackForPackageStmt, insidePackageStmt = insidePackageStmt) ++
-      inhale(acc, statesStackForPackageStmt, insidePackageStmt)
+      inhale(Seq((acc, error)), addDefinednessChecks = false, statesStackForPackageStmt, insidePackageStmt)
     val stmtLast =  Assume(predicateTrigger(heapModule.currentStateExps, acc.loc)) ++ {
       val location = acc.loc
       val predicate = verifier.program.findPredicate(location.predicateName)
@@ -874,7 +882,7 @@ with DefinednessComponent with ExhaleComponent with InhaleComponent {
       } ++
       (if(exhaleUnfoldedPredicate)
           exhale(Seq((acc, error)), havocHeap = false, statesStackForPackageStmt = statesStackForPackageStmt, insidePackageStmt = insidePackageStmt)
-      else Nil) ++ inhale(Permissions.multiplyExpByPerm(acc.loc.predicateBody(verifier.program, env.allDefinedNames(program)).get,acc.perm), statesStackForPackageStmt = statesStackForPackageStmt, insidePackageStmt = insidePackageStmt)
+      else Nil) ++ inhale(Seq((Permissions.multiplyExpByPerm(acc.loc.predicateBody(verifier.program, env.allDefinedNames(program)).get,acc.perm), error)), addDefinednessChecks = false, statesStackForPackageStmt = statesStackForPackageStmt, insidePackageStmt = insidePackageStmt)
     unfoldInfo = oldUnfoldInfo
     duringUnfold = oldDuringUnfold
     duringFold = oldDuringFold
@@ -907,9 +915,9 @@ with DefinednessComponent with ExhaleComponent with InhaleComponent {
           Nil
         }
 
-        (before, after)
+        (before _ , after _ )
       }
-      case pap@sil.PredicateAccessPredicate(loc@sil.PredicateAccess(args, predicateName), _) if duringUnfold && currentPhaseId == 0 =>
+      case pap@sil.PredicateAccessPredicate(loc@sil.PredicateAccess(args, predicateName), _) if duringUnfold =>
         val oldVersion = LocalVar(Identifier("oldVersion"), predicateVersionType)
         val newVersion = LocalVar(Identifier("newVersion"), predicateVersionType)
         val curVersion = translateExp(loc)
@@ -938,7 +946,7 @@ with DefinednessComponent with ExhaleComponent with InhaleComponent {
 
   var exhaleTmpStateId = -1
   var extraUnfolding = false
-  override def inhaleExp(e: sil.Exp): Stmt = {
+  override def inhaleExp(e: sil.Exp, error: PartialVerificationError): Stmt = {
     e match {
       case sil.Unfolding(acc, _) => if (duringUnfoldingExtraUnfold) Nil else // execute the unfolding, since this may gain information
       {
@@ -970,5 +978,30 @@ with DefinednessComponent with ExhaleComponent with InhaleComponent {
           res ++ (if (duringUnfold) insidePredicate(unfoldInfo, pap) else Nil))
       case _ => Nil
     }
+  }
+
+  def translateBackendFuncApp(fa: sil.BackendFuncApp): Exp = {
+    val funct = fa.backendFunc
+    // Do not use funcpred namespace, see translateSMTFunc.
+    val funcIdent = Identifier(funct.name)(silVarNamespace)
+    val res = FuncApp(funcIdent, fa.args map translateExp, translateType(fa.typ))
+    res.showReturnType = true
+    res
+  }
+
+  def translateBackendFunc(f: sil.BackendFunc): Seq[Decl] = {
+    // We do not use the funcpred namespace because based on the namespace, the funcpred module
+    // decides whether to stuff meant only for heap-dependent functions (like heights computation
+    // and limited functions).
+    val funcIdent=Identifier(f.name)(silVarNamespace)
+    env = Environment(verifier, f)
+    val t = translateType(f.typ)
+    val args = f.formalArgs map (x => LocalVarDecl(Identifier(x.name), translateType(x.typ)))
+    var attributes: Map[String, String] = Map()
+    attributes += "builtin" -> f.smtName
+    val func = Func(funcIdent, args, t, attributes)
+    val res = MaybeCommentedDecl(s"Translation of SMT function ${f.name}", func, size = 1)
+    env = null
+    res
   }
 }

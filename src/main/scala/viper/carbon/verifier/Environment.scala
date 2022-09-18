@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon.verifier
 
@@ -41,7 +41,12 @@ case class Environment(verifier: Verifier, member: sil.Node) {
       }
     case f@sil.DomainFunc(name, args, typ, unique) =>
       for (v <- args) {
-        define(v.localVar)
+        v match {
+          case n: sil.LocalVarDecl => define(n.localVar)
+          case u: sil.UnnamedLocalVarDecl => define(sil.LocalVar(uniqueName(f.name + "_param"), u.typ)(u.pos, u.info, u.errT))
+        }
+      //? for (v <- args if (v.isInstanceOf[sil.LocalVarDecl])) {
+      //?   define(v.asInstanceOf[sil.LocalVarDecl].localVar)
       }
     case _ =>
   }
@@ -86,7 +91,7 @@ case class Environment(verifier: Verifier, member: sil.Node) {
   def makeUniquelyNamed(decl: sil.LocalVarDecl) : sil.LocalVarDecl =
     if (isDefinedAt(decl.localVar)) new sil.LocalVarDecl(this.uniqueName(decl.localVar.name),decl.typ)(decl.pos, decl.info) else decl
 
-  def undefine(variable: sil.LocalVar) {
+  def undefine(variable: sil.LocalVar): Unit = {
     require(currentMapping.contains(variable))
     currentMapping.remove(variable)
   }
@@ -94,7 +99,7 @@ case class Environment(verifier: Verifier, member: sil.Node) {
   /**
    * Takes a string and tries to produce a similar string that is not already used.
    */
-  private def uniqueName(s: String): String = {
+  def uniqueName(s: String): String = {
     names.createUniqueIdentifier(s)
   }
 }

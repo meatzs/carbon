@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon
 
@@ -12,8 +12,10 @@ import viper.silver.ast.Program
 import viper.silver.utility.Paths
 import viper.silver.verifier._
 import verifier.{BoogieDependency, BoogieInterface, Verifier}
-import java.io.{BufferedOutputStream, File, FileOutputStream}
 
+import java.io.{BufferedOutputStream, File, FileOutputStream, IOException}
+import viper.silver.frontend.{MissingDependencyException, NativeModel, VariablesModel}
+import viper.silver.reporter.Reporter
 
 /**
  * The main class to perform verification of Viper programs.  Deals with command-line arguments, configuration
@@ -21,17 +23,16 @@ import java.io.{BufferedOutputStream, File, FileOutputStream}
  *
  * Debug information can either be set using the constructor argument or the setter.
  */
-case class CarbonVerifier(private var _debugInfo: Seq[(String, Any)] = Nil) extends Verifier with viper.silver.verifier.Verifier with BoogieInterface {
-
-  def this() = this(Nil)
+case class CarbonVerifier(override val reporter: Reporter,
+                          private var _debugInfo: Seq[(String, Any)] = Nil) extends Verifier with viper.silver.verifier.Verifier with BoogieInterface {
 
   var env = null
 
   private var _config: CarbonConfig = _
   def config = _config
 
-  def start() = {}
-  def stop() {
+  def start(): Unit = {}
+  def stop(): Unit = {
     if (allModules != null) {
       allModules foreach (m => {
         m.stop()
@@ -60,7 +61,9 @@ case class CarbonVerifier(private var _debugInfo: Seq[(String, Any)] = Nil) exte
   val domainModule = new DefaultDomainModule(this)
   val seqModule = new DefaultSeqModule(this)
   val setModule = new DefaultSetModule(this)
+  val mapModule = new DefaultMapModule(this)
   val wandModule = new DefaultWandModule(this)
+  val loopModule = new DefaultLoopModule(this)
 
   // initialize all modules
   allModules foreach (m => {
@@ -86,13 +89,20 @@ case class CarbonVerifier(private var _debugInfo: Seq[(String, Any)] = Nil) exte
     case None => z3Default
   } else z3Default
 
+  def assumeInjectivityOnInhale = if (config != null) config.assumeInjectivityOnInhale.toOption match {
+    case Some(b) => b
+    case None => false
+  }
+  else false
+
+
   def name: String = "carbon"
   def version: String = "1.0"
   def buildVersion = version
   def copyright: String = "(c) 2013 ETH Zurich"
 
   def getDebugInfo = _debugInfo
-  def debugInfo(info: Seq[(String, Any)]) {
+  def debugInfo(info: Seq[(String, Any)]): Unit = {
     _debugInfo = info
   }
 
@@ -103,7 +113,7 @@ case class CarbonVerifier(private var _debugInfo: Seq[(String, Any)] = Nil) exte
     }))
   }
 
-  def parseCommandLine(options: Seq[String]) {
+  def parseCommandLine(options: Seq[String]): Unit = {
     _config = new CarbonConfig(options)
   }
 
@@ -113,12 +123,18 @@ case class CarbonVerifier(private var _debugInfo: Seq[(String, Any)] = Nil) exte
     List(new BoogieDependency(boogiePath), new Dependency {
       def name = "Z3"
       def version = {
-        val v = List(z3Path, "-version").lineStream.to[List]
-        if (v.size == 1 && v(0).startsWith("Z3 version ")) {
-          v(0).substring("Z3 version ".size)
-        } else {
-          unknownVersion
+        try {
+          val v = List(z3Path, "-version").lazyLines.to(List)
+          if (v.size == 1 && v(0).startsWith("Z3 version ")) {
+            v(0).substring("Z3 version ".size)
+          } else {
+            unknownVersion
+          }
         }
+        catch {
+          case _: IOException => throw MissingDependencyException("Z3 couldn't be found.")
+        }
+
       }
       def location = z3Path
     })
@@ -129,18 +145,16 @@ case class CarbonVerifier(private var _debugInfo: Seq[(String, Any)] = Nil) exte
 
     // reset all modules
     allModules map (m => m.reset())
-    heapModule.enableAllocationEncoding = config == null || !config.disableAllocEncoding.supplied // NOTE: config == null happens on the build server / via sbt test
+    heapModule.enableAllocationEncoding = config == null || !config.disableAllocEncoding.isSupplied // NOTE: config == null happens on the build server / via sbt test
 
     var transformNames = false
     if (config == null) Seq() else config.counterexample.toOption match {
-      case Some("native") =>
-      case Some("variables") => {
-        transformNames = true
-      }
+      case Some(NativeModel) =>
+      case Some(VariablesModel) => transformNames = true
       case None =>
       case Some(v) => sys.error("Invalid option: " + v)
     }
-    val (tProg, translatedNames) = mainModule.translate(program)
+    val (tProg, translatedNames) = mainModule.translate(program, reporter)
     _translated = tProg
 
 
@@ -209,7 +223,7 @@ case class CarbonVerifier(private var _debugInfo: Seq[(String, Any)] = Nil) exte
 
   private var _program: Program = null
   def program = _program
-  def program_=(p : Program) {
+  def program_=(p : Program): Unit = {
     _program = p
   }
 

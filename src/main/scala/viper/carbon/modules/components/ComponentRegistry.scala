@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon.modules.components
 
@@ -32,7 +32,7 @@ trait ComponentRegistry[C <: Component] {
 
   /** Register a new component. */
   /* If C should be before c then c goes in the "before" sequence. If C should be after c, then c goes in the "after" sequence. Note that this used to be the other way around. */
-  def register(component: C, before: Seq[Component] = Nil, after: Seq[Component] = Nil) {
+  def register(component: C, before: Seq[Component] = Nil, after: Seq[Component] = Nil): Unit = {
     _components = _components :+ component
     beforePairs.add(component,component)
     for(c <- before) beforePairs.add((component,c))

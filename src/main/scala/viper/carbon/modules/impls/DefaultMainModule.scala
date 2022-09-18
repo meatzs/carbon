@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon.modules.impls
 
@@ -18,10 +18,11 @@ import viper.carbon.boogie.CommentedDecl
 import viper.carbon.boogie.Procedure
 import viper.carbon.boogie.Program
 import viper.carbon.verifier.Environment
-import viper.silver.verifier.errors
+import viper.silver.verifier.{TypecheckerWarning, errors}
 import viper.carbon.verifier.Verifier
 import viper.silver.ast.HasLineColumn
 import viper.silver.ast.utility.rewriter.Traverse
+import viper.silver.reporter.{Reporter, WarningsDuringTypechecking}
 
 import scala.collection.mutable
 
@@ -50,7 +51,7 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
     LocalVarDecl(name, t)
   }
 
-  override def translate(p: sil.Program): (Program, Map[String, Map[String, String]]) = {
+  override def translate(p: sil.Program, reporter: Reporter): (Program, Map[String, Map[String, String]]) = {
 
     def replaceInhExhWithTrue(e: sil.Exp) : sil.Exp = {
       e.transform(
@@ -63,35 +64,52 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
     def replaceInhExhWithTrueSeq(es: Seq[sil.Exp]) : Seq[sil.Exp] =
       es.map(replaceInhExhWithTrue).filter(e => !e.equals(sil.TrueLit()()))
 
-      val progTriggersWithoutInhExhSpec =
-        p.transform(
-          {
-            case f: sil.Forall => f.autoTrigger
-            case e: sil.Exists => e.autoTrigger
-            case m: sil.Method =>
-              /**
-                * For all potentially inlined methods except the entry method:
-                * Replace inhale-exhale assertions in specifications with "true", since taking them into account
-                * for inlining does not work in the standard approach.
-                * Specifications for abstract methods are left unchanged (since they cannot be inlined).
-                * Once this has been done, we "maximize" the sequences
-                */
-              if (staticInlining.isDefined && !ignoreAnnotations && m.body.isDefined && entry.fold(true)(entryName => !m.name.equals(entryName))) {
-                m.copy(
-                  pres = replaceInhExhWithTrueSeq(m.pres),
-                  posts = replaceInhExhWithTrueSeq(m.posts)
-                )(m.pos, m.info, m.errT)
-              } else {
-                m
-              }
-            case w: sil.While =>
-              if(staticInlining.isDefined && !ignoreAnnotations) {
-                w.copy(invs = replaceInhExhWithTrueSeq(w.invs))(w.pos, w.info, w.errT)
-              } else {
-                w
-              }
-          },
-          Traverse.TopDown)
+    val progTriggersWithoutInhExhSpec =
+      p.transform(
+        {
+          case f: sil.Forall => {
+            val res = f.autoTrigger
+            if (res.triggers.isEmpty) {
+              reporter.report(WarningsDuringTypechecking(Seq(TypecheckerWarning("No triggers provided or inferred for quantifier.", res.pos))))
+            }
+            res
+          }
+          case e: sil.Exists => {
+            val res = e.autoTrigger
+            if (res.triggers.isEmpty) {
+              reporter.report(WarningsDuringTypechecking(Seq(TypecheckerWarning("No triggers provided or inferred for quantifier.", res.pos))))
+            }
+            res
+          }
+          case m: sil.Method =>
+            /**
+              * For all potentially inlined methods except the entry method:
+              * Replace inhale-exhale assertions in specifications with "true", since taking them into account
+              * for inlining does not work in the standard approach.
+              * Specifications for abstract methods are left unchanged (since they cannot be inlined).
+              * Once this has been done, we "maximize" the sequences
+              */
+            if (staticInlining.isDefined && !ignoreAnnotations && m.body.isDefined && entry.fold(true)(entryName => !m.name.equals(entryName))) {
+              m.copy(
+                pres = replaceInhExhWithTrueSeq(m.pres),
+                posts = replaceInhExhWithTrueSeq(m.posts)
+              )(m.pos, m.info, m.errT)
+            } else {
+              m
+            }
+          case w: sil.While =>
+            if(staticInlining.isDefined && !ignoreAnnotations) {
+              w.copy(invs = replaceInhExhWithTrueSeq(w.invs))(w.pos, w.info, w.errT)
+            } else {
+              w
+            }
+        },
+        Traverse.TopDown)
+
+    val backendFuncs = new mutable.HashSet[sil.BackendFunc]()
+    p.visit {
+      case sf: sil.BackendFuncApp => backendFuncs.add(sf.backendFunc)
+    }
 
     /* we replace the program already here even though we may replace it again later, since the annotation refers to the
      * program via the verifier
@@ -173,7 +191,8 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
           translateFields ++
           (functions flatMap (f => translateFunction(f, nameMaps.get(f.name)))) ++
           (predicates flatMap (p => translatePredicate(p, nameMaps.get(p.name)))) ++
-          (methods flatMap (m => translateMethodDecl(m, nameMaps.get(m.name))))
+          (methods flatMap (m => translateMethodDecl(m, nameMaps.get(m.name)))) ++
+          (backendFuncs flatMap translateBackendFunc)
 
         // get the preambles (only at the end, even if we add it at the beginning)
         val preambles = verifier.allModules flatMap {
@@ -205,22 +224,24 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
   }
 
   def translateMethodDecl(m: sil.Method, names: Option[mutable.Map[String, String]]): Seq[Decl] = {
-    env = Environment(verifier, m)
-    ErrorMemberMapping.currentMember = m
-        val res = m match {
+    val mWithLoopInfo = loopModule.initializeMethod(m)
+
+    env = Environment(verifier, mWithLoopInfo)
+    ErrorMemberMapping.currentMember = mWithLoopInfo
+        val res = mWithLoopInfo match {
           case method @ sil.Method(name, formalArgs, formalReturns, pres, posts, _) =>
             val initOldStateComment = "Initializing of old state"
             val ins: Seq[LocalVarDecl] = formalArgs map translateLocalVarDecl
             val outs: Seq[LocalVarDecl] = formalReturns map translateLocalVarDecl
-            val init = MaybeCommentBlock("Initializing the state", stateModule.initBoogieState ++ assumeAllFunctionDefinitions)
+            val init = MaybeCommentBlock("Initializing the state", stateModule.initBoogieState ++ assumeAllFunctionDefinitions ++ stmtModule.initStmt(method.bodyOrAssumeFalse))
             val initOld = MaybeCommentBlock("Initializing the old state", stateModule.initOldState)
-            val paramAssumptions = m.formalArgs map (a => allAssumptionsAboutValue(a.typ, translateLocalVarDecl(a), true))
+            val paramAssumptions = mWithLoopInfo.formalArgs map (a => allAssumptionsAboutValue(a.typ, translateLocalVarDecl(a), true))
             val inhalePre = translateMethodDeclPre(pres)
             val checkPost: Stmt = if (posts.nonEmpty) {
               translateMethodDeclCheckPosts(posts)
             }
             else Nil
-            val postsWithErrors = posts map (p => (p, errors.PostconditionViolated(p, m)))
+            val postsWithErrors = posts map (p => (p, errors.PostconditionViolated(p, mWithLoopInfo)))
             val exhalePost = MaybeCommentBlock("Exhaling postcondition", exhale(postsWithErrors))
             val body: Stmt = translateStmt(method.bodyOrAssumeFalse)
               /* TODO: Might be worth special-casing on methods with empty bodies */
@@ -250,7 +271,7 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
     val reset = stateModule.resetBoogieState
 
     /** note that the order here matters - onlyExhalePosts should be computed with respect to the reset state */
-    val onlyExhalePosts: Seq[Stmt] = checkDefinednessOfExhaleSpecAndInhale(
+    val onlyExhalePosts: Seq[Stmt] = inhaleModule.inhaleExhaleSpecWithDefinednessCheck(
     posts, {
       errors.ContractNotWellformed(_)
     })
@@ -261,7 +282,7 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
        * Postcondition contains InhaleExhale expression.
        * Need to check inhale and exhale parts separately.
        */
-      val onlyInhalePosts: Seq[Stmt] = checkDefinednessOfInhaleSpecAndInhale(
+      val onlyInhalePosts: Seq[Stmt] = inhaleModule.inhaleInhaleSpecWithDefinednessCheck(
       posts, {
         errors.ContractNotWellformed(_)
       })
@@ -292,11 +313,11 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
     val res = if (Expressions.contains[sil.InhaleExhaleExp](pres)) {
       // Precondition contains InhaleExhale expression.
       // Need to check inhale and exhale parts separately.
-      val onlyExhalePres: Seq[Stmt] = checkDefinednessOfExhaleSpecAndInhale(
+      val onlyExhalePres: Seq[Stmt] = inhaleModule.inhaleExhaleSpecWithDefinednessCheck(
       pres, {
         errors.ContractNotWellformed(_)
       })
-      val onlyInhalePres: Seq[Stmt] = checkDefinednessOfInhaleSpecAndInhale(
+      val onlyInhalePres: Seq[Stmt] = inhaleModule.inhaleInhaleSpecWithDefinednessCheck(
       pres, {
         errors.ContractNotWellformed(_)
       })
@@ -308,7 +329,7 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
       )
     }
     else {
-      val inhalePres: Seq[Stmt] = checkDefinednessOfInhaleSpecAndInhale(
+      val inhalePres: Seq[Stmt] = inhaleModule.inhaleInhaleSpecWithDefinednessCheck(
       pres, {
         errors.ContractNotWellformed(_)
       })

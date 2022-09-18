@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon.boogie
 
@@ -15,9 +15,11 @@ class BoogieNameGenerator extends DefaultNameGenerator {
   def otherCharacter = s"[0-9$otherChars]".r
   def separator = "_"
   def reservedNames = allReservedNames
-  val boogieReservedNames: Set[String] = Set("div", "mod", "const", "procedure", "type", "function", "lambda", "uniqu", "complete", "if", "else", "free",
+  val boogieReservedNames: Set[String] = Set("div", "mod", "const", "procedure", "type", "function", "lambda", "unique", "complete", "if", "then", "else", "while", "free",
     "invariant", "goto", "break", "return", "call", "forall", "assert", "havoc", "assume", "returns", "var", "implementation",
-    "axiom", "exists", "old", "false", "real", "int", "true", "bool", "finite", "ensures", "requires", "where", "par") ++
+    "axiom", "exists", "old", "false", "real", "int", "true", "bool", "finite", "ensures", "requires", "modifies", "where", "par", "lambda",
+    "uses", "RTP", "RTZ", "yield", "async", "roundNearestTiesToAway", "roundNearestTiesToEven", "extends", "roundTowardPositive",
+    "roundTowardZero", "RNA", "RTN", "roundTowardNegative", "RNE") ++
     Set("Set", "MultiSet", "Seq")
   val SMTreservedNames: Set[String] = Set(
     // Basic symbols:

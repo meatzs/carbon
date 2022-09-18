@@ -2,26 +2,26 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon.modules.impls
 
 import viper.carbon.modules.{StatelessComponent, StmtModule}
-import viper.carbon.modules.components.SimpleStmtComponent
+import viper.carbon.modules.components.{DefinednessComponent, SimpleStmtComponent}
 import viper.silver.ast.utility.Expressions.{whenExhaling, whenInhaling}
 import viper.silver.{ast => sil}
 import viper.carbon.boogie.{Havoc, MaybeComment, _}
 import viper.carbon.verifier.Verifier
 import Implicits._
 import viper.silver.ast.{HasLineColumn, NoPosition}
-import viper.silver.verifier.{PartialVerificationError, errors}
+import viper.silver.verifier.{PartialVerificationError, errors, reasons}
 import viper.silver.ast.utility.Expressions
 
 
 /**
  * The default implementation of a [[viper.carbon.modules.StmtModule]].
  */
-class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleStmtComponent with StatelessComponent {
+class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleStmtComponent with StatelessComponent with DefinednessComponent {
 
   import verifier._
   import expModule._
@@ -31,7 +31,7 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
   import funcPredModule._
   import wandModule._
 
-  override def start() {
+  override def start(): Unit = {
     // this is the main translation, so it should come at the "beginning"; it defines the innermost code used in the translation; other modules can wrap this with their own code
     register(this, before = Seq(verifier.heapModule,verifier.permModule))
     // NOTE: this builds up the translation inside-out, so the *first* component defines the innermost code.
@@ -40,14 +40,38 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
     // For Field assignments: Heap module (which goes last) adds the translation of the actual operation as a postfix the other code (which checks well-definedness)
     // For MethodCall: assumptions about return values are added by the HeapModule as a postfix to the main translation in StmtModule
     // For New: the operation translation (HeapModule) is added as a prefix to the code adding permissions (PermModule)
+    expModule.register(this)
   }
 
-  val lblNamespace = verifier.freshNamespace("stmt.lbl")
+  private val lblNamespace = verifier.freshNamespace("stmt.lbl")
+  var lblVarsNamespace = verifier.freshNamespace("var.lbl")
+  override def labelNamespace = lblNamespace
 
   def name = "Statement module"
 
   /**
-   * Takes a list of assertions, and executes all of the unfolding expressions inside. In particular, this means that the correct
+    * For each label we track a boolean that indicates whether the label has been defined in the trace
+    */
+  var labelBooleanGuards : collection.mutable.Map[String, LocalVarDecl] = new collection.mutable.HashMap[String, LocalVarDecl]()
+
+  override def initStmt(methodBody: sil.Stmt): Stmt = {
+    labelBooleanGuards = new collection.mutable.HashMap[String, LocalVarDecl]()
+
+    //create a boolean variable declaration for each label
+    methodBody.visit(
+      n => n match {
+        case sil.Label(name,_) =>
+          labelBooleanGuards.put(name, LocalVarDecl(Identifier(name+"_lblGuard")(lblVarsNamespace), Bool))
+      }
+    )
+
+    for (boolDecls <- labelBooleanGuards.values.toList) yield {
+      boolDecls.l := FalseLit()
+    }
+  }
+
+  /**
+    * Takes a list of assertions, and executes all of the unfolding expressions inside. In particular, this means that the correct
    * predicate definitions get assumed, under the correct conditionals. Most checking of definedness is disabled (by the "false"
    * parameter to checkDefinedness), however, note that checking that the predicates themselves are held when unfolding is still
    * performed, because the code for that is an exhale. Because of this, it may be necessary to make sure that this operation is
@@ -87,15 +111,19 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
       simpleHandleStmtInlining(stmt, statesStack, allStateAssms, insidePackageStmt)
     }
     else {
+      if(loopModule.isLoopDummyStmt(stmt)) {
+        //statement was just added for loop information purposes (only loopModule cares about it)
+        return Nil
+      }
+
       stmt match {
         case assign@sil.LocalVarAssign(lhs, rhs) =>
           checkDefinedness(lhs, errors.AssignmentFailed(assign), insidePackageStmt = insidePackageStmt) ++
-            checkDefinedness(rhs, errors.AssignmentFailed(assign), insidePackageStmt = insidePackageStmt) ++ {
-            if (insidePackageStmt)
-              Assign(translateExpInWand(lhs), translateExpInWand(rhs))
-            else
-              Assign(translateExp(lhs), translateExp(rhs))
-          }
+            checkDefinedness(rhs, errors.AssignmentFailed(assign), insidePackageStmt = insidePackageStmt) ++
+          {if(insidePackageStmt)
+            Assign(translateExpInWand(lhs), translateExpInWand(rhs))
+          else
+            Assign(translateExp(lhs), translateExp(rhs))}
         case assign@sil.FieldAssign(lhs, rhs) =>
           checkDefinedness(lhs.rcv, errors.AssignmentFailed(assign)) ++
             checkDefinedness(rhs, errors.AssignmentFailed(assign))
@@ -103,11 +131,11 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
         case unfold@sil.Unfold(e) =>
           translateUnfold(unfold, statesStack, insidePackageStmt)
         case inh@sil.Inhale(e) =>
-          checkDefinednessOfSpecAndInhale(whenInhaling(e), errors.InhaleFailed(inh), statesStack, insidePackageStmt)
+          inhaleWithDefinednessCheck(whenInhaling(e), errors.InhaleFailed(inh), statesStack, insidePackageStmt)
         case exh@sil.Exhale(e) =>
           val transformedExp = whenExhaling(e)
-          checkDefinedness(transformedExp, errors.ExhaleFailed(exh), insidePackageStmt = insidePackageStmt, ignoreIfInWand = true) ++
-            exhale((transformedExp, errors.ExhaleFailed(exh)), statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt)
+          checkDefinedness(transformedExp, errors.ExhaleFailed(exh), insidePackageStmt = insidePackageStmt, ignoreIfInWand = true)++
+          exhale((transformedExp, errors.ExhaleFailed(exh)), statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt)
         case a@sil.Assert(e) =>
           val transformedExp = whenExhaling(e)
           if (transformedExp.isPure) {
@@ -117,9 +145,9 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
           } else {
             // we create a temporary state to ignore the side-effects
             val (backup, snapshot) = freshTempState("Assert")
-            val exhaleStmt = exhale((transformedExp, errors.AssertFailed(a)), isAssert = true, statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt, havocHeap = false)
+            val exhaleStmt = exhale((transformedExp, errors.AssertFailed(a)), isAssert =  true, statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt, havocHeap = false)
             replaceState(snapshot)
-            checkDefinedness(transformedExp, errors.AssertFailed(a), insidePackageStmt = insidePackageStmt, ignoreIfInWand = true) :: backup :: exhaleStmt :: Nil
+              checkDefinedness(transformedExp, errors.AssertFailed(a), insidePackageStmt = insidePackageStmt, ignoreIfInWand = true) :: backup :: exhaleStmt :: Nil
           }
         case mc@sil.MethodCall(methodName, args, targets) =>
           val method = verifier.program.findMethod(methodName)
@@ -167,64 +195,35 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
             MaybeCommentBlock("Exhaling precondition", executeUnfoldings(pres, (pre => errors.PreconditionInCallFalse(mc).withReasonNodeTransformed(renamingArguments))) ++
               exhale(pres map (e => (e, errors.PreconditionInCallFalse(mc).withReasonNodeTransformed(renamingArguments))), statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt)) ++ {
             stateModule.replaceOldState(preCallState)
-            val res = MaybeCommentBlock("Inhaling postcondition", inhale(posts, statesStack, insidePackageStmt) ++
-              executeUnfoldings(posts, (post => errors.Internal(post).withReasonNodeTransformed(renamingArguments))))
+            val res = MaybeCommentBlock("Inhaling postcondition",
+              inhale(posts map (e => (e, errors.CallFailed(mc).withReasonNodeTransformed(renamingArguments))), addDefinednessChecks = false, statesStack, insidePackageStmt) ++
+                executeUnfoldings(posts, (post => errors.Internal(post).withReasonNodeTransformed(renamingArguments))))
             stateModule.replaceOldState(oldState)
             toUndefine map mainModule.env.undefine
             res
           }
           res
-        case w@sil.While(cond, invs, body) =>
-          val guard = translateExp(cond)
-          MaybeCommentBlock("Exhale loop invariant before loop",
-            executeUnfoldings(w.invs, (inv => errors.LoopInvariantNotEstablished(inv))) ++ exhale(w.invs map (e => (e, errors.LoopInvariantNotEstablished(e))))
-          ) ++ {
-            val writtenVars = w.writtenVars diff (body.transitiveScopedDecls.collect { case l: sil.LocalVarDecl => l } map (_.localVar))
-            MaybeCommentBlock("Havoc loop written variables (except locals)",
-              Havoc((writtenVars map translateExp).asInstanceOf[Seq[Var]]) ++
-                (writtenVars map (v => mainModule.allAssumptionsAboutValue(v.typ, mainModule.translateLocalVarSig(v.typ, v), false)))
-            )
-          } ++
-            MaybeCommentBlock("Check definedness of invariant", NondetIf(
-              (invs map (inv => checkDefinednessOfSpecAndInhale(inv, errors.ContractNotWellformed(inv)))) ++
-                Assume(FalseLit())
-            )) ++
-            MaybeCommentBlock("Check the loop body", NondetIf({
-              val (freshStateStmt, prevState) = stateModule.freshTempState("loop")
-              val stmts = MaybeComment("Reset state", freshStateStmt ++ stateModule.initBoogieState) ++
-                MaybeComment("Inhale invariant", inhale(w.invs) ++ executeUnfoldings(w.invs, (inv => errors.Internal(inv)))) ++
-                Comment("Check and assume guard") ++
-                checkDefinedness(cond, errors.WhileFailed(w.cond)) ++
-                Assume(guard) ++ stateModule.assumeGoodState ++
-                MaybeCommentBlock("Translate loop body", translateStmt(body)) ++
-                MaybeComment("Exhale invariant", executeUnfoldings(w.invs, (inv => errors.LoopInvariantNotPreserved(inv))) ++ exhale(w.invs map (e => (e, errors.LoopInvariantNotPreserved(e))))) ++
-                MaybeComment("Terminate execution", Assume(FalseLit()))
-              stateModule.replaceState(prevState)
-              stmts
-            }
-            )) ++
-            MaybeCommentBlock("Inhale loop invariant after loop, and assume guard",
-              Assume(guard.not) ++ stateModule.assumeGoodState ++
-                inhale(w.invs) ++ executeUnfoldings(w.invs, (inv => errors.Internal(inv)))
-            )
+        case sil.While(_, _, _) =>
+          //handled by LoopModule
+          Nil
         case i@sil.If(cond, thn, els) =>
           checkDefinedness(cond, errors.IfFailed(cond), insidePackageStmt = insidePackageStmt) ++
           If((allStateAssms) ==> translateExpInWand(cond),
             translateStmt(thn, statesStack, allStateAssms, insidePackageStmt),
             translateStmt(els, statesStack, allStateAssms, insidePackageStmt))
-        case sil.Label(old_name, invs) => {
-          val name = inliningModule.updateLabel(old_name)
-          // FIXME: Maybe only do this if inlining is active?
-          val (stmt, currentState) = stateModule.freshTempState("Label" + name)
-          stateModule.stateRepositoryPut(name, stateModule.state)
-          stateModule.replaceState(currentState)
-          stmt ++ Label(Lbl(Identifier(name)(lblNamespace)))
+        case sil.Label(name, _) => {
+          val labelState = LabelHelper.getLabelState[stateModule.StateSnapshot](
+            name,
+            stateModule.freshTempStateKeepCurrent,
+            stateModule.stateRepositoryGet, stateModule.stateRepositoryPut)
+          //first label, then init statement: otherwise gotos to this label will skip the initialization
+          Label(Lbl(Identifier(name)(lblNamespace))) ++
+            stateModule.initToCurrentStmt(labelState) ++
+            labelBooleanGuards.get(name).fold[Stmt](Nil)(labelGuardDecl => Seq(labelGuardDecl.l := TrueLit()))  //label is defined
         }
-        case sil.Goto(target) =>
-          // We actually need to use the last goto we saw, and it can have been renamed
-          // FIXME: Maybe only do this if inlining is active?
-          val name = inliningModule.getLabel(target)
-          Goto(Lbl(Identifier(name)(lblNamespace)))
+        case sil.Goto(_) =>
+          /* Handled by loop module, since the loop module decides whether the goto should be translated as a goto. */
+          Nil
         case pa@sil.Package(wand, proof) => {
           checkDefinedness(wand, errors.MagicWandNotWellformed(wand), insidePackageStmt = insidePackageStmt)
           translatePackage(pa, errors.PackageFailed(pa), statesStack, allStateAssms, insidePackageStmt)
@@ -232,7 +231,7 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
         case a@sil.Apply(wand) =>
           translateApply(a, errors.ApplyFailed(a), statesStack, allStateAssms, insidePackageStmt)
         case _ =>
-          Nil
+            Nil
       }
     }
   }
@@ -268,7 +267,7 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
         case unfold@sil.Unfold(e) =>
           translateUnfold(unfold, statesStack, insidePackageStmt)
         case inh@sil.Inhale(e) =>
-          checkDefinednessOfSpecAndInhale(whenInhaling(e), errors.InhaleFailed(inh), statesStack, insidePackageStmt)
+          inhaleWithDefinednessCheck(whenInhaling(e), errors.InhaleFailed(inh), statesStack, insidePackageStmt)
         case exh@sil.Exhale(e) =>
           val transformedExp = whenExhaling(e)
           checkDefinedness(transformedExp, errors.ExhaleFailed(exh), insidePackageStmt = insidePackageStmt, ignoreIfInWand = true) ++
@@ -336,8 +335,9 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
               MaybeCommentBlock("Exhaling precondition", executeUnfoldings(pres, (pre => errors.PreconditionInCallFalse(mc).withReasonNodeTransformed(renamingArguments))) ++
                 exhale(pres map (e => (e, errors.PreconditionInCallFalse(mc).withReasonNodeTransformed(renamingArguments))), statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt)) ++ {
               stateModule.replaceOldState(preCallState)
-              val res = MaybeCommentBlock("Inhaling postcondition", inhale(posts, statesStack, insidePackageStmt) ++
-                executeUnfoldings(posts, (post => errors.Internal(post).withReasonNodeTransformed(renamingArguments))))
+              val res = MaybeCommentBlock("Inhaling postcondition",
+                inhale(posts map (e => (e, errors.CallFailed(mc).withReasonNodeTransformed(renamingArguments))), addDefinednessChecks = false, statesStack, insidePackageStmt) ++
+                  executeUnfoldings(posts, (post => errors.Internal(post).withReasonNodeTransformed(renamingArguments))))
               stateModule.replaceOldState(oldState)
               toUndefine map mainModule.env.undefine
               res
@@ -412,10 +412,11 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
       if (duringPackage) {
         wandModule.translatingStmtsInWandInit()
       }
+
       var comment = "Translating statement: " + stmt.toString.replace("\n", "\n  // ")
       stmt match {
         case sil.Seqn(old_ss, scopedDecls) =>
-          var locals = scopedDecls.collect { case l: sil.LocalVarDecl => l }
+          var locals = scopedDecls.collect {case l: sil.LocalVarDecl => l}
           val ss = {
             if (inliningModule.isCheckingFraming() || verifier.staticInlining.isEmpty || inliningModule.alreadyGroupedInlinableStmts(old_ss)) {
               old_ss
@@ -429,7 +430,7 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
           locals map (v => mainModule.env.define(v.localVar)) // add local variables to environment
           val s =
             MaybeCommentBlock("Assumptions about local variables", locals map (a => mainModule.allAssumptionsAboutValue(a.typ, mainModule.translateLocalVarDecl(a), true))) ++
-              Seqn(ss map (st => translateStmt(st, statesStack, allStateAssms, duringPackage)))
+            Seqn(ss map (st => translateStmt(st, statesStack, allStateAssms, duringPackage)))
           locals map (v => mainModule.env.undefine(v.localVar)) // remove local variables from environment
           // return to avoid adding a comment, and to avoid the extra 'assumeGoodState'
           return s
@@ -453,22 +454,36 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
       for (c <- components) { // NOTE: this builds up the translation inside-out, so the *first* component defines the innermost code.
         //      val (before, after) = c.handleStmt(stmt, statesStack, allStateAssms, inWand)
         //      stmts = before ++ stmts ++ after
-        val stmtCopy = stmt.shallowClone()
-        val f = c.handleStmt(stmtCopy, statesStack, allStateAssms, duringPackage)
+        val f = c.handleStmt(stmt, statesStack, allStateAssms, duringPackage)
         stmts = f(stmts)
       }
-      if (stmts.children.size == 0) {
+      if (stmts.children.size == 0 && !loopModule.isLoopDummyStmt(stmt)) {
         assert(assertion = false, "Translation of " + stmt + " is not defined")
       }
       val translation = stmts ::
-        (if (duringPackage) {
+        (if(duringPackage){
           exchangeAssumesWithBoolean(assumeGoodState, statesStack.head.asInstanceOf[StateRep].boolVar)
-        } else {
+        }else{
           assumeGoodState
         }) ::
         Nil
 
       CommentBlock(comment + s" -- ${stmt.pos}", translation)
     }
+  }
+
+
+  override def simplePartialCheckDefinednessBefore(e: sil.Exp, error: PartialVerificationError, makeChecks: Boolean): Stmt = {
+    if(makeChecks) {
+      e match {
+        case labelOld@sil.LabelledOld(_, labelName) =>
+          labelBooleanGuards.get(labelName) match {
+            case Some(labelGuardDecl) =>
+              Assert(labelGuardDecl.l, error.dueTo(reasons.LabelledStateNotReached(labelOld)))
+            case None => Nil
+          }
+        case _ => Nil
+      }
+    } else Nil
   }
 }

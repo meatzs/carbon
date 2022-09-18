@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon.modules
 
@@ -89,6 +89,17 @@ trait StateModule extends Module with ComponentRegistry[CarbonStateComponent] wi
   def freshTempState(name: String, discardCurrent: Boolean = false, initialise: Boolean = false): (Stmt, StateSnapshot)
 
   /**
+    * Returns a fresh state that is not an old state. This method has no side-effects on the current state.
+    */
+  def freshTempStateKeepCurrent(name: String) : StateSnapshot
+
+  /**
+    * Returns the statement that initializes the input state to the current state. This method has no side-effects on
+    * the current state.
+    */
+  def initToCurrentStmt(snapshot: StateSnapshot) : Stmt
+
+  /**
    * Create a state without any information and return a snapshot of the created state.
    * if init is true then the Stmt returned will contain the initialization according to the state
    * components
@@ -101,7 +112,7 @@ trait StateModule extends Module with ComponentRegistry[CarbonStateComponent] wi
   /**
    * Restore the state to a given snapshot.
    */
-  def replaceState(snapshot: StateSnapshot)
+  def replaceState(snapshot: StateSnapshot): Unit
 
   /**
    * Get the current old state.
@@ -111,7 +122,7 @@ trait StateModule extends Module with ComponentRegistry[CarbonStateComponent] wi
   /**
    * Replace the old state with a given snapshot.
    */
-  def replaceOldState(snapshot: StateSnapshot)
+  def replaceOldState(snapshot: StateSnapshot): Unit
 
   /**
    * Get the current state.
@@ -138,7 +149,7 @@ trait StateModule extends Module with ComponentRegistry[CarbonStateComponent] wi
    * @param name the key to associate with this StateSnapshot
    * @param snapshot the StateSnapshot to store
    */
-  def stateRepositoryPut(name:String, snapshot: StateSnapshot)
+  def stateRepositoryPut(name:String, snapshot: StateSnapshot): Unit
 
   /*
    * Analogous get operation to the put above.
