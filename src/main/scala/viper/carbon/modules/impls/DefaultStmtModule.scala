@@ -454,7 +454,8 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
       for (c <- components) { // NOTE: this builds up the translation inside-out, so the *first* component defines the innermost code.
         //      val (before, after) = c.handleStmt(stmt, statesStack, allStateAssms, inWand)
         //      stmts = before ++ stmts ++ after
-        val f = c.handleStmt(stmt, statesStack, allStateAssms, duringPackage)
+        val stmtCopy = stmt.shallowClone()
+        val f = c.handleStmt(stmtCopy, statesStack, allStateAssms, duringPackage)
         stmts = f(stmts)
       }
       if (stmts.children.size == 0 && !loopModule.isLoopDummyStmt(stmt)) {
