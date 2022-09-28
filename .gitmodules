@@ -1,4 +1,4 @@
 [submodule "silver"]
 	path = silver
-	url = https://github.com/meatzs/silver_official.git
+	url = https://github.com/meatzs/silver.git
 	branch = DomainFuncApp-return-type
