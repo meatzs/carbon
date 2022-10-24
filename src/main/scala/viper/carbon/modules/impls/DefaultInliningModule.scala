@@ -6,8 +6,8 @@ import viper.carbon.boogie._
 import viper.carbon.verifier.Verifier
 import Implicits._
 import viper.carbon.modules.components.Component
-import viper.silver.ast.{CurrentPerm, ErrorTrafo, FieldAccess, FieldAssign, ForPerm, HasLineColumn, Info, LocalVarAssign, LocationAccess, Method, Position, WildcardPerm}
-import viper.silver.verifier.{DummyReason, VerificationError}
+import viper.silver.ast.{CurrentPerm, ErrorTrafo, FieldAccess, FieldAssign, ForPerm, FullPerm, HasLineColumn, Info, LocalVarAssign, LocationAccess, Method, MethodCall, Position, WildcardPerm}
+import viper.silver.verifier.{DummyReason, VerificationError, errors, PartialVerificationError}
 import viper.silver.ast.utility.Expressions
 import viper.silver.verifier.errors.SoundnessFailed
 import viper.silver.ast
@@ -378,6 +378,155 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     false
   }
 
+  // ----------------------------------------------------------------
+  // DIFFERENTIAL INLINING
+  // ----------------------------------------------------------------
+
+  //TODO: Maybe add functionality s.t. only certain methods or loops get differential inlining
+
+
+  /** used to make sure that error messages are only produced for the barrier SPH. */
+  override var barrierSPH: Boolean = true
+
+  /** List of the barrier type names. Index is barrierType and element is name. */
+  val barrierNames: Seq[String] = Seq("SPH", "SPHp", "SPHa", "SPaH", "SPaHp", "SPaHa", "SaPH", "SaPHp", "SaPHa",
+    "SaPaH", "SaPaHp", "SaPaHa")
+
+  var currentBarrier: Int = -1
+  override def getCurrentBarrierType: Int = {currentBarrier}
+
+  /** Equal -1 if verifier.diffInl==none; equals 0 if filter S; equals 1 if filter Sa */
+  var filterS: Int = -1;
+  /** Equal -1 if verifier.diffInl==none; equals 0 if filter P; equals 1 if filter Pa */
+  var filterP: Int = -1;
+  /** Equal -1 if verifier.diffInl==none; equals 0 if filter H; equals 1 if filter Hp; equals 2 if filter Ha */
+  var filterH: Int = -1;
+
+  /** Booggie Mask variable for framing */
+  var frameMask = getVarDecl("FrameMask", maskType)
+  /** Booggie Heap variable for framing */
+  var frameHeap = getVarDecl("FrameHeap", heapType)
+
+  /**
+    * Sets the filter variables for the barrier.
+    *
+    * @param name Name of the method that gets translated. Will contain the entry Method name with the suffix of the
+    *             current barrier.
+    */
+  def barrierSetup(name: String): Unit = {
+    //assumes the sequential traversal through the program s.t. the barrier is set until the next diffInl iteration
+    for (barrier <- barrierNames) {
+      if (name.contains(barrier)) {
+        barrierSPH = false
+        currentBarrier = barrierNames.indexOf((barrier))
+        setFiltersForBarrier(currentBarrier)
+      }
+    }
+  }
+
+  def setFiltersForBarrier(barrierType: Int) :Unit  = {
+    currentBarrier = barrierType
+    barrierType match {
+      case SPH@0 => {filterS = 0; filterP = 0; filterH = 0;}
+      case SPHp@1 => {filterS = 0; filterP = 0; filterH = 1;}
+      case SPHa@2 => {filterS = 0; filterP = 0; filterH = 2;}
+      case SPaH@3 => {filterS = 0; filterP = 1; filterH = 0;}
+      case SPaHp@4 => {filterS = 0; filterP = 1; filterH = 1;}
+      case SPaHa@5 => {filterS = 0; filterP = 1; filterH = 2;}
+      case SaPH@6 => {filterS = 1; filterP = 0; filterH = 0;}
+      case SaPHp@7 => {filterS = 1; filterP = 0; filterH = 1;}
+      case SaPHa@8 => {filterS = 1; filterP = 0; filterH = 2;}
+      case SaPaH@9 => {filterS = 1; filterP = 1; filterH = 0;}
+      case SaPaHp@10 => {filterS = 1; filterP = 1; filterH = 1;}
+      case SaPaHa@11 => {filterS = 1; filterP = 1; filterH = 2;}
+      case _ => sys.error("Barrier Type is not defined.")
+    }
+  }
+
+  /**
+    *
+    * @param PaHp_addOn Is an only a non-empty statement iff. filterP==1 && filterH==1 && we prepare the state before
+    *                   the inlined method call)
+    * @return
+    */
+  def prepareState(PaHp_addOn: Stmt = Statements.EmptyStmt): Stmt = {
+    var statement: Stmt = Statements.EmptyStmt
+    (filterP, filterH) match {
+      case (1, 2) => statement = stateModule.resetBoogieState
+      case (1, 1) =>
+        statement = PaHp_addOn ++ Assign(normalState._1, permModule.getZeroMaskExp())
+        if (PaHp_addOn.isEmpty) //only add after the inlined method call
+          statement = statement ++ Havoc(normalState._2)
+      case (1, 0) => statement = Assign(normalState._1, permModule.getZeroMaskExp())
+      case (0, 2) => statement = Havoc(normalState._2)
+      case (0, 1) => //do nothing
+      case (0, 0) =>
+     }
+
+    MaybeCommentBlock("Differential inlining: Modify state for barrier type ", statement ++ stateModule.assumeGoodState)
+  }
+
+  /** @return Returns a boogie CommentBlock that assigns the current Mask to the frameMask variable */
+  def saveFrameMask: Stmt = {
+    if (filterP == 1 || (filterP==0 && filterH==2))
+      MaybeCommentBlock("Differential inlining: saving FrameMask ", Assign(frameMask.l, normalState._1))
+    else
+      Statements.EmptyStmt
+  }
+
+  /** @return Returns a boogie CommentBlock that saves a the current heap and mask in the frameHeap and frameMask  */
+  def createFrame: Stmt = {
+      MaybeCommentBlock("Differential inlining: creating Frame", Assign(frameHeap.l, normalState._2) ++ Assign(frameMask.l, normalState._1))
+  }
+
+  /**
+    * @return Returns a boogie stmt that merges the framed store, mask, or heap
+    */
+  def mergeFrame: Stmt = {
+    var statement: Stmt = Statements.EmptyStmt
+    if (filterS == 1) {}
+
+    if (filterP ==1) {
+      val resMask = getVarDecl("resMask", maskType)
+      statement = statement ++ Assume(permModule.sumMask(resMask.l, normalState._1, frameMask.l)) ++ Assign(normalState._1, resMask.l)
+    }
+
+    if (filterH==0) {} //do nothing
+    else if (filterP != 0) {statement = statement ++ Assume(heapModule.identicalOnKnownLocations(frameHeap.l, frameMask.l))}
+
+    MaybeCommentBlock("Differential inlining: merging Frame ", statement ++ stateModule.assumeGoodState)
+  }
+
+  /**
+    *
+    * @param cond The conditions of a method or the loop invariants.
+    * @return Returns a Boogie CommentBlock that inhales the input conditions.
+    */
+  def applyFilterInhale(cond: Seq[sil.Exp], preCon: Boolean = true, mc: sil.MethodCall, statesStack: List[Any] = null, insidePackageStmt: Boolean = false,
+                        renamingArguments: (errors.ErrorNode => errors.ErrorNode),
+                        executeUnfoldings: (Seq[sil.Exp], (sil.Exp => PartialVerificationError)) => Stmt): Stmt = {
+
+    MaybeCommentBlock("Differential Inlining: Inhaling " ++ {if (preCon) {"Precondition"} else {"Postcondition"}},
+      inhaleModule.inhale(cond map (e => (e, errors.CallFailed(mc).withReasonNodeTransformed(renamingArguments))),
+      addDefinednessChecks = false, statesStack, insidePackageStmt) ++
+      executeUnfoldings(cond, (post => errors.Internal(post).withReasonNodeTransformed(renamingArguments))))
+  }
+
+  /**
+    *
+    * @param cond The postconditons of a method or the loop invariants.
+    * @return Returns a Boogie CommentBlock that checks the input conditions for definedness and exhales them.
+    */
+  def applyFilterExhale(cond: Seq[sil.Exp], preCon: Boolean = true, mc: sil.MethodCall, statesStack: List[Any] = null, insidePackageStmt: Boolean = false,
+                        renamingArguments: (errors.ErrorNode => errors.ErrorNode),
+                        executeUnfoldings: (Seq[sil.Exp], (sil.Exp => PartialVerificationError)) => Stmt): Stmt= {
+
+    MaybeCommentBlock("Differential Inlining: Exhaling " ++ {if (preCon) {"Precondition"} else {"Postcondition"}},
+      executeUnfoldings(cond, (pre => errors.PreconditionInCallFalse(mc).withReasonNodeTransformed(renamingArguments))) ++
+      exhaleModule.exhale(cond map (e => (e, errors.PreconditionInCallFalse(mc).withReasonNodeTransformed(renamingArguments))),
+        havocHeap = (filterH > 0), statesStackForPackageStmt = statesStack, insidePackageStmt = insidePackageStmt))
+  }
+
 
   // ----------------------------------------------------------------
   // MATCH DETERMINISM
@@ -657,6 +806,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   var id_var_deter: Int = 0
   private val deter_namespace: Namespace = verifier.freshNamespace("determinism")
 
+  /**
+    * @param name The preferred name of the local variable.
+    * @param typ Type of the local variable.
+    * @return Returns a LocalVarDecl with a name similar to the input name of the input type.
+    */
   def getVarDecl(name: String, typ: Type): LocalVarDecl = {
     id_var_deter += 1
     LocalVarDecl(Identifier("varTemp_" + id_var_deter + "_" + name)(deter_namespace), typ)
@@ -1426,6 +1580,11 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   // ACTUAL INLINING
   // ----------------------------------------------------------------
 
+  /**
+    *
+    * @param stmt Takes as input a boogie statement.
+    * @return Returns the unchanged argument stmt if staticInlining is not defined or closureSC is false in the verifer.
+    */
   def ignoreErrorsWhenBounded(stmt: Stmt): Stmt = {
     if (staticInlining.isDefined && closureSC) {
       stmt match {
@@ -1589,6 +1748,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   var labelCounter: Int = 0
 
+  /**
+    * @param s Preferred name as String
+    * @return Returns a name similar to the preferred input name.
+    */
   def getFreshName(s: String): String = {
     //FIXME: We rely on the assumption that this label name is unique and fresh
     allNamesSet = allNamesSet ++ mainModule.env.allDefinedNames(verifier.program)
@@ -1614,7 +1777,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
    * @return follows the path of "renamingLabels" until it reaches fixed point
    *
    * @note: renamingLabels should always directly point to a fixed point because of updateLabel method. So it should
-   * be enought to just return "renamingLabels(s)"
+   * be enough to just return "renamingLabels(s)"
    */
   def getLabel(s: String): String = {
     //the datastructure is always compact
@@ -1701,7 +1864,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val cond_neg: sil.Stmt = sil.Inhale(sil.Not(cond)(cond.pos, cond.info, cond.errT))(cond.pos, cond.info, cond.errT)
       val wfm: Stmt = checkFraming(cond_neg, cond_neg, true, true)
       extendCallstack(pop(callStack)._1, true) //remove top s.t. we do not push the same iteration twice
-      MaybeCommentBlock("0: Check SC and cut branch (loop)", wfm ++ Assume(guard ==> FalseLit()))
+      MaybeCommentBlock("0: Cut branch (loop)", wfm ++ Assume(guard ==> FalseLit()))
     }
     else {
       // Remembering some parameters to restore at the end of the method
@@ -1784,7 +1947,44 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
    * @param targets
    * @return
    */
-  def inlineMethod(mc: sil.MethodCall, m: Method, args: Seq[ast.Exp], targets: Seq[ast.LocalVar]): Stmt = {
+  def inlineMethod(mc: sil.MethodCall, statesStack: List[Any] = null, allStateAssms: Exp = TrueLit(), insidePackageStmt: Boolean = false,
+                   executeUnfoldings: (Seq[sil.Exp], (sil.Exp => PartialVerificationError)) => Stmt) : Stmt = {
+    val m = verifier.program.findMethod(mc.methodName)
+    val args = mc.args
+    val targets = mc.targets
+
+    val toUndefine = collection.mutable.ListBuffer[sil.LocalVar]()
+    val actualArgs = args.zipWithIndex map (a => {
+      val (actual, i) = a
+      // use the concrete argument if it is just a variable or constant (to avoid code bloat)
+      val useConcrete = actual match {
+        case v: sil.LocalVar if !targets.contains(v) => true
+        case _: sil.Literal => true
+        case _ => false
+      }
+      if (!useConcrete) {
+        val silFormal = m.formalArgs(i)
+        val tempArg = sil.LocalVar("arg_" + silFormal.name, silFormal.typ)()
+        mainModule.env.define(tempArg)
+        toUndefine.append(tempArg)
+        val translatedTempArg = translateExp(tempArg)
+        val translatedActual = translateExp(actual)
+        val stmt = translatedTempArg := translatedActual
+        (tempArg, stmt, Some(actual))
+      } else {
+        (args(i), Nil: Stmt, None)
+      }
+    })
+    val neededRenamings: Seq[(sil.AbstractLocalVar, sil.Exp)] = actualArgs.filter((_._3.isDefined)).map(element => (element._1.asInstanceOf[sil.LocalVar], element._3.get))
+    val removingTriggers: (errors.ErrorNode => errors.ErrorNode) =
+      ((n: errors.ErrorNode) => n.transform { case q: sil.Forall => q.copy(triggers = Nil)(q.pos, q.info, q.errT) })
+    val renamingArguments: (errors.ErrorNode => errors.ErrorNode) = ((n: errors.ErrorNode) => removingTriggers(n).transform({
+      case e: sil.Exp => Expressions.instantiateVariables[sil.Exp](e, neededRenamings map (_._1), neededRenamings map (_._2))
+    }))
+
+    val pres = m.pres map (e => Expressions.instantiateVariables(e, m.formalArgs ++ m.formalReturns, (actualArgs map (_._1)) ++ targets, mainModule.env.allDefinedNames(program)))
+    val posts = m.posts map (e => Expressions.instantiateVariables(e, m.formalArgs ++ m.formalReturns, (actualArgs map (_._1)) ++ targets, mainModule.env.allDefinedNames(program)))
+
 
     extendCallstack(mc)
     var addInfo: String = "At depth: "+ current_depth + "; Stacktrace: "+ callStackToString()
@@ -1795,115 +1995,128 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
     if (stopInlining) {
       extendCallstack(mc, true)
-      MaybeComment("0: Cut branch (method call)", Assume(FalseLit()))
+      return MaybeComment("0: Cut branch (method call)", Assume(FalseLit()))
+    }
+
+    val old_inside_initial_method = inside_initial_method
+    inside_initial_method = false
+
+    // LABELS: We save the current state of "Renaming", and we restore it at the end
+    val old_renaming: Map[String, String] = renamingLabels
+
+    // Real inlining
+    n_inl += 1
+    current_depth += 1
+    val other_vars: Seq[ast.LocalVar] = (m.formalArgs map (_.localVar)) ++ (m.formalReturns map (_.localVar))
+
+    currentRenaming = Map()
+    inRenaming = Set()
+
+    val t1: (PartialFunction[viper.silver.ast.Node,viper.silver.ast.Node]) = {
+      case sil.Old(e) => sil.LabelledOld(e, n_label.toString)(e.pos, m.info, m.errT)
+    }
+    val t2: (PartialFunction[viper.silver.ast.Node,viper.silver.ast.Node]) = {
+      case sil.Old(e) => sil.LabelledOld(e, (n_label + 1).toString)(e.pos, m.info, m.errT)
+    }
+    val t3: (PartialFunction[viper.silver.ast.Node,viper.silver.ast.Node]) = {
+      case sil.Old(e) => sil.LabelledOld(e, (n_label + 2).toString)(e.pos, m.info, m.errT)
+    }
+
+    val pre_body: ast.Stmt = alphaRename(m.body.get)
+    // Partial annotation:
+    // We assert the precondition and the postcondition in Silver, before inlining
+    // such that it also help to prove the soundness condition
+    /*
+    val prec: ast.Exp = foldStar(m.pres map renameExp, m.pos, m.info, m.errT)
+    val pre_post: ast.Exp = foldStar(m.posts map renameExp, m.pos, m.info, m.errT)
+     */
+    val lab1 = ast.Label(n_label.toString, Seq())(m.pos, m.info, m.errT)
+    val lab2 = ast.Label((n_label + 1).toString, Seq())(m.pos, m.info, m.errT)
+    val lab3 = ast.Label((n_label + 2).toString, Seq())(m.pos, m.info, m.errT)
+    /*
+    val post1 = pre_post.transform(t1)
+    val post2 = pre_post.transform(t2)
+    val post3 = pre_post.transform(t3)
+     */
+
+    /** For checking framing */
+    val body1 = ast.Seqn(Seq(lab1, pre_body.transform(t1)), Seq())(m.pos, m.info, m.errT)
+    /** For checking framing */
+    val body2 = ast.Seqn(Seq(lab2, pre_body.transform(t2)), Seq())(m.pos, m.info, m.errT)
+    /** For inlining in boogie */
+    var inliningBody = ast.Seqn(Seq(lab3, pre_body.transform(t3)), Seq())(m.pos, m.info, m.errT)
+
+
+    n_label += 3
+
+    val renamedFormalArgsVars: Seq[ast.LocalVar] = (m.formalArgs map (_.localVar)) map renameVar
+    val renamedFormalReturnsVars: Seq[ast.LocalVar] = ((m.formalReturns map (_.localVar))) map renameVar
+
+    renamedFormalArgsVars foreach {
+      (x: ast.LocalVar) => if (!mainModule.env.isDefinedAt(x)) {
+        mainModule.env.define(x)
+      }
+    }
+
+    renamedFormalReturnsVars foreach {
+      (x: ast.LocalVar) => if (!mainModule.env.isDefinedAt(x)) {
+        mainModule.env.define(x)
+      }
+    }
+
+    val r1 = checkFraming(body1, body2)
+    val oldCheckingFraming = checkingFraming
+    if (!inlinable(body1)) {
+      checkingFraming = true
+    }
+
+    var r2: Stmt = Statements.EmptyStmt
+    if (diffInl && (barrierSPH == false)) {
+      var PaHp_addOn = Statements.EmptyStmt
+      if (filterP==1 && filterH==1) {
+        var tempHeap = getVarDecl("TempHeap", heapType)
+        PaHp_addOn = Assign(normalState._1, permModule.getZeroMaskExp()) ++ stateModule.assumeGoodState ++ applyFilterInhale(pres, true, mc, statesStack, insidePackageStmt, renamingArguments, executeUnfoldings) ++
+          MaybeCommentBlock("Create Hp Heap ", Havoc(tempHeap.l) ++ Assume(identicalOnKnownLocations(tempHeap.l, normalState._1))) ++ Assign(normalState._2, tempHeap.l)
+      }
+      r2 = MaybeCommentBlock("Differential Inlining: Framing of resources  ", createFrame ++ applyFilterExhale(pres, true, mc, statesStack, insidePackageStmt, renamingArguments, executeUnfoldings) ++
+        saveFrameMask) ++ prepareState(PaHp_addOn) ++ applyFilterInhale(pres, true, mc, statesStack, insidePackageStmt, renamingArguments, executeUnfoldings) ++
+        // actual Method body translation
+        stmtModule.translateStmt(inliningBody) ++
+        applyFilterExhale(posts, false, mc, statesStack, insidePackageStmt, renamingArguments, executeUnfoldings) ++
+        MaybeCommentBlock("Differential Inlining: Restore state ",
+          prepareState() ++ applyFilterInhale(posts, false, mc, statesStack, insidePackageStmt, renamingArguments, executeUnfoldings) ++ mergeFrame)
     }
     else {
-      val old_inside_initial_method = inside_initial_method
-      inside_initial_method = false
-
-      // LABELS: We save the current state of "Renaming", and we restore it at the end
-      val old_renaming: Map[String, String] = renamingLabels
-
-      // Real inlining
-      n_inl += 1
-      current_depth += 1
-      val other_vars: Seq[ast.LocalVar] = (m.formalArgs map (_.localVar)) ++ (m.formalReturns map (_.localVar))
-
-      currentRenaming = Map()
-      inRenaming = Set()
-
-      val t1: (PartialFunction[viper.silver.ast.Node,viper.silver.ast.Node]) = {
-        case sil.Old(e) => sil.LabelledOld(e, n_label.toString)(e.pos, m.info, m.errT)
-      }
-      val t2: (PartialFunction[viper.silver.ast.Node,viper.silver.ast.Node]) = {
-        case sil.Old(e) => sil.LabelledOld(e, (n_label + 1).toString)(e.pos, m.info, m.errT)
-      }
-      val t3: (PartialFunction[viper.silver.ast.Node,viper.silver.ast.Node]) = {
-        case sil.Old(e) => sil.LabelledOld(e, (n_label + 2).toString)(e.pos, m.info, m.errT)
-      }
-
-
-
-      val pre_body: ast.Stmt = alphaRename(m.body.get)
-      // Partial annotation:
-      // We assert the precondition and the postcondition in Silver, before inlining
-      // such that it also help to prove the soundness condition
-      /*
-      val prec: ast.Exp = foldStar(m.pres map renameExp, m.pos, m.info, m.errT)
-      val pre_post: ast.Exp = foldStar(m.posts map renameExp, m.pos, m.info, m.errT)
-       */
-      val lab1 = ast.Label(n_label.toString, Seq())(m.pos, m.info, m.errT)
-      val lab2 = ast.Label((n_label + 1).toString, Seq())(m.pos, m.info, m.errT)
-      val lab3 = ast.Label((n_label + 2).toString, Seq())(m.pos, m.info, m.errT)
-      /*
-      val post1 = pre_post.transform(t1)
-      val post2 = pre_post.transform(t2)
-      val post3 = pre_post.transform(t3)
-       */
-
-
-      // OLD VERSION: WE ASSERTED HERE
-      //val body1 = ast.Seqn(Seq(lab1, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body.transform(t1), ast.Assert(post1)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
-      //val body2 = ast.Seqn(Seq(lab2, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body.transform(t2), ast.Assert(post2)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
-      //val body3 = ast.Seqn(Seq(lab3, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body.transform(t3), ast.Assert(post3)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
-      val body1 = ast.Seqn(Seq(lab1, pre_body.transform(t1)), Seq())(m.pos, m.info, m.errT)
-      val body2 = ast.Seqn(Seq(lab2, pre_body.transform(t2)), Seq())(m.pos, m.info, m.errT)
-      val body3 = ast.Seqn(Seq(lab3, pre_body.transform(t3)), Seq())(m.pos, m.info, m.errT)
-
-
-      n_label += 3
-
-      val renamedFormalArgsVars: Seq[ast.LocalVar] = (m.formalArgs map (_.localVar)) map renameVar
-      val renamedFormalReturnsVars: Seq[ast.LocalVar] = ((m.formalReturns map (_.localVar))) map renameVar
-
-      renamedFormalArgsVars foreach {
-        (x: ast.LocalVar) => if (!mainModule.env.isDefinedAt(x)) {
-          mainModule.env.define(x)
-        }
-      }
-
-      renamedFormalReturnsVars foreach {
-        (x: ast.LocalVar) => if (!mainModule.env.isDefinedAt(x)) {
-          mainModule.env.define(x)
-        }
-      }
-
-      val r1 = checkFraming(body1, body2)
-      val oldCheckingFraming = checkingFraming
-      if (!inlinable(body1)) {
-        checkingFraming = true
-      }
-      //val r2 = stmtModule.translateStmt(transformLabelsAndOld(body3))
-      val r2 = stmtModule.translateStmt(body3)
-      checkingFraming = oldCheckingFraming
-
-      current_depth -= 1
-
-      val assignArgsPre: Seq[(Exp, Exp)] = ((renamedFormalArgsVars map translateExp) zip (args map translateExp)) filter ((x) => x._1 != x._2)
-      val assignRetsPre: Seq[(Exp, Exp)] = ((targets map translateExp) zip (renamedFormalReturnsVars map translateExp)) filter ((x) => x._1 != x._2)
-
-      val assignArgs = assignArgsPre map (x => Assign(x._1, x._2))
-      val assignRets = assignRetsPre map (x => Assign(x._1, x._2))
-
-      renamedFormalArgsVars foreach {
-        (x: ast.LocalVar) => if (mainModule.env.isDefinedAt(x)) {
-          mainModule.env.undefine(x)
-        }
-      }
-      renamedFormalReturnsVars foreach {
-        (x: ast.LocalVar) => if (mainModule.env.isDefinedAt(x)) {
-          mainModule.env.undefine(x)
-        }
-      }
-
-      // Restoring...
-      inside_initial_method = old_inside_initial_method
-      renamingLabels = old_renaming
-
-      extendCallstack(mc, true)
-
-      Seqn(assignArgs) ++ r1  ++ getBoundedComplete() ++ r2 ++ Seqn(assignRets) ++ getBoundedComplete()
+      r2 = stmtModule.translateStmt(inliningBody)
     }
+
+    checkingFraming = oldCheckingFraming
+    current_depth -= 1
+
+    val assignArgsPre: Seq[(Exp, Exp)] = ((renamedFormalArgsVars map translateExp) zip (args map translateExp)) filter ((x) => x._1 != x._2)
+    val assignRetsPre: Seq[(Exp, Exp)] = ((targets map translateExp) zip (renamedFormalReturnsVars map translateExp)) filter ((x) => x._1 != x._2)
+
+    val assignArgs = assignArgsPre map (x => Assign(x._1, x._2))
+    val assignRets = assignRetsPre map (x => Assign(x._1, x._2))
+
+    renamedFormalArgsVars foreach {
+      (x: ast.LocalVar) => if (mainModule.env.isDefinedAt(x)) {
+        mainModule.env.undefine(x)
+      }
+    }
+    renamedFormalReturnsVars foreach {
+      (x: ast.LocalVar) => if (mainModule.env.isDefinedAt(x)) {
+        mainModule.env.undefine(x)
+      }
+    }
+
+    // Restoring...
+    inside_initial_method = old_inside_initial_method
+    renamingLabels = old_renaming
+
+    extendCallstack(mc, true)
+
+    Seqn(assignArgs) ++ r1  ++ getBoundedComplete() ++ r2 ++ Seqn(assignRets) ++ getBoundedComplete()
   }
 
   // ----------------------------------------------------------------

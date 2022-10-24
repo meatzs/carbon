@@ -104,6 +104,12 @@ class CarbonConfig(args: Seq[String]) extends SilFrontendConfig(args, "Carbon") 
     noshort = true
   )
 
+  val diffInl = opt[Boolean]("diffInl",
+    descr = "Differential Inlining (default: disabled)",
+    default = None,
+    noshort = true
+  )
+
   val entry = opt[String]("entry",
     descr = "Entry point for static inlining (default: first method)",
     default = None,

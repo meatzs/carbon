@@ -232,6 +232,7 @@ case class CarbonVerifier(override val reporter: Reporter,
   def staticInlining = if (config != null) {config.staticInlining.toOption} else None
   def verboseCallstack = if (config != null) {config.verboseCallstack.toOption} else None
   def maxInl = if (config != null) {config.maxInl.toOption} else None
+  def diffInl = if (config != null) {config.diffInl.toOption.getOrElse(false)} else {false}
   def noCheckSC: Boolean = if (config != null) {config.noCheckSC.toOption.getOrElse(false)} else {false}
   def noSyntacticCheck: Boolean = if (config != null) {config.noSyntacticCheck.toOption.getOrElse(false)} else {false}
   def printSC: Boolean = if (config != null) {config.printSC.toOption.getOrElse(false)} else {false}

@@ -82,8 +82,18 @@ trait BoogieInterface {
   def invokeBoogie(program: Program, options: Seq[String]): (String,VerificationResult) = {
     // find all errors and assign everyone a unique id
     errormap = Map()
+    /** flag that gets set if there is a error while differential inlining is active. Is necessary because we do not
+      * have access to the carbon verifier in silver modules */
+    var diffInlActive = false
+    /** flag that gets set if static inlining is active. Is necessary because we do not have access to the carbon verifier
+      * in silver modules */
+    var staticInlActive = false
     program.visit {
       case a@Assert(exp, error) =>
+        if (!staticInlActive && error.offendingNode.inlMsg.isDefined)
+          staticInlActive = true
+        if (!diffInlActive && error.offendingNode.diffInlBarrierType.isDefined)
+          diffInlActive = true
         errormap += (a.id -> error)
     }
 
@@ -95,6 +105,31 @@ trait BoogieInterface {
       case (version,Nil) =>
         (version,Success)
       case (version,errorIds) => {
+        if (staticInlActive) {
+          //update the error msg for the errors in errormap for errors that occure after a SC error appears
+          //only transform errors until next barrier for diff Inl is reached.
+        }
+        if (diffInlActive) {
+          /** Sequence of Integers that collect all the barrier types for which differential inlining did not verify. */
+          var barrierVerificationFailed: Set[Int] = Set()
+          var errors = (0 until errorIds.length).map(i => {
+            if (errormap.get(errorIds(i)).get.offendingNode.diffInlBarrierType.isDefined) {
+              barrierVerificationFailed = barrierVerificationFailed + (errormap.get(errorIds(i)).get.offendingNode.diffInlBarrierType.get)
+            }
+            val id = errorIds(i)
+            val error = errormap.get(id).get
+            if (models.nonEmpty)
+              error.failureContexts = Seq(FailureContextImpl(Some(SimpleCounterexample(Model(models(i))))))
+            error
+          })
+          val diffError: DiffInlError = new DiffInlError {
+            override def readableMessage(withId: Boolean, withPosition: Boolean): String = {
+              "DiffInl Error Message: " + analyseDiffInlFailures(barrierVerificationFailed)
+            }
+          }
+          errors = errors :+ diffError
+          return (version, Failure(errors))
+        }
         val errors = (0 until errorIds.length).map(i => {
           val id = errorIds(i)
           val error = errormap.get(id).get
@@ -105,6 +140,10 @@ trait BoogieInterface {
         (version,Failure(errors))
       }
     }
+  }
+
+  private def soundnessCheckConfidenceTransformation(): Unit = {
+
   }
 
   /**

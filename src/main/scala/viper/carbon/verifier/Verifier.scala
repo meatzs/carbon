@@ -86,6 +86,8 @@ trait Verifier {
   def verboseCallstack: Option[String]
   /** Defines max number of inlined loops or methods when inlining   */
   def maxInl: Option[Int]
+  /** Defines if Differential Inlining is executed */
+  def diffInl: Boolean
   /** Check soundness conditions (mono and framing) for inlining */
   def noCheckSC: Boolean
   /** Print the code when checking soundness conditions (mono and framing)  */
