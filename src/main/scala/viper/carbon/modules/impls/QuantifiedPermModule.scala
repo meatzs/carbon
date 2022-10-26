@@ -134,6 +134,10 @@ class QuantifiedPermModule(val verifier: Verifier)
   private val heapType = NamedType("HeapType")
   private val normalHeap: LocalVarDecl = LocalVarDecl(Identifier("normalHeap"), heapType)
 
+  def getZeroMaskExp(): Exp = {
+    zeroMask
+  }
+
   def staticHeap(): Var = {
     heapModule.currentHeap.head.asInstanceOf[Var]
   }

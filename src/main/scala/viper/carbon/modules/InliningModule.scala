@@ -3,7 +3,7 @@ package viper.carbon.modules
 import viper.carbon.modules.components.Component
 import viper.silver.{ast => sil}
 import viper.silver.ast.{ErrorTrafo, Info, Method, Position}
-import viper.silver.verifier.VerificationError
+import viper.silver.verifier.{PartialVerificationError, VerificationError}
 import viper.silver.ast
 import viper.carbon.boogie._
 
@@ -60,6 +60,26 @@ trait InliningModule extends Module with Component {
    * @return returns String of the non-collapsed callstack generated during inlining
    */
   def callStackToStringVerbose(): String
+
+  // ----------------------------------------------------------------
+  // DIFFERENTIAL INLINING
+  // ----------------------------------------------------------------
+
+  /** List of the barrier type names. Index is barrierType and element is name. */
+  val barrierNames: Seq[String]
+
+  /** used to make sure that error messages are only produced for the barrier SPH. */
+  var barrierSPH: Boolean
+
+  /**
+    * Sets the filter variables for the barrier.
+    *
+    * @param name Name of the method that gets translated. Will contain the entry Method name with the suffix of the
+    *             current barrier.
+    */
+  def barrierSetup(name: String): Unit
+
+  def getCurrentBarrierType: Int
 
   // ----------------------------------------------------------------
   // MATCH DETERMINISM
@@ -157,11 +177,17 @@ trait InliningModule extends Module with Component {
   // ----------------------------------------------------------------
 
 
+  /**
+    *
+    * @param stmt Takes as input a boogie statement.
+    * @return Returns the unchanged argument stmt if staticInlining is not defined or closureSC is false in the verifer.
+    */
   def ignoreErrorsWhenBounded(stmt: Stmt): Stmt
 
   def inlineLoop(w: sil.WhileInl): Stmt
 
-  def inlineMethod(mc: sil.MethodCall, m: Method, args: Seq[ast.Exp], targets: Seq[ast.LocalVar]): Stmt
+  def inlineMethod(mc: sil.MethodCall, statesStack: List[Any] = null, allStateAssms: Exp = TrueLit(), insidePackageStmt: Boolean = false,
+                   executeUnfoldings: (Seq[sil.Exp], (sil.Exp => PartialVerificationError)) => Stmt): Stmt
 
   // ----------------------------------------------------------------
   // RENAMING

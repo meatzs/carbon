@@ -146,4 +146,6 @@ trait PermModule extends Module with CarbonStateComponent {
   val fullPerm: Const
   val sumMasks: Identifier
 
+  def getZeroMaskExp(): Exp
+
 }

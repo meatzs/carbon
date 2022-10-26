@@ -251,6 +251,12 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
     var addInfo: String = "At depth: "+ inliningModule.current_depth + line + "; Stacktrace: "+ inliningModule.callStackToString()
     stmt.inlMsg = Some(addInfo)
 
+    if (diffInl && inliningModule.getCurrentBarrierType >=0)
+      stmt.diffInlBarrierType = Some(inliningModule.getCurrentBarrierType)
+    if (!inliningModule.barrierSPH) {
+      stmt.inlMsg = None
+    }
+
     stmt match {
         case assign@sil.LocalVarAssign(lhs, rhs) =>
           checkDefinedness(lhs, errors.AssignmentFailed(assign), insidePackageStmt = insidePackageStmt) ++
@@ -288,7 +294,7 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
         case mc@sil.MethodCall(methodName, args, targets) =>
           val method = verifier.program.findMethod(methodName)
           if (verifier.staticInlining.isDefined && method.body.isDefined) {
-            inliningModule.inlineMethod(mc, method, args, targets)
+            inliningModule.inlineMethod(mc, statesStack, allStateAssms, insidePackageStmt, executeUnfoldings)
           }
           else {
             // save pre-call state
