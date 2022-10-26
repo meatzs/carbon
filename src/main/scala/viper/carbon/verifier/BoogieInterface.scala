@@ -8,9 +8,10 @@ package viper.carbon.verifier
 
 import java.io._
 import viper.carbon.boogie.{Assert, Program}
+import viper.silver.ast.Position
 import viper.silver.reporter.BackendSubProcessStages._
 import viper.silver.reporter.{BackendSubProcessReport, Reporter}
-import viper.silver.verifier.errors.Internal
+import viper.silver.verifier.errors.{ErrorNode, Internal}
 import viper.silver.verifier.reasons.InternalReason
 import viper.silver.verifier.{Failure, _}
 
@@ -82,8 +83,13 @@ trait BoogieInterface {
   def invokeBoogie(program: Program, options: Seq[String]): (String,VerificationResult) = {
     // find all errors and assign everyone a unique id
     errormap = Map()
+    /** flag that gets set if static inlining is active. Is necessary because we do not have access to the carbon verifier
+      * in silver modules */
+    var staticInlActive = false
     program.visit {
       case a@Assert(exp, error) =>
+        if (!staticInlActive && error.offendingNode.inlMsg.isDefined)
+          staticInlActive = true
         errormap += (a.id -> error)
     }
 
@@ -95,6 +101,26 @@ trait BoogieInterface {
       case (version,Nil) =>
         (version,Success)
       case (version,errorIds) => {
+        if (staticInlActive) {
+          var lowConfidence = false
+          for (i <- 0 until errorIds.length) {
+            val id = errorIds(i)
+            val error = errormap.get(id).get
+            val scError = error.readableMessage.contains("MONO ") || error.readableMessage.contains("FRAMING ") ||
+              error.readableMessage.contains("WFM ")
+            if (scError) {lowConfidence = true}
+            errormap += (id -> new VerificationError {
+              val conf = lowConfidence
+              override def reason: ErrorReason = error.reason
+              override def readableMessage(withId: Boolean, withPosition: Boolean): String = (error.readableMessage +
+                {if (scError) "" else if (conf) " Low confidence that real error." else " High confidence that real error."})
+              override def id: String = error.id
+              override def offendingNode: ErrorNode = error.offendingNode
+              override def pos: Position = error.pos
+              override def withNode(offendingNode: ErrorNode): ErrorMessage = error.withNode()
+            })
+          }
+        }
         val errors = (0 until errorIds.length).map(i => {
           val id = errorIds(i)
           val error = errormap.get(id).get
