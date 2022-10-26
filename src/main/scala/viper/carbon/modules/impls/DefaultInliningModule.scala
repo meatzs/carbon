@@ -960,6 +960,14 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     }
   }
 
+  /**
+    * Creates an expression that can be evaluated to checks the equality of two boogie variable sequences.
+    *
+    * @param s1 A sequence of boogie variables.
+    * @param s2 A sequence of boogie variables.
+    * @return Returns a true literal if either s1 or s2 is a empty sequence and otherwise returns a
+    *         conjunction of equalities of the elements of s1 and s2 with the same index by applying itself recursively.
+    */
   def equalSeq(s1: Seq[Var], s2: Seq[Var]): Exp = {
     (s1, s2) match {
       case (Seq(), _) => TrueLit()
@@ -972,6 +980,9 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     MapSelect(mask, Seq(rcv, location))
   }
 
+  /**
+    * @return Defines the functions and axioms necessary for the soundness condition checks in the generated boogie file.
+    */
   def getAxioms(): List[Decl] = {
     val obj: LocalVarDecl = LocalVarDecl(Identifier("o")(axiomNamespace), refType)
     val field = LocalVarDecl(Identifier("f")(axiomNamespace), fieldType)
@@ -1012,8 +1023,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     )), size = 1) ++
 
  */
-
-
 
     MaybeCommentedDecl("CHECK SOUNDNESS CONDITION",
       Func(smallerMask, smallerMaskArgs, Bool) ++
@@ -1071,8 +1080,6 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
         sumStateApp <==> (sumMaskApp
           && FuncApp(equalOnMask, Seq(normalHeap.l, heap1.l, mask1.l), Bool)
           && FuncApp(equalOnMask, Seq(normalHeap.l, heap2.l, mask2.l), Bool)
-          // && heap1.l === normalHeap.l
-          // && heap2.l === normalHeap.l
           ))))
   }
 

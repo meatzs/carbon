@@ -8,9 +8,10 @@ package viper.carbon.verifier
 
 import java.io._
 import viper.carbon.boogie.{Assert, Program}
+import viper.silver.ast.Position
 import viper.silver.reporter.BackendSubProcessStages._
 import viper.silver.reporter.{BackendSubProcessReport, Reporter}
-import viper.silver.verifier.errors.Internal
+import viper.silver.verifier.errors.{ErrorNode, Internal}
 import viper.silver.verifier.reasons.InternalReason
 import viper.silver.verifier.{Failure, _}
 
@@ -106,8 +107,24 @@ trait BoogieInterface {
         (version,Success)
       case (version,errorIds) => {
         if (staticInlActive) {
-          //update the error msg for the errors in errormap for errors that occure after a SC error appears
-          //only transform errors until next barrier for diff Inl is reached.
+          var lowConfidence = false
+          for (i <- 0 until errorIds.length) {
+            val id = errorIds(i)
+            val error = errormap.get(id).get
+            val scError = error.readableMessage.contains("MONO ") || error.readableMessage.contains("FRAMING ") ||
+              error.readableMessage.contains("WFM ")
+            if (scError) {lowConfidence = true}
+            errormap += (id -> new VerificationError {
+              val conf = lowConfidence
+              override def reason: ErrorReason = error.reason
+              override def readableMessage(withId: Boolean, withPosition: Boolean): String = (error.readableMessage +
+                {if (scError) "" else if (conf) " Low confidence that real error." else " High confidence that real error."})
+              override def id: String = error.id
+              override def offendingNode: ErrorNode = error.offendingNode
+              override def pos: Position = error.pos
+              override def withNode(offendingNode: ErrorNode): ErrorMessage = error.withNode()
+            })
+          }
         }
         if (diffInlActive) {
           /** Sequence of Integers that collect all the barrier types for which differential inlining did not verify. */
