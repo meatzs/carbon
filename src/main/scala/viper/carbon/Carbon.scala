@@ -2,14 +2,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon
 
 import ch.qos.logback.classic.Logger
 import viper.silver.frontend.{SilFrontend, SilFrontendConfig}
 import viper.silver.logger.ViperStdOutLogger
-import viper.silver.plugin.PluginAwareReporter
 import viper.silver.reporter.{Reporter, StdIOReporter}
 import viper.silver.verifier.{Verifier => SilVerifier}
 
@@ -17,22 +16,20 @@ import viper.silver.verifier.{Verifier => SilVerifier}
  * The main object for Carbon containing the execution start-point.
  */
 object Carbon extends CarbonFrontend(StdIOReporter("carbon_reporter"), ViperStdOutLogger("Carbon", "INFO").get) {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     execute(args)
     specifyAppExitCode()
     sys.exit(appExitCode)
   }
 }
 
-class CarbonFrontend(override val reporter: PluginAwareReporter,
+class CarbonFrontend(override val reporter: Reporter,
                      override val logger: Logger) extends SilFrontend {
-
-  def this(reporter: Reporter, logger: Logger) = this(PluginAwareReporter(reporter), logger)
 
   private var carbonInstance: CarbonVerifier = _
 
   def createVerifier(fullCmd: String) = {
-    carbonInstance = CarbonVerifier(Seq("Arguments: " -> fullCmd))
+    carbonInstance = CarbonVerifier(reporter, Seq("Arguments: " -> fullCmd))
 
     carbonInstance
   }

@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon.modules
 
@@ -40,6 +40,4 @@ trait ExhaleModule extends Module with ExhaleComponent with ComponentRegistry[Ex
     */
   def exhale(exp: Seq[(sil.Exp, PartialVerificationError)], havocHeap: Boolean = true, isAssert: Boolean = false
              , statesStackForPackageStmt: List[Any] = null, insidePackageStmt: Boolean = false): Stmt
-
-  def currentPhaseId: Int
 }

@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon.verifier
 
@@ -32,14 +32,17 @@ trait Verifier {
   val domainModule: DomainModule
   val seqModule: SeqModule
   val setModule: SetModule
+  val mapModule: MapModule
   val wandModule: WandModule
+  val loopModule: LoopModule
 
   /**
    * A list of all modules.
    */
   lazy val allModules: Seq[Module] = {
     Seq(mainModule, stateModule, heapModule, permModule, stmtModule, expModule, typeModule,
-      exhaleModule, inhaleModule, funcPredModule, domainModule, seqModule, setModule, wandModule)
+      exhaleModule, inhaleModule, funcPredModule, domainModule, seqModule, setModule,
+      loopModule, mapModule, wandModule)
   } ensuring {
     mods => true
   }
@@ -72,7 +75,9 @@ trait Verifier {
   /**
    *  Replace the program with the provided one (for instance, to achieve whole-program transformations, including updating lookups of method definitions etc.)
    */
-  def replaceProgram(prog : sil.Program)
+  def replaceProgram(prog : sil.Program): Unit
+
+  def assumeInjectivityOnInhale: Boolean
 
   /**  Defines max depth of inlining methods or loops  */
   def staticInlining: Option[Int]

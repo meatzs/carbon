@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon.boogie
 
@@ -32,7 +32,7 @@ object Visitor {
   /**
    * See Node.visit.
    */
-  def visit(n: Node)(f: PartialFunction[Node, Unit]) {
+  def visit(n: Node)(f: PartialFunction[Node, Unit]): Unit = {
     if (f.isDefinedAt(n)) f(n)
     for (sub <- n.subnodes) {
       visit(sub)(f)
@@ -42,7 +42,7 @@ object Visitor {
   /**
    * See Node.visit.
    */
-  def visit(n: Node, f1: PartialFunction[Node, Unit], f2: PartialFunction[Node, Unit]) {
+  def visit(n: Node, f1: PartialFunction[Node, Unit], f2: PartialFunction[Node, Unit]): Unit = {
     if (f1.isDefinedAt(n)) f1(n)
     for (sub <- n.subnodes) {
       visit(sub, f1, f2)
@@ -53,7 +53,7 @@ object Visitor {
   /**
    * See Node.visitOpt.
    */
-  def visitOpt(n: Node)(f: Node => Boolean) {
+  def visitOpt(n: Node)(f: Node => Boolean): Unit = {
     if (f(n)) {
       for (sub <- n.subnodes) {
         visitOpt(sub)(f)
@@ -64,7 +64,7 @@ object Visitor {
   /**
    * See Node.visitOpt.
    */
-  def visitOpt(n: Node, f1: Node => Boolean, f2: Node => Unit) {
+  def visitOpt(n: Node, f1: Node => Boolean, f2: Node => Unit): Unit = {
     if (f1(n)) {
       for (sub <- n.subnodes) {
         visitOpt(sub, f1, f2)

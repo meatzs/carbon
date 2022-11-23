@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon.modules
 
@@ -40,23 +40,7 @@ trait PermModule extends Module with CarbonStateComponent {
    */
   def permissionPositive(permission: Exp, zeroOK : Boolean = false): Exp
 
-
   def conservativeIsPositivePerm(e: sil.Exp): Boolean
-
-  /**
-   * The number of phases during exhale.
-   */
-  def numberOfPhases: Int
-
-  /**
-   * The ID of the phase that this expression should be exhaled in.
-   */
-  def isInPhase(e: sil.Exp, phaseId: Int): Boolean
-
-  /**
-   * A short description of a given phase.
-   */
-  def phaseDescription(phase: Int): String
 
   /**
    * The current mask.
@@ -82,6 +66,11 @@ trait PermModule extends Module with CarbonStateComponent {
     * The wand mask field of a given wand (as its ghost location).
     */
   def wandMaskField(wand: Exp): Exp
+
+  /**
+    * The type used for masks.
+    */
+  def maskType: Type
 
   /**
    * The type used to for predicate masks.
@@ -114,7 +103,23 @@ trait PermModule extends Module with CarbonStateComponent {
   def sumMask(assmsToSmt: Exp => Stmt):Stmt
   */
 
+  /**
+    *
+    * @param summandMask1
+    * @param summandMask2
+    * @return expression for which its validity implies that the current mask is the sum of the two input masks
+    */
   def sumMask(summandMask1: Seq[Exp], summandMask2: Seq[Exp]): Exp
+
+  /**
+    *
+    * @param resultMask
+    * @param summandMask1
+    * @param summandMask2
+    * @return expression for which its validity implies that @{code resultMask} is the sum of the other two input
+    *         masks
+    */
+  def sumMask(resultMask: Seq[Exp], summandMask1: Seq[Exp], summandMask2: Seq[Exp]) : Exp
 
     /** returns a mask and the returned statement ensures that the mask  has non-zero permission at rcv.loc and zero
       * permission at all other location

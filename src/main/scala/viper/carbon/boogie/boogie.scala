@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon.boogie
 
@@ -40,7 +40,7 @@ sealed trait Node {
   /**
    * Applies the function `f` to the AST node, then visits all subnodes.
    */
-  def visit(f: PartialFunction[Node, Unit]) {
+  def visit(f: PartialFunction[Node, Unit]): Unit = {
     Visitor.visit(this)(f)
   }
 
@@ -48,7 +48,7 @@ sealed trait Node {
    * Applies the function `f1` to the AST node, then visits all subnodes,
    * and finally calls `f2` to the AST node.
    */
-  def visit(n: Node, f1: PartialFunction[Node, Unit], f2: PartialFunction[Node, Unit]) {
+  def visit(n: Node, f1: PartialFunction[Node, Unit], f2: PartialFunction[Node, Unit]): Unit = {
     Visitor.visit(this, f1, f2)
   }
 
@@ -56,7 +56,7 @@ sealed trait Node {
    * Applies the function `f` to the AST node, then visits all subnodes if `f`
    * returned true.
    */
-  def visitOpt(n: Node)(f: Node => Boolean) {
+  def visitOpt(n: Node)(f: Node => Boolean): Unit = {
     Visitor.visitOpt(this)(f)
   }
 
@@ -64,7 +64,7 @@ sealed trait Node {
    * Applies the function `f1` to the AST node, then visits all subnodes if `f1`
    * returned true, and finally calls `f2` to the AST node.
    */
-  def visitOpt(n: Node, f1: Node => Boolean, f2: Node => Unit) {
+  def visitOpt(n: Node, f1: Node => Boolean, f2: Node => Unit): Unit = {
     Visitor.visitOpt(this, f1, f2)
   }
 
@@ -389,7 +389,7 @@ sealed trait Decl extends Node
 case class ConstDecl(name: Identifier, typ: Type, unique: Boolean = false) extends Decl
 case class TypeDecl(t: NamedType) extends Decl
 case class TypeAlias(name: NamedType, definition: Type) extends Decl
-case class Func(name: Identifier, args: Seq[LocalVarDecl], typ: Type) extends Decl
+case class Func(name: Identifier, args: Seq[LocalVarDecl], typ: Type, attributes: Map[String, String] = Map()) extends Decl
 case class Axiom(exp: Exp) extends Decl
 case class GlobalVarDecl(name: Identifier, typ: Type) extends Decl
 case class Procedure(name: Identifier, ins: Seq[LocalVarDecl], outs: Seq[LocalVarDecl], body: Stmt) extends Decl

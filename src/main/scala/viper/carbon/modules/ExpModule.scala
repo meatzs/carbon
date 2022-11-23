@@ -2,12 +2,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon.modules
 
 import viper.silver.{ast => sil}
-import viper.silver.ast.utility.Expressions.{whenExhaling, whenInhaling}
 import viper.carbon.boogie.{Exp, LocalVar, Stmt}
 import viper.carbon.modules.components.{ComponentRegistry, DefinednessComponent}
 import viper.silver.verifier.PartialVerificationError
@@ -44,39 +43,6 @@ trait ExpModule extends Module with ComponentRegistry[DefinednessComponent] {
       */
   def checkDefinedness(e: sil.Exp, error: PartialVerificationError, makeChecks: Boolean = true,
                        insidePackageStmt: Boolean = false, ignoreIfInWand: Boolean = false): Stmt
-
-  /**
-   * Check definedness of Viper assertions such as pre-/postconditions or invariants.
-   * The implementation works by inhaling 'e' and checking the necessary properties
-   * along the way.
-    *
-    *
-    * inWand distinguishes whether check definedness is called during a package statement or not.
-    *
-    * statesStack is the stack of states used during packaging a magic wand (it carries the current state, left-hand side state).
-    * statesStack also carries the left-hand side states of the outer magic wands in case of nested package statements.
-   */
-  def checkDefinednessOfSpecAndInhale(e: sil.Exp, error: PartialVerificationError, statesStack: List[Any] = null, inWand: Boolean = false): Stmt
-
-  /**
-   * Convert all InhaleExhale expressions to their exhale part and call checkDefinednessOfSpecAndInhale.
-   */
-  def checkDefinednessOfExhaleSpecAndInhale(expressions: Seq[sil.Exp],
-                                            errorConstructor: (sil.Exp) => PartialVerificationError): Seq[Stmt] = {
-    expressions map (e => {
-      checkDefinednessOfSpecAndInhale(whenExhaling(e), errorConstructor(e))
-    })
-  }
-
-  /**
-   * Convert all InhaleExhale expressions to their inhale part and call checkDefinednessOfSpecAndInhale.
-   */
-  def checkDefinednessOfInhaleSpecAndInhale(expressions: Seq[sil.Exp],
-                                            errorConstructor: (sil.Exp) => PartialVerificationError): Seq[Stmt] = {
-    expressions map (e => {
-      checkDefinednessOfSpecAndInhale(whenInhaling(e), errorConstructor(e))
-    })
-  }
 
   /**
    * Check definedness of Viper assertions such as pre-/postconditions or invariants.

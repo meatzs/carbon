@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 //
-// Copyright (c) 2011-2019 ETH Zurich.
+// Copyright (c) 2011-2021 ETH Zurich.
 
 package viper.carbon.modules.impls
 
@@ -45,7 +45,7 @@ class DefaultDomainModule(val verifier: Verifier) extends DomainModule with Stat
       val func = ConstDecl(Identifier(f.name), t, unique = true)
       MaybeCommentedDecl(s"Translation of domain unique function ${f.name}", func, size = 1)
     } else {
-      val args = f.formalArgs map (x => LocalVarDecl(Identifier(x.name), translateType(x.typ)))
+      val args = f.formalArgs map (x => LocalVarDecl(Identifier(if (x.isInstanceOf[sil.LocalVarDecl]) x.asInstanceOf[sil.LocalVarDecl].name else env.uniqueName(f.name + "_param")), translateType(x.typ)))
       val func = Func(Identifier(f.name), args, t)
       MaybeCommentedDecl(s"Translation of domain function ${f.name}", func, size = 1)
     }
