@@ -154,7 +154,7 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
               inliningModule.entryMethod = entry.toString
           }
           if (diffInl) {
-            for (i <- 0 to 11) {
+            for (i <- 0 to 7) {
               val inlMethod = methods.head
               //check if entry method name does not contain the barrier name as string
               for (barrier <- inliningModule.barrierNames) {

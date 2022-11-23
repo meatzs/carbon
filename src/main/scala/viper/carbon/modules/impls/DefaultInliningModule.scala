@@ -435,8 +435,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   var curBarrier: Int = -1
 
   /** List of the barrier type names. Index is barrierType and element is name. */
-  val barrierNames: Seq[String] = Seq("SPH", "SPHp", "SPHa", "SPaH", "SPaHp", "SPaHa", "SaPH", "SaPHp", "SaPHa",
-    "SaPaH", "SaPaHp", "SaPaHa")
+  val barrierNames: Seq[String] = Seq("SPH", "SPaH", "SPaHp", "SPaHa", "SaPH", "SaPaH", "SaPaHp", "SaPaHa")
 
   var currentBarrier: (Int,String) = (-1, "")
   override def getCurrentBarrierType: (Int, String) = {currentBarrier}
@@ -459,7 +458,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     //assumes the sequential traversal through the program s.t. the barrier is set until the next diffInl iteration
     curBarrier = curBarrier + 1
 
-    if (curBarrier==0 || curBarrier==1 || curBarrier==2)
+    if (curBarrier==0)
       barrierSPH = true
     else
       barrierSPH = false
@@ -518,17 +517,13 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   def setFiltersForBarrier(barrierType: Int) :Unit  = {
     barrierType match {
       case SPH@0 => {filterS = 0; filterP = 0; filterH = 0;}
-      case SPHp@1 => {filterS = 0; filterP = 0; filterH = 1;}
-      case SPHa@2 => {filterS = 0; filterP = 0; filterH = 2;}
-      case SPaH@3 => {filterS = 0; filterP = 1; filterH = 0;}
-      case SPaHp@4 => {filterS = 0; filterP = 1; filterH = 1;}
-      case SPaHa@5 => {filterS = 0; filterP = 1; filterH = 2;}
-      case SaPH@6 => {filterS = 1; filterP = 0; filterH = 0;}
-      case SaPHp@7 => {filterS = 1; filterP = 0; filterH = 1;}
-      case SaPHa@8 => {filterS = 1; filterP = 0; filterH = 2;}
-      case SaPaH@9 => {filterS = 1; filterP = 1; filterH = 0;}
-      case SaPaHp@10 => {filterS = 1; filterP = 1; filterH = 1;}
-      case SaPaHa@11 => {filterS = 1; filterP = 1; filterH = 2;}
+      case SPaH@1 => {filterS = 0; filterP = 1; filterH = 0;}
+      case SPaHp@2 => {filterS = 0; filterP = 1; filterH = 1;}
+      case SPaHa@3 => {filterS = 0; filterP = 1; filterH = 2;}
+      case SaPH@4 => {filterS = 1; filterP = 0; filterH = 0;}
+      case SaPaH@5 => {filterS = 1; filterP = 1; filterH = 0;}
+      case SaPaHp@6 => {filterS = 1; filterP = 1; filterH = 1;}
+      case SaPaHa@7 => {filterS = 1; filterP = 1; filterH = 2;}
       case _ => sys.error("Barrier Type is not defined.")
     }
   }
@@ -542,10 +537,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       statement = statement ++ Havoc(store.toSeq)
     (filterP, filterH) match {
       case (0, 0) => //do nothing, is handled by normal inlining
-      case (0, 1) => //do nothing, is handled by normal inlining
-      case (0, 2) => //do nothing, is handled by normal inlining
       case (1, 0) => statement = statement ++ Assign(normalState._1, permModule.getZeroMaskExp())
-      case (1, 1) => //do nothing, is handled in inlineMethod function
+      case (1, 1) => //do nothing, is handled in inlineMethod function in this module
       case (1, 2) => statement = statement ++ stateModule.resetBoogieState
       case (_, _) => sys.error("Invalid barrier Type")
      }
@@ -644,8 +637,10 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   // DIFFERENTIAL INLINING - ERROR ANALYSIS AND REPORTING
   // ----------------------------------------------------------------
 
-  val barrierParentMapping: Map[Int, Set[Int]] = Map(0 -> Set(1, 3, 6), 1 -> Set(2, 4, 7), 2 -> Set(5, 8), 3 -> Set(4, 9),
-    4 -> Set(5, 10), 5 -> Set(11), 6 -> Set(7, 9), 7 -> Set(8, 10), 8 -> Set(11), 9 -> Set(10), 10 -> Set(11), 11 -> Set())
+  //barrierNames Seq("SPH", "SPaH", "SPaHp", "SPaHa", "SaPH", "SaPaH", "SaPaHp", "SaPaHa")
+
+  val barrierParentMapping: Map[Int, Set[Int]] = Map(0 -> Set(1, 4), 1 -> Set(2,5), 2 -> Set(3, 6),
+    3 -> Set(7), 4 -> Set(5), 5 -> Set(6), 6 -> Set(7))
 
   /**
     * Differential Inlining tests the same inlined code multiple times with different annotation levels (barriers).
@@ -696,20 +691,15 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       }
       i += 1
     }
-    var consistent = true
     for (id <- ids) {
       val failedBarrierSet: Set[Int] = barrierSetWithSameError(id)
       /** barrierSetWithSameError should always be nonEmpty otherwise the id would not exist in errorIds*/
       if (failedBarrierSet.nonEmpty) {
         val error = errormap.get(id).get
-        val consistencyCheck = checkBarrierConsistency(failedBarrierSet)
-        if (consistencyCheck._1==false) consistent=false
         errormap += (id -> new VerificationError {
           override def reason: ErrorReason = error.reason
           override def readableMessage(withId: Boolean, withPosition: Boolean): String = (error.readableMessage +
-            "; \nDifferntial Inlining: " + {if (consistent) "" else "Warning: Possible bad state in barriers " +
-            consistencyCheck._2.map(x=>barrierNames(x)).toString()} +
-            "Failed in " + failedBarrierSet.size + " of 12 barriers: " +
+            "; \nDifferntial Inlining: " + "Failed in " + failedBarrierSet.size + " of 8 barriers: " +
             failedBarrierSet.map(x => barrierNames(x)).foldRight(";")((x, s) => {
               if (x.nonEmpty) ", " + x + s else s}).substring(1)) +
             analyseDiffInlFailures(failedBarrierSet)
@@ -743,34 +733,15 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   def analyseDiffInlFailures(failedBarriers: Set[Int]): String = {
     if (failedBarriers.isEmpty)  //if all barriers verified then no DiffInlError will be created -> this is actually useless because that is verification success
       return "Verification succeeded for all Barriers!"
-    if (failedBarriers.size==12)
+    if (failedBarriers.size==8)
       return ""
 
     //assumes that all barriers are verified
-    var successBarriers: Set[Int] = Set(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+    var successBarriers: Set[Int] = Set(0, 1, 2, 3, 4, 5, 6, 7)
     successBarriers = successBarriers -- failedBarriers
-    s"\n Critical link analysis: \n " + findCritBarriers(failedBarriers, successBarriers).map {
-      case (a, b, c) => s"${barrierNames(a)} succeeded; ${b.foldRight(";")((x, s) =>
-        ", " + barrierNames(x) + s).substring(2)} failed => $c"}.mkString("\n ") + "\n"
-  }
-
-  /**
-    * If a parent barrier verifies then all children should also verify.
-    *
-    * @param failedBarriers Set of the integer representation of the barriers that failed verification.
-    * @return returns the barrier verifications that potentially are in a bad state.
-    */
-  def checkBarrierConsistency(failedBarriers: Set[Int]) : (Boolean, Set[Int]) = {
-    var consitent: Boolean = true
-    var inconsitentBarriers: Set[Int] = Set()
-    var successBarriers: Set[Int] = Set(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
-    successBarriers = successBarriers -- failedBarriers
-    //TODO: maybe filter like in critical links.
-    for (i<- failedBarriers) {
-      val possibleBadState: Set[Int] = barrierParentMapping(i) & successBarriers
-      if (possibleBadState.nonEmpty) inconsitentBarriers= inconsitentBarriers++ possibleBadState
-    }
-    (consitent, inconsitentBarriers)
+    s"\n " + findCritBarriers(failedBarriers, successBarriers).map {
+      case (a, b, c) => s"${barrierNames(a)} succeeded; ${b.foldRight("")((x, s) =>
+        ", " + barrierNames(x) + s).substring(1)} failed => $c"}.mkString("\n ") + "\n"
   }
 
   /**
@@ -793,28 +764,15 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
     result
   }
 
-  //  surrounding context
-  //TODO: Placehodlers for Hp
   var critBarrierStrengheningImplication: Map[Int, String] = Map(
-    0 -> ("There are enough resources in the surrounding context for successful verification. Annotations for the store, the permission " ++
-      "mask, and the heap are insufficient."), //SPH
-    1 -> ("placeHolder"), //SPHp
-    2 -> ("The annotations for the Heap are sufficient for successful verification. There are enough resources for the store " ++
-      "and permission mask in the surrounding context. Strengthen annotations for the store and permission mask for successful verification."), //SPHa
-    3 -> ("The annotations for the permission mask are sufficient for successful verification. There are enough resources for the store " ++
-      "and heap in the surrounding context. Strengthen annotations for the store and heap for successful verification."), //SPaH
-    4 -> ("placeHolder"), //SPaHp
-    5 -> ("The annotations for the permission mask and heap are sufficient for successful verification. There are enough store resources in the " ++
-      "surrounding context. Strenghten annotations for the store for successful verification."), //SPaHa
-    6 -> ("The annotations for the store are sufficient for successful verification. There are enough permission resources in the surrounding context. " ++
-      "Strenghten annotations for the permission mask and heap for successful verification."), //SaPH
-    7 -> ("placeHolder"), //SaPHp
-    8 -> ("The annotations for the store and heap are sufficient for successful verification. There are enough permission resources in the " ++
-      "surrounding context. Strenghten annotations for the permission mask for successful verification."), //SaPHa
-    9 -> ("The annotations for the store and the permission mask are sufficient for successful verification. There are enough heap resources in the surrounding context. " ++
-      "Strenghten annotations for the heap for successful verification."), //SaPaH
-    10 -> ("placeHolder"), //SaPaHp
-    11 -> "Verification is successful for defined annotations." //SaPaHa -> case not possible to be called. Just here for completness.
+    0 -> ("Enough resources in surrounding context; Insufficient annotations for: store, mask, heap."), //SPH
+    1 -> ("Enough resources in surrounding context; Sufficient annotations for: mask; Insufficient annotations for: store, heap"), //SPaH
+    2 -> ("Enough resources in surrounding context; Sufficient annotations for: mask; Insufficient annotations for: store, heap"), //SPaHp
+    3 -> ("Enough resources in surrounding context; Sufficient annotations for: mask, heap; Insufficient annotations for: store"), //SPaHa
+    4 -> ("Enough resources in surrounding context; Sufficient annotations for: store; Insufficient annotations for: mask, heap"), //SaPH
+    5 -> ("Enough resources in surrounding context; Sufficient annotations for: store, mask; Insufficient annotations for: heap"), //SaPaH
+    6 -> ("Enough resources in surrounding context; Sufficient annotations for: store, mask; Insufficient annotations for: heap"), //SaPaHp
+    7 -> "Verification is successful for defined annotations." //SaPaHa -> case not possible to be called. Just here for completness.
   )
 
 
