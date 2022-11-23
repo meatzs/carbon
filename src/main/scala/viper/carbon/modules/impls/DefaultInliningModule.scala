@@ -7,9 +7,9 @@ import viper.carbon.verifier.Verifier
 import Implicits._
 import viper.carbon.modules.components.Component
 import viper.silver.ast.{CurrentPerm, ErrorTrafo, FieldAccess, FieldAssign, ForPerm, HasLineColumn, Info, LocalVarAssign, LocationAccess, Method, Position, WildcardPerm}
-import viper.silver.verifier.{DummyReason, VerificationError}
+import viper.silver.verifier.{DummyReason, ErrorMessage, ErrorReason, VerificationError}
 import viper.silver.ast.utility.Expressions
-import viper.silver.verifier.errors.SoundnessFailed
+import viper.silver.verifier.errors.{ErrorNode, SoundnessFailed}
 import viper.silver.ast
 
 import scala.collection.mutable.ListBuffer
@@ -129,10 +129,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
   /** gives the inlined loops a unique id to distinguish between inlined loops with same position*/
   var loopEnumerationCounter = 0
 
-  /** increments loopEnumerationCounter by 1 */
-  def incrementLoopEnumCounter(): Unit = {
-    loopEnumerationCounter += 1
-  }
+
 
   /**
    * Callstack of loops and methods that gets build during inlining. It does not include the entryMethod.
@@ -150,6 +147,14 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   /** Gets set to true if n_inl>verifier.maxInl.get and used to print this information in callStackToString() */
   var maxInlineReached: Boolean = false
+
+  /** increments loopEnumerationCounter by 1 */
+  def incrementLoopEnumCounter(): Unit = {
+    loopEnumerationCounter += 1
+  }
+
+  override def copyCallStack(): ListBuffer[(ast.Stmt, Boolean)] = callStack.clone()
+
 
   def push(stack: ListBuffer[(sil.Stmt, Boolean)], t : (sil.Stmt, Boolean)) : Unit = {
     stack.prepend(t)
@@ -376,6 +381,42 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       }
     }
     false
+  }
+
+  /**
+    * Only gets called if staticInlining is active. The method will add information about the confidence level of an
+    * error. If there is no soundness check error then the readable massage of all errors in the errormap with their key
+    * as element of errorIds will be extended with the message that the confidence level is high. Otherwise the
+    * readable message of the errors in the errormap with their key as element of errorIds will be extended with the
+    * message that the confidence level is low. The soundness check errors themselves do not have a confidence level.
+    *
+    * @param errorIds    The sequence of boogie error ids that failed the assertion.
+    * @param oldErrormap the errormap that needs to be updated TODO: what is contained in the errormap
+    * @return returns a new errormap with the modifications to oldErrormap
+    */
+  def soundnessCheckConfidenceTransformation(errorIds: Seq[Int], oldErrormap: Map[Int, VerificationError]): Map[Int, VerificationError] = {
+    var errormap: Map[Int, VerificationError] = oldErrormap
+    var lowConfidence = false
+    for (id <- errorIds) {
+      val error = errormap.get(id).get
+      val scError = error.readableMessage.contains("MONO ") || error.readableMessage.contains("FRAMING ") ||
+        error.readableMessage.contains("WFM ")
+      if (scError) {
+        lowConfidence = true
+      }
+      errormap += (id -> new VerificationError {
+        val conf = lowConfidence
+        override def reason: ErrorReason = error.reason
+        override def readableMessage(withId: Boolean, withPosition: Boolean): String = (error.readableMessage + {
+          if (scError) "" else if (conf) " Low confidence that real error." else " High confidence that real error."
+        })
+        override def id: String = error.id
+        override def offendingNode: ErrorNode = error.offendingNode
+        override def pos: Position = error.pos
+        override def withNode(offendingNode: ErrorNode): ErrorMessage = error.withNode()
+      })
+    }
+    errormap
   }
 
 
@@ -1784,13 +1825,7 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
 
   var n_label = 0
 
-  /**
-   *
-   * @param m a method
-   * @param args
-   * @param targets
-   * @return
-   */
+
   def inlineMethod(mc: sil.MethodCall, m: Method, args: Seq[ast.Exp], targets: Seq[ast.LocalVar]): Stmt = {
 
     extendCallstack(mc)
@@ -1842,19 +1877,12 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val lab1 = ast.Label(n_label.toString, Seq())(m.pos, m.info, m.errT)
       val lab2 = ast.Label((n_label + 1).toString, Seq())(m.pos, m.info, m.errT)
       val lab3 = ast.Label((n_label + 2).toString, Seq())(m.pos, m.info, m.errT)
-      /*
-      val post1 = pre_post.transform(t1)
-      val post2 = pre_post.transform(t2)
-      val post3 = pre_post.transform(t3)
-       */
 
-
-      // OLD VERSION: WE ASSERTED HERE
-      //val body1 = ast.Seqn(Seq(lab1, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body.transform(t1), ast.Assert(post1)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
-      //val body2 = ast.Seqn(Seq(lab2, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body.transform(t2), ast.Assert(post2)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
-      //val body3 = ast.Seqn(Seq(lab3, ast.Assert(prec)(m.pos, m.info, m.errT), pre_body.transform(t3), ast.Assert(post3)(m.pos, m.info, m.errT)), Seq())(m.pos, m.info, m.errT)
+      /** For checking framing */
       val body1 = ast.Seqn(Seq(lab1, pre_body.transform(t1)), Seq())(m.pos, m.info, m.errT)
+      /** For checking framing */
       val body2 = ast.Seqn(Seq(lab2, pre_body.transform(t2)), Seq())(m.pos, m.info, m.errT)
+      /** For inlining in boogie */
       val body3 = ast.Seqn(Seq(lab3, pre_body.transform(t3)), Seq())(m.pos, m.info, m.errT)
 
 
@@ -1863,24 +1891,16 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val renamedFormalArgsVars: Seq[ast.LocalVar] = (m.formalArgs map (_.localVar)) map renameVar
       val renamedFormalReturnsVars: Seq[ast.LocalVar] = ((m.formalReturns map (_.localVar))) map renameVar
 
-      renamedFormalArgsVars foreach {
-        (x: ast.LocalVar) => if (!mainModule.env.isDefinedAt(x)) {
-          mainModule.env.define(x)
-        }
-      }
+      (renamedFormalArgsVars filter (x => !mainModule.env.isDefinedAt(x))) map mainModule.env.define
+      (renamedFormalReturnsVars filter (x => !mainModule.env.isDefinedAt(x))) map mainModule.env.define
 
-      renamedFormalReturnsVars foreach {
-        (x: ast.LocalVar) => if (!mainModule.env.isDefinedAt(x)) {
-          mainModule.env.define(x)
-        }
-      }
 
       val r1 = checkFraming(body1, body2)
       val oldCheckingFraming = checkingFraming
       if (!inlinable(body1)) {
         checkingFraming = true
       }
-      //val r2 = stmtModule.translateStmt(transformLabelsAndOld(body3))
+      /** r2 contains the translation of the method body  */
       val r2 = stmtModule.translateStmt(body3)
       checkingFraming = oldCheckingFraming
 
@@ -1892,16 +1912,8 @@ class DefaultInliningModule(val verifier: Verifier) extends InliningModule with 
       val assignArgs = assignArgsPre map (x => Assign(x._1, x._2))
       val assignRets = assignRetsPre map (x => Assign(x._1, x._2))
 
-      renamedFormalArgsVars foreach {
-        (x: ast.LocalVar) => if (mainModule.env.isDefinedAt(x)) {
-          mainModule.env.undefine(x)
-        }
-      }
-      renamedFormalReturnsVars foreach {
-        (x: ast.LocalVar) => if (mainModule.env.isDefinedAt(x)) {
-          mainModule.env.undefine(x)
-        }
-      }
+      (renamedFormalArgsVars filter (x => mainModule.env.isDefinedAt(x))) map mainModule.env.undefine
+      (renamedFormalReturnsVars filter (x => mainModule.env.isDefinedAt(x))) map mainModule.env.undefine
 
       // Restoring...
       inside_initial_method = old_inside_initial_method

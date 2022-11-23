@@ -7,6 +7,8 @@ import viper.silver.verifier.VerificationError
 import viper.silver.ast
 import viper.carbon.boogie._
 
+import scala.collection.mutable.ListBuffer
+
 trait InliningModule extends Module with Component {
 
   def annotateMethod(m: ast.Method): ast.Method
@@ -53,6 +55,8 @@ trait InliningModule extends Module with Component {
    */
   def callStackToString() : String
 
+  def copyCallStack(): ListBuffer[(sil.Stmt, Boolean)]
+
   /**
    * Does not consume the callstack (DefaultInliningModule.callStack) generated during inlining and does
    * not modify any variables.
@@ -60,6 +64,19 @@ trait InliningModule extends Module with Component {
    * @return returns String of the non-collapsed callstack generated during inlining
    */
   def callStackToStringVerbose(): String
+
+  /**
+    * Only gets called if staticInlining is active. The method will add information about the confidence level of an
+    * error. If there is no soundness check error then the readable massage of all errors in the errormap with their key
+    * as element of errorIds will be extended with the message that the confidence level is high. Otherwise the
+    * readable message of the errors in the errormap with their key as element of errorIds will be extended with the
+    * message that the confidence level is low. The soundness check errors themselves do not have a confidence level.
+    *
+    * @param errorIds The sequence of boogie error ids that failed the assertion.
+    */
+  def soundnessCheckConfidenceTransformation(errorIds: Seq[Int], oldErrormap: Map[Int, VerificationError]): Map[Int, VerificationError]
+
+
 
   // ----------------------------------------------------------------
   // MATCH DETERMINISM

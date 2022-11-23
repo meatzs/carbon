@@ -245,11 +245,6 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
    * For more details see the general node in 'wandModule'
    */
   def simpleHandleStmtInlining(stmt: sil.Stmt, statesStack: List[Any] = null, allStateAssms: Exp = TrueLit(), insidePackageStmt: Boolean = false): Stmt = {
-    var line = ""
-    if(stmt.pos!= NoPosition) {line = "; On Line: "+ stmt.pos.asInstanceOf[HasLineColumn].line}
-
-    var addInfo: String = "At depth: "+ inliningModule.current_depth + line + "; Stacktrace: "+ inliningModule.callStackToString()
-    stmt.inlMsg = Some(addInfo)
 
     stmt match {
         case assign@sil.LocalVarAssign(lhs, rhs) =>
@@ -455,6 +450,10 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
         //      val (before, after) = c.handleStmt(stmt, statesStack, allStateAssms, inWand)
         //      stmts = before ++ stmts ++ after
         val stmtCopy = stmt.shallowClone()
+
+        var addInfo: String = "SI-depth: " + inliningModule.current_depth + "; Stacktrace: " + inliningModule.callStackToString()
+        stmtCopy.inlMsg = Some(addInfo)
+
         val f = c.handleStmt(stmtCopy, statesStack, allStateAssms, duringPackage)
         stmts = f(stmts)
       }

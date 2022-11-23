@@ -14,6 +14,7 @@ import viper.silver.reporter.{BackendSubProcessReport, Reporter}
 import viper.silver.verifier.errors.{ErrorNode, Internal}
 import viper.silver.verifier.reasons.InternalReason
 import viper.silver.verifier.{Failure, _}
+import viper.carbon.modules.InliningModule
 
 import scala.jdk.CollectionConverters._
 
@@ -45,6 +46,8 @@ case class FailureContextImpl(counterExample: Option[Counterexample]) extends Fa
   */
 
 trait BoogieInterface {
+
+  val inliningModule: InliningModule
 
   def reporter: Reporter
 
@@ -101,25 +104,12 @@ trait BoogieInterface {
       case (version,Nil) =>
         (version,Success)
       case (version,errorIds) => {
+        for (i <- errorIds) {
+          val id = i
+          val error = errormap.get(id).get
+        }
         if (staticInlActive) {
-          var lowConfidence = false
-          for (i <- 0 until errorIds.length) {
-            val id = errorIds(i)
-            val error = errormap.get(id).get
-            val scError = error.readableMessage.contains("MONO ") || error.readableMessage.contains("FRAMING ") ||
-              error.readableMessage.contains("WFM ")
-            if (scError) {lowConfidence = true}
-            errormap += (id -> new VerificationError {
-              val conf = lowConfidence
-              override def reason: ErrorReason = error.reason
-              override def readableMessage(withId: Boolean, withPosition: Boolean): String = (error.readableMessage +
-                {if (scError) "" else if (conf) " Low confidence that real error." else " High confidence that real error."})
-              override def id: String = error.id
-              override def offendingNode: ErrorNode = error.offendingNode
-              override def pos: Position = error.pos
-              override def withNode(offendingNode: ErrorNode): ErrorMessage = error.withNode()
-            })
-          }
+          errormap = inliningModule.soundnessCheckConfidenceTransformation(errorIds, errormap)
         }
         val errors = (0 until errorIds.length).map(i => {
           val id = errorIds(i)
