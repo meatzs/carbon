@@ -7,6 +7,8 @@ import viper.silver.verifier.{PartialVerificationError, VerificationError}
 import viper.silver.ast
 import viper.carbon.boogie._
 
+import scala.collection.mutable.ListBuffer
+
 trait InliningModule extends Module with Component {
 
   def annotateMethod(m: ast.Method): ast.Method
@@ -53,6 +55,8 @@ trait InliningModule extends Module with Component {
    */
   def callStackToString() : String
 
+  def copyCallStack(): ListBuffer[(sil.Stmt, Boolean)]
+
   /**
    * Does not consume the callstack (DefaultInliningModule.callStack) generated during inlining and does
    * not modify any variables.
@@ -61,25 +65,60 @@ trait InliningModule extends Module with Component {
    */
   def callStackToStringVerbose(): String
 
+  /**
+    * Only gets called if staticInlining is active. The method will add information about the confidence level of an
+    * error. If there is no soundness check error then the readable massage of all errors in the errormap with their key
+    * as element of errorIds will be extended with the message that the confidence level is high. Otherwise the
+    * readable message of the errors in the errormap with their key as element of errorIds will be extended with the
+    * message that the confidence level is low. The soundness check errors themselves do not have a confidence level.
+    *
+    * @param errorIds The sequence of boogie error ids that failed the assertion.
+    */
+  def soundnessCheckConfidenceTransformation(errorIds: Seq[Int], oldErrormap: Map[Int, VerificationError]): Map[Int, VerificationError]
+
+
   // ----------------------------------------------------------------
-  // DIFFERENTIAL INLINING
+  // DIFFERENTIAL INLINING -- BOOGIE MODIFICATIONS
   // ----------------------------------------------------------------
 
   /** List of the barrier type names. Index is barrierType and element is name. */
   val barrierNames: Seq[String]
 
-  /** used to make sure that error messages are only produced for the barrier SPH. */
-  var barrierSPH: Boolean
-
   /**
-    * Sets the filter variables for the barrier.
+    * Sets the filter variables for the barrier. And resets relevant global variables in inliningModule
     *
     * @param name Name of the method that gets translated. Will contain the entry Method name with the suffix of the
     *             current barrier.
     */
   def barrierSetup(name: String): Unit
 
-  def getCurrentBarrierType: Int
+  def getCurrentBarrierType: (Int, String)
+
+
+  // ----------------------------------------------------------------
+  // DIFFERENTIAL INLINING -- ANALYSIS AND REPORTING
+  // ----------------------------------------------------------------
+
+  /**
+    * Differential Inlining tests the same inlined code multiple times with different annotation levels (barriers).
+    * To avoid that the same errors get displayed multiple times this method aggregates the errors and adds information
+    * to the readable massage in which barriers the same error occurred.
+    *
+    * @param errorIds Sequence of the boogie errorIds that failed the assertion
+    * @return Returns an aggregated version of the sequence of VerificationErrors.
+    */
+  def diffInlErrorTransform(errorIds: Seq[Int], oldErrorMap: Map[Int, VerificationError], models: collection.mutable.ListBuffer[String]):
+  (IndexedSeq[VerificationError], Map[Int, VerificationError])
+
+  /**
+    *
+    * @param failedBarriers set of the barriers that failed to verify. The barrier types are represented as Integer
+    *                       and the name of the barrier can be resolved by using the Integer as Index of the val "barrierNames".
+    * @return Returns the error message for readableMessage() as String. If all barriers verified (i.e. failedBarriers.isEmpty)
+    *         then it generates a success message. Otherwise, it return what barriers failed and which barriers are critical links.
+    */
+  def analyseDiffInlFailures(failedBarriers: Set[Int]): String
+
 
   // ----------------------------------------------------------------
   // MATCH DETERMINISM

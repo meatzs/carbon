@@ -7,13 +7,14 @@
 package viper.carbon.verifier
 
 import java.io._
-import viper.carbon.boogie.{Assert, Program}
+import viper.carbon.boogie.{Assert, Goto, Program}
 import viper.silver.ast.Position
 import viper.silver.reporter.BackendSubProcessStages._
 import viper.silver.reporter.{BackendSubProcessReport, Reporter}
 import viper.silver.verifier.errors.{ErrorNode, Internal}
 import viper.silver.verifier.reasons.InternalReason
 import viper.silver.verifier.{Failure, _}
+import viper.carbon.modules.InliningModule
 
 import scala.jdk.CollectionConverters._
 
@@ -45,6 +46,8 @@ case class FailureContextImpl(counterExample: Option[Counterexample]) extends Fa
   */
 
 trait BoogieInterface {
+
+  val inliningModule: InliningModule
 
   def reporter: Reporter
 
@@ -93,8 +96,9 @@ trait BoogieInterface {
       case a@Assert(exp, error) =>
         if (!staticInlActive && error.offendingNode.inlMsg.isDefined)
           staticInlActive = true
-        if (!diffInlActive && error.offendingNode.diffInlBarrierType.isDefined)
+        if (!diffInlActive && error.offendingNode.diffInlBarrierType.isDefined) {
           diffInlActive = true
+        }
         errormap += (a.id -> error)
     }
 
@@ -103,50 +107,22 @@ trait BoogieInterface {
 
     // parse the output
     parse(output) match {
-      case (version,Nil) =>
-        (version,Success)
-      case (version,errorIds) => {
-        if (staticInlActive) {
-          var lowConfidence = false
-          for (i <- 0 until errorIds.length) {
-            val id = errorIds(i)
-            val error = errormap.get(id).get
-            val scError = error.readableMessage.contains("MONO ") || error.readableMessage.contains("FRAMING ") ||
-              error.readableMessage.contains("WFM ")
-            if (scError) {lowConfidence = true}
-            errormap += (id -> new VerificationError {
-              val conf = lowConfidence
-              override def reason: ErrorReason = error.reason
-              override def readableMessage(withId: Boolean, withPosition: Boolean): String = (error.readableMessage +
-                {if (scError) "" else if (conf) " Low confidence that real error." else " High confidence that real error."})
-              override def id: String = error.id
-              override def offendingNode: ErrorNode = error.offendingNode
-              override def pos: Position = error.pos
-              override def withNode(offendingNode: ErrorNode): ErrorMessage = error.withNode()
-            })
-          }
+      case (version, Nil) =>
+        (version, Success)
+      case (version, errorIds) => {
+        for (i <- errorIds) {
+          val id = i
+          val error = errormap.get(id).get
         }
         if (diffInlActive) {
-          /** Sequence of Integers that collect all the barrier types for which differential inlining did not verify. */
-          var barrierVerificationFailed: Set[Int] = Set()
-          var errors = (0 until errorIds.length).map(i => {
-            if (errormap.get(errorIds(i)).get.offendingNode.diffInlBarrierType.isDefined) {
-              barrierVerificationFailed = barrierVerificationFailed + (errormap.get(errorIds(i)).get.offendingNode.diffInlBarrierType.get)
-            }
-            val id = errorIds(i)
-            val error = errormap.get(id).get
-            if (models.nonEmpty)
-              error.failureContexts = Seq(FailureContextImpl(Some(SimpleCounterexample(Model(models(i))))))
-            error
-          })
-          val diffError: DiffInlError = new DiffInlError {
-            override def readableMessage(withId: Boolean, withPosition: Boolean): String = {
-              "DiffInl Error Message: " + analyseDiffInlFailures(barrierVerificationFailed)
-            }
-          }
-          errors = errors :+ diffError
-          return (version, Failure(errors))
+          var temp = inliningModule.diffInlErrorTransform(errorIds, errormap, models)
+          errormap = temp._2
+          return (version, Failure(temp._1))
         }
+        if (staticInlActive) {
+          errormap = inliningModule.soundnessCheckConfidenceTransformation(errorIds, errormap)
+        }
+
         val errors = (0 until errorIds.length).map(i => {
           val id = errorIds(i)
           val error = errormap.get(id).get
@@ -154,19 +130,16 @@ trait BoogieInterface {
             error.failureContexts = Seq(FailureContextImpl(Some(SimpleCounterexample(Model(models(i))))))
           error
         })
-        (version,Failure(errors))
+        (version, Failure(errors))
       }
     }
   }
 
-  private def soundnessCheckConfidenceTransformation(): Unit = {
-
-  }
 
   /**
     * Parse the output of Boogie. Returns a pair of the detected version number and a sequence of error identifiers.
     */
-  private def parse(output: String): (String,Seq[Int]) = {
+  private def parse(output: String): (String, Seq[Int]) = {
     val LogoPattern = "Boogie program verifier version ([0-9.]+),.*".r
     val SummaryPattern = "Boogie program verifier finished with ([0-9]+) verified, ([0-9]+) error.*".r
     val ErrorPattern = "  .+ \\[([0-9]+)\\]".r

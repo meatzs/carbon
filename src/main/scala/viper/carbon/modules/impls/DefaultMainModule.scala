@@ -154,7 +154,7 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
               inliningModule.entryMethod = entry.toString
           }
           if (diffInl) {
-            for (i <- 1 to 11) {
+            for (i <- 0 to 11) {
               val inlMethod = methods.head
               //check if entry method name does not contain the barrier name as string
               for (barrier <- inliningModule.barrierNames) {
@@ -168,6 +168,7 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
                 inlMethod.info, inlMethod.errT)
               methods = methods :+ diffInlMethod
             }
+            methods = methods.tail
           }
           verboseCallstack match {
             case None =>
@@ -238,7 +239,10 @@ class DefaultMainModule(val verifier: Verifier) extends MainModule with Stateles
   }
 
   def translateMethodDecl(m: sil.Method, names: Option[mutable.Map[String, String]]): Seq[Decl] = {
-    if (diffInl) inliningModule.barrierSetup(m.name)
+    if (diffInl) {
+      inliningModule.barrierSetup(m.name)
+      m.diffInlBarrierType = Some(inliningModule.getCurrentBarrierType)
+    }
 
     val mWithLoopInfo = loopModule.initializeMethod(m)
 
