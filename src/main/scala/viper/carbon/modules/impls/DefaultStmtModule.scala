@@ -451,8 +451,10 @@ class DefaultStmtModule(val verifier: Verifier) extends StmtModule with SimpleSt
         //      stmts = before ++ stmts ++ after
         val stmtCopy = stmt.shallowClone()
 
-        var addInfo: String = "SI-depth: " + inliningModule.current_depth + "; Stacktrace: " + inliningModule.callStackToString()
-        stmtCopy.inlMsg = Some(addInfo)
+        if (verifier.staticInlining.isDefined) {
+          var addInfo: String = "SI-depth: " + inliningModule.current_depth + "; Stacktrace: " + inliningModule.callStackToString()
+          stmtCopy.inlMsg = Some(addInfo)
+        }
 
         val f = c.handleStmt(stmtCopy, statesStack, allStateAssms, duringPackage)
         stmts = f(stmts)
